@@ -1,5 +1,6 @@
 plugins {
     kotlin("jvm") version "2.3.0" apply false
+    id("org.jlleitschuh.gradle.ktlint") version "12.1.2"
 }
 
 allprojects {
@@ -9,4 +10,6 @@ allprojects {
     repositories {
         mavenCentral()
     }
+
+    apply(plugin = "org.jlleitschuh.gradle.ktlint")
 }
