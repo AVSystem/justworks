@@ -3,7 +3,6 @@ package com.avsystem.justworks.core.parser
 import io.swagger.v3.oas.models.OpenAPI
 
 object SpecValidator {
-
     fun validate(openApi: OpenAPI): List<String> {
         val errors = mutableListOf<String>()
 

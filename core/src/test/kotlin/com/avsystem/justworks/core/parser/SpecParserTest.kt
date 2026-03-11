@@ -373,10 +373,7 @@ class SpecParserTest {
         return tempFile
     }
 
-    private fun collectRefs(
-        typeRef: TypeRef?,
-        refs: MutableSet<String>,
-    ) {
+    private fun collectRefs(typeRef: TypeRef?, refs: MutableSet<String>) {
         when (typeRef) {
             is TypeRef.Reference -> {
                 refs.add(typeRef.schemaName)

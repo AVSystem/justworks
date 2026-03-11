@@ -126,7 +126,8 @@ class SpecParser {
                         mediaType.schema?.let { schema ->
                             val schemaTypeRef = if (isInlineObjectSchema(schema)) {
                                 // Inline request body schema
-                                val contextName = generateOperationId(method.name, path).replaceFirstChar { it.uppercase() } + "Request"
+                                val contextName = generateOperationId(method.name, path)
+                                    .replaceFirstChar { it.uppercase() } + "Request"
                                 createInlineTypeRef(schema, contextName)
                             } else {
                                 schemaToTypeRef(schema)
@@ -150,7 +151,8 @@ class SpecParser {
                         val schemaTypeRef = schema?.let { s ->
                             if (isInlineObjectSchema(s)) {
                                 // Inline response body schema
-                                val contextName = generateOperationId(method.name, path).replaceFirstChar { it.uppercase() } + "Response"
+                                val contextName = generateOperationId(method.name, path)
+                                    .replaceFirstChar { it.uppercase() } + "Response"
                                 createInlineTypeRef(s, contextName)
                             } else {
                                 schemaToTypeRef(s)
@@ -273,10 +275,7 @@ class SpecParser {
 
     private fun isEnumSchema(schema: Schema<*>): Boolean = !schema.enum.isNullOrEmpty()
 
-    private fun extractEnumModel(
-        name: String,
-        schema: Schema<*>,
-    ): EnumModel {
+    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel {
         val backingType =
             when (schema.type) {
                 "integer" -> EnumBackingType.INTEGER
@@ -371,10 +370,7 @@ class SpecParser {
         return unwrappedRefs to syntheticDiscriminator
     }
 
-    private fun extractSchemaModel(
-        name: String,
-        schema: Schema<*>,
-    ): SchemaModel {
+    private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf =
             schema.allOf?.mapNotNull { subSchema ->
                 subSchema.`$ref`?.let { ref ->
@@ -537,10 +533,7 @@ class SpecParser {
     /**
      * Creates a TypeRef.Inline for an inline object schema.
      */
-    private fun createInlineTypeRef(
-        schema: Schema<*>,
-        contextName: String
-    ): TypeRef {
+    private fun createInlineTypeRef(schema: Schema<*>, contextName: String): TypeRef {
         val requiredProps = schema.required.orEmpty().toSet()
         val properties = schema.properties.orEmpty().map { (propName, propSchema) ->
             val propType = if (isInlineObjectSchema(propSchema)) {
@@ -565,10 +558,7 @@ class SpecParser {
         )
     }
 
-    private fun generateOperationId(
-        method: String,
-        path: String,
-    ): String {
+    private fun generateOperationId(method: String, path: String): String {
         val segments =
             path
                 .split("/")
