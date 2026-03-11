@@ -10,6 +10,12 @@ kotlin {
     jvmToolchain(21)
 }
 
+// todo: remove when https://github.com/JLLeitschuh/ktlint-gradle/issues/912 resolved
+ktlint {
+    version.set("1.8.0")
+}
+
+
 dependencies {
     implementation("io.swagger.parser.v3:swagger-parser:2.1.39")
     implementation("com.squareup:kotlinpoet:2.2.0")

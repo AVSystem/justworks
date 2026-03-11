@@ -7,7 +7,6 @@ import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
 import arrow.core.raise.either
 import arrow.core.raise.nullable
-import arrow.core.raise.recover
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.Endpoint
@@ -126,7 +125,7 @@ object SpecParser {
                 RequestBody(
                     required = body.required ?: false,
                     contentType = contentType,
-                    schema = schema.toTypeRef("${operationId.upperCase()}Request"),
+                    schema = schema.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request"),
                 )
             }
             val responses = operation.responses
@@ -136,7 +135,7 @@ object SpecParser {
                     Response(
                         statusCode = code,
                         description = resp.description,
-                        schema = schema?.toTypeRef("${operationId.upperCase()}Response"),
+                        schema = schema?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                     )
                 }
 
@@ -165,19 +164,19 @@ object SpecParser {
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
         ?: (this.name ?: allOf.singleOrNull()?.name)?.let(TypeRef::Reference)
-        ?: when (this@toTypeRef.type) {
-            "string" -> STRING_FORMAT_MAP[this@toTypeRef.format] ?: TypeRef.Primitive(PrimitiveType.STRING)
+        ?: when (this.type) {
+            "string" -> STRING_FORMAT_MAP[this.format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-            "integer" -> INTEGER_FORMAT_MAP[this@toTypeRef.format] ?: TypeRef.Primitive(PrimitiveType.INT)
+            "integer" -> INTEGER_FORMAT_MAP[this.format] ?: TypeRef.Primitive(PrimitiveType.INT)
 
-            "number" -> NUMBER_FORMAT_MAP[this@toTypeRef.format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
+            "number" -> NUMBER_FORMAT_MAP[this.format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
 
             "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-            "array" -> this@toTypeRef.items?.toTypeRef()?.let(TypeRef::Array) ?: TypeRef.Primitive(PrimitiveType.STRING)
+            "array" -> this.items?.toTypeRef()?.let(TypeRef::Array) ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-            "object" -> (this@toTypeRef.additionalProperties as? Schema<*>)?.toTypeRef()
-                ?: this@toTypeRef.title?.let(TypeRef::Reference)
+            "object" -> (this.additionalProperties as? Schema<*>)?.toTypeRef()
+                ?: this.title?.let(TypeRef::Reference)
                 ?: TypeRef.Unknown
 
             else -> TypeRef.Primitive(PrimitiveType.STRING)
@@ -219,7 +218,12 @@ object SpecParser {
                     ?.singleOrNull()
                     ?.toPair()
             }.toMap()
-            .mapValuesNotNull { (propertyName, propertySchema) -> propertySchema.resolveOrRegisterName(propertyName) }
+            .mapValuesNotNull { (propertyName, propertySchema) ->
+                propertySchema.resolveName() ?: propertyName.takeIf { propertySchema.isInlineObject }?.also { name ->
+                    componentSchemas[name] = propertySchema
+                    componentSchemaIdentity[propertySchema] = name
+                }
+            }
 
         ensure(unwrapped.isNotEmpty())
 
@@ -228,14 +232,6 @@ object SpecParser {
 
         refs to Discriminator(propertyName = "type", mapping = mapping)
     }
-
-    /** Resolves the schema name, or registers an inline object as a new component. */
-    context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
-    private fun Schema<*>.resolveOrRegisterName(fallbackName: String): String? =
-        resolveName() ?: fallbackName.takeIf { isInlineObject }?.also { name ->
-            componentSchemas[name] = this
-            componentSchemaIdentity[this] = name
-        }
 
     context(_: Raise<ParseResult.Failure>, _: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
@@ -353,14 +349,14 @@ object SpecParser {
      * Creates a TypeRef.Inline for an inline object schema.
      */
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
-    private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? = takeIf { isInlineObject }?.let {
-        val requiredProps = requiredSet
-        TypeRef.Inline(
-            properties = propertyModels(requiredProps) { "$contextName.${it.toPascalCase()}" }.values.toList(),
-            requiredProperties = requiredProps,
-            contextHint = contextName,
-        )
-    }
+    private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? =
+        takeIf { isInlineObject }?.requiredSet?.let { required ->
+            TypeRef.Inline(
+                properties = propertyModels(required) { "$contextName.${it.toPascalCase()}" }.values.toList(),
+                requiredProperties = required,
+                contextHint = contextName,
+            )
+        }
 
     private fun generateOperationId(method: String, path: String): String {
         val segments =
@@ -379,7 +375,8 @@ object SpecParser {
 
     private val Schema<*>.isEnumSchema get(): Boolean = !this.enum.isNullOrEmpty()
 
-    private fun String.toPascalCase(): String = split("-", "_", ".").joinToString("") { it.upperCase() }
+    private fun String.toPascalCase(): String =
+        split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
 
     context(componentSchemaIdentity: ComponentSchemaIdentity)
     private fun Schema<*>.resolveName(): String? =
@@ -392,8 +389,6 @@ object SpecParser {
 
     private val Schema<*>.requiredSet: Set<String> get() = required.orEmpty().toSet()
 
-    private fun String.upperCase() = replaceFirstChar { it.uppercase() }
-
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.propertyModels(required: Set<String>, createContext: (String) -> String? = { null }) =
         properties
@@ -405,16 +400,16 @@ object SpecParser {
 
 private const val SCHEMA_PREFIX = "#/components/schemas/"
 
-private val STRING_FORMAT_MAP = mapOf<String, TypeRef.Primitive>(
+private val STRING_FORMAT_MAP = mapOf(
     "byte" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
     "date-time" to TypeRef.Primitive(PrimitiveType.DATE_TIME),
     "date" to TypeRef.Primitive(PrimitiveType.DATE),
 )
 
-private val INTEGER_FORMAT_MAP = mapOf<String, TypeRef.Primitive>(
+private val INTEGER_FORMAT_MAP = mapOf(
     "int64" to TypeRef.Primitive(PrimitiveType.LONG),
 )
 
-private val NUMBER_FORMAT_MAP = mapOf<String, TypeRef.Primitive>(
+private val NUMBER_FORMAT_MAP = mapOf(
     "float" to TypeRef.Primitive(PrimitiveType.FLOAT),
 )
