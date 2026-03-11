@@ -30,15 +30,13 @@ import java.io.File
 import java.util.IdentityHashMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
+sealed interface ParseResult {
+    data class Success(val apiSpec: ApiSpec, val warnings: List<String> = emptyList()) : ParseResult
+
+    data class Failure(val errors: List<String>, val warnings: List<String> = emptyList()) : ParseResult
+}
+
 object SpecParser {
-
-    // --- Public API ---
-
-    sealed interface ParseResult {
-        data class Success(val apiSpec: ApiSpec, val warnings: List<String> = emptyList()) : ParseResult
-        data class Failure(val errors: List<String>, val warnings: List<String> = emptyList()) : ParseResult
-    }
-
     fun parse(specFile: File): ParseResult = either {
         val parseOptions = ParseOptions().apply {
             isResolve = true
@@ -65,12 +63,8 @@ object SpecParser {
         return ParseResult.Success(openApi.toApiSpec(), warnings = allWarnings)
     }.merge()
 
-    // --- Internal type aliases ---
-
     private typealias ComponentSchemaIdentity = IdentityHashMap<Schema<*>, String>
     private typealias ComponentSchemas = MutableMap<String, Schema<*>>
-
-    // --- Top-level transformation ---
 
     context(_: Raise<ParseResult.Failure>)
     private fun OpenAPI.toApiSpec(): ApiSpec {
@@ -94,8 +88,6 @@ object SpecParser {
         }
     }
 
-    // --- Endpoint extraction ---
-
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractEndpoints(paths: Map<String, PathItem>): List<Endpoint> = paths.flatMap { (path, pathItem) ->
         pathItem.readOperationsMap().map { (method, operation) ->
@@ -107,7 +99,10 @@ object SpecParser {
 
             val requestBody = nullable {
                 val body = operation.requestBody.bind()
-                val (contentType, mediaType) = body.content?.entries?.firstOrNull().bind()
+                val (contentType, mediaType) = body.content
+                    ?.entries
+                    ?.firstOrNull()
+                    .bind()
                 val schema = mediaType.schema.bind()
                 RequestBody(
                     required = body.required ?: false,
@@ -122,7 +117,9 @@ object SpecParser {
                     Response(
                         statusCode = code,
                         description = resp.description,
-                        schema = resp.content?.get("application/json")?.schema
+                        schema = resp.content
+                            ?.get("application/json")
+                            ?.schema
                             ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                     )
                 }
@@ -224,10 +221,7 @@ object SpecParser {
     }
 
     context(_: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
-    private fun Schema<*>.resolveSubSchema(): Schema<*> =
-        resolveName()?.let { componentSchemas[it] } ?: this
-
-    // --- oneOf wrapper pattern detection ---
+    private fun Schema<*>.resolveSubSchema(): Schema<*> = resolveName()?.let { componentSchemas[it] } ?: this
 
     /**
      * Detects and unwraps the oneOf wrapper pattern where each variant is a single-property
@@ -250,8 +244,12 @@ object SpecParser {
             .orEmpty()
             .asSequence()
             .filter { it.isInlineObject }
-            .mapNotNull { it.properties?.entries?.singleOrNull()?.toPair() }
-            .toMap()
+            .mapNotNull {
+                it.properties
+                    ?.entries
+                    ?.singleOrNull()
+                    ?.toPair()
+            }.toMap()
             .mapValuesNotNull { (propertyName, propertySchema) ->
                 propertySchema.resolveName() ?: propertyName.takeIf { propertySchema.isInlineObject }?.also { name ->
                     componentSchemas[name] = propertySchema
@@ -265,17 +263,20 @@ object SpecParser {
         unwrapped.values.toList() to Discriminator(propertyName = "type", mapping = mapping)
     }
 
-    // --- Type resolution ---
-
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
         ?: (resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
         ?: when (type) {
             "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
+
             "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
+
             "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
+
             "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
+
             "array" -> items?.toTypeRef()?.let(TypeRef::Array) ?: TypeRef.Primitive(PrimitiveType.STRING)
+
             "object" -> (additionalProperties as? Schema<*>)?.toTypeRef()
                 ?: title?.let(TypeRef::Reference)
                 ?: TypeRef.Unknown
@@ -293,11 +294,8 @@ object SpecParser {
         )
     }
 
-    // --- Schema<*> extensions ---
-
     context(componentSchemaIdentity: ComponentSchemaIdentity)
-    private fun Schema<*>.resolveName(): String? =
-        `$ref`?.removePrefix(SCHEMA_PREFIX) ?: componentSchemaIdentity[this]
+    private fun Schema<*>.resolveName(): String? = `$ref`?.removePrefix(SCHEMA_PREFIX) ?: componentSchemaIdentity[this]
 
     context(componentSchemaIdentity: ComponentSchemaIdentity)
     private val Schema<*>.isInlineObject
@@ -320,8 +318,6 @@ object SpecParser {
                 )
             }
 
-    // --- Naming helpers ---
-
     private fun generateOperationId(method: String, path: String): String {
         val segments = path
             .split("/")
@@ -338,8 +334,6 @@ object SpecParser {
 
     private fun String.toPascalCase(): String =
         split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
-
-    // --- Constants ---
 
     private const val SCHEMA_PREFIX = "#/components/schemas/"
 
