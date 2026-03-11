@@ -18,8 +18,8 @@ class SpecParserPolymorphicTest {
     }
 
     private fun parseSpec(file: File): ApiSpec = when (val result = SpecParser.parse(file)) {
-        is SpecParser.ParseResult.Success -> result.apiSpec
-        is SpecParser.ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
+        is ParseResult.Success -> result.apiSpec
+        is ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
     }
 
     @Test

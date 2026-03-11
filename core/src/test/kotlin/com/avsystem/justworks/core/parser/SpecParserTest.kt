@@ -24,13 +24,13 @@ class SpecParserTest {
     }
 
     private fun parseSpec(file: File): ApiSpec = when (val result = SpecParser.parse(file)) {
-        is SpecParser.ParseResult.Success -> result.apiSpec
-        is SpecParser.ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
+        is ParseResult.Success -> result.apiSpec
+        is ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
     }
 
     private fun parseSpecErrors(file: File): List<String> {
         val result = SpecParser.parse(file)
-        check(result is SpecParser.ParseResult.Failure) { "Expected failure" }
+        check(result is ParseResult.Failure) { "Expected failure" }
         return result.errors
     }
 
@@ -237,7 +237,7 @@ class SpecParserTest {
     @Test
     fun `parse invalid spec returns Failure`() {
         val result = SpecParser.parse(loadResource("invalid-spec.yaml"))
-        assertIs<SpecParser.ParseResult.Failure>(result)
+        assertIs<ParseResult.Failure>(result)
     }
 
     @Test
@@ -256,7 +256,7 @@ class SpecParserTest {
     @Test
     fun `parse swagger 2 json returns Success`() {
         val result = SpecParser.parse(loadResource("petstore-v2.json"))
-        assertIs<SpecParser.ParseResult.Success>(result)
+        assertIs<ParseResult.Success>(result)
     }
 
     @Test
