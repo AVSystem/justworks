@@ -1,15 +1,17 @@
 package com.avsystem.justworks.core.parser
 
-import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.TypeRef
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
 class SpecParserPolymorphicTest {
+    private val parser = SpecParser()
+
     private fun loadResource(name: String): File {
         val url =
             javaClass.getResource("/$name")
@@ -17,14 +19,10 @@ class SpecParserPolymorphicTest {
         return File(url.toURI())
     }
 
-    private fun parseSpec(file: File): ApiSpec = when (val result = SpecParser.parse(file)) {
-        is ParseResult.Success -> result.apiSpec
-        is ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
-    }
-
     @Test
     fun `allOf schema has merged properties from referenced schema`() {
-        val spec = parseSpec(loadResource("polymorphic-spec.yaml"))
+        val result = parser.parse(loadResource("polymorphic-spec.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         val extendedDog =
             spec.schemas.find { it.name == "ExtendedDog" }
@@ -44,7 +42,8 @@ class SpecParserPolymorphicTest {
 
     @Test
     fun `oneOf schema preserves oneOf refs`() {
-        val spec = parseSpec(loadResource("polymorphic-spec.yaml"))
+        val result = parser.parse(loadResource("polymorphic-spec.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         val shape =
             spec.schemas.find { it.name == "Shape" }
@@ -58,7 +57,8 @@ class SpecParserPolymorphicTest {
 
     @Test
     fun `discriminator is preserved in parsed model`() {
-        val spec = parseSpec(loadResource("polymorphic-spec.yaml"))
+        val result = parser.parse(loadResource("polymorphic-spec.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         val shape =
             spec.schemas.find { it.name == "Shape" }

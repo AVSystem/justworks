@@ -3,10 +3,8 @@ package com.avsystem.justworks.core.gen
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.MemberName
 
-/**
- * Centralized repository of type and function references used across code generators.
- * Organized by domain (HTTP client, serialization, dates, error handling).
- */
+// Centralized repository of type and function references used across code generators.
+// Organized by domain (HTTP client, serialization, dates, error handling).
 
 // ============================================================================
 // Ktor HTTP Client
@@ -51,10 +49,10 @@ val POLYMORPHIC_FUN = MemberName("kotlinx.serialization.modules", "polymorphic")
 val SUBCLASS_FUN = MemberName("kotlinx.serialization.modules", "subclass")
 
 // ============================================================================
-// Date/Time (kotlinx.datetime)
+// Date/Time
 // ============================================================================
 
-val INSTANT = ClassName("kotlinx.datetime", "Instant")
+val INSTANT = ClassName("kotlin.time", "Instant")
 val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
 
 // ============================================================================

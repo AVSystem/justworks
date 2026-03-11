@@ -1,6 +1,5 @@
 package com.avsystem.justworks.core.parser
 
-import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumBackingType
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.ParameterLocation
@@ -8,7 +7,6 @@ import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.TypeRef
 import java.io.File
 import kotlin.test.Test
-import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -16,6 +14,8 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 class SpecParserTest {
+    private val parser = SpecParser()
+
     private fun loadResource(name: String): File {
         val url =
             javaClass.getResource("/$name")
@@ -23,28 +23,20 @@ class SpecParserTest {
         return File(url.toURI())
     }
 
-    private fun parseSpec(file: File): ApiSpec = when (val result = SpecParser.parse(file)) {
-        is ParseResult.Success -> result.apiSpec
-        is ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
-    }
-
-    private fun parseSpecErrors(file: File): List<String> {
-        val result = SpecParser.parse(file)
-        check(result is ParseResult.Failure) { "Expected failure" }
-        return result.errors
-    }
-
     // -- SPEC-01: OpenAPI 3.0 parsing --
 
     @Test
     fun `parse petstore yaml produces Success with endpoints`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
+
         assertEquals(3, spec.endpoints.size, "Expected 3 endpoints")
     }
 
     @Test
     fun `parse petstore yaml produces schemas`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         val schemaNames = spec.schemas.map { it.name }.toSet()
         assertTrue("Pet" in schemaNames, "Pet schema missing")
@@ -54,7 +46,8 @@ class SpecParserTest {
 
     @Test
     fun `parse petstore yaml produces enums`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         val petStatus = spec.enums.find { it.name == "PetStatus" }
         assertNotNull(petStatus, "PetStatus enum missing")
@@ -64,7 +57,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed Pet schema has correct properties`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
         val pet =
             spec.schemas.find { it.name == "Pet" }
                 ?: fail("Pet schema not found")
@@ -96,7 +90,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed GET pets endpoint has query parameter limit with INT type`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
         val listPets =
             spec.endpoints.find { it.operationId == "listPets" }
                 ?: fail("listPets endpoint not found")
@@ -114,7 +109,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed GET pets petId has path parameter`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
         val getPet =
             spec.endpoints.find { it.operationId == "getPetById" }
                 ?: fail("getPetById endpoint not found")
@@ -130,7 +126,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed POST pets has requestBody referencing NewPet`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
         val createPet =
             spec.endpoints.find { it.operationId == "createPet" }
                 ?: fail("createPet endpoint not found")
@@ -147,7 +144,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed endpoints have tags`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
         val listPets = spec.endpoints.find { it.operationId == "listPets" }!!
 
         assertTrue(listPets.tags.contains("pets"), "listPets should have 'pets' tag")
@@ -155,7 +153,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed GET pets response is array of Pet`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
+        val result = parser.parse(loadResource("petstore.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
         val listPets = spec.endpoints.find { it.operationId == "listPets" }!!
 
         val okResponse =
@@ -171,7 +170,8 @@ class SpecParserTest {
 
     @Test
     fun `parse refs spec resolves all references`() {
-        val spec = parseSpec(loadResource("refs-spec.yaml"))
+        val result = parser.parse(loadResource("refs-spec.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         // All schema names that are referenced should exist in schemas
         val allSchemaNames = (spec.schemas.map { it.name } + spec.enums.map { it.name }).toSet()
@@ -201,7 +201,8 @@ class SpecParserTest {
 
     @Test
     fun `refs spec nested references are resolved in model`() {
-        val spec = parseSpec(loadResource("refs-spec.yaml"))
+        val result = parser.parse(loadResource("refs-spec.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         // Order -> Item -> ItemDetails (chain of refs)
         val order =
@@ -219,7 +220,8 @@ class SpecParserTest {
 
     @Test
     fun `refs spec parameter ref is resolved`() {
-        val spec = parseSpec(loadResource("refs-spec.yaml"))
+        val result = parser.parse(loadResource("refs-spec.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         val listOrders =
             spec.endpoints.find { it.operationId == "listOrders" }
@@ -236,17 +238,18 @@ class SpecParserTest {
 
     @Test
     fun `parse invalid spec returns Failure`() {
-        val result = SpecParser.parse(loadResource("invalid-spec.yaml"))
+        val result = parser.parse(loadResource("invalid-spec.yaml"))
         assertIs<ParseResult.Failure>(result)
     }
 
     @Test
     fun `parse invalid spec has descriptive error messages`() {
-        val errors = parseSpecErrors(loadResource("invalid-spec.yaml"))
+        val result = parser.parse(loadResource("invalid-spec.yaml"))
+        val failure = assertIs<ParseResult.Failure>(result)
 
-        assertTrue(errors.isNotEmpty(), "Failure should have error messages")
+        assertTrue(failure.errors.isNotEmpty(), "Failure should have error messages")
         // Errors should be human-readable, not empty or codes-only
-        errors.forEach { error ->
+        failure.errors.forEach { error ->
             assertTrue(error.length > 5, "Error message too short to be useful: '$error'")
         }
     }
@@ -255,13 +258,14 @@ class SpecParserTest {
 
     @Test
     fun `parse swagger 2 json returns Success`() {
-        val result = SpecParser.parse(loadResource("petstore-v2.json"))
+        val result = parser.parse(loadResource("petstore-v2.json"))
         assertIs<ParseResult.Success>(result)
     }
 
     @Test
     fun `swagger 2 spec produces endpoints and schemas`() {
-        val spec = parseSpec(loadResource("petstore-v2.json"))
+        val result = parser.parse(loadResource("petstore-v2.json"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         assertTrue(spec.endpoints.isNotEmpty(), "v2 spec should produce endpoints")
         assertTrue(
@@ -281,7 +285,8 @@ class SpecParserTest {
 
     @Test
     fun `anyOf without discriminator parses successfully`() {
-        val spec = parseSpec(loadResource("anyof-spec.yaml"))
+        val result = parser.parse(loadResource("anyof-spec.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         val unionPayment = spec.schemas.find { it.name == "UnionPayment" }
         assertNotNull(unionPayment, "UnionPayment schema should exist")
@@ -292,7 +297,8 @@ class SpecParserTest {
 
     @Test
     fun `anyOf with discriminator parses successfully`() {
-        val spec = parseSpec(loadResource("anyof-valid-spec.yaml"))
+        val result = parser.parse(loadResource("anyof-valid-spec.yaml"))
+        val spec = assertIs<ParseResult.Success>(result).spec
 
         val payment = spec.schemas.find { it.name == "Payment" }
         assertNotNull(payment, "Payment schema should exist")
@@ -303,10 +309,11 @@ class SpecParserTest {
     }
 
     @Test
-    fun `mixed anyOf and oneOf raises error`() {
-        val errors = parseSpecErrors(loadResource("mixed-combinator-spec.yaml"))
+    fun `mixed anyOf and oneOf throws IllegalArgumentException`() {
+        val result = parser.parse(loadResource("mixed-combinator-spec.yaml"))
+        val failure = assertIs<ParseResult.Failure>(result)
 
-        val errorMessages = errors.joinToString("\n")
+        val errorMessages = failure.errors.joinToString("\n")
         assertTrue(
             "both oneOf and anyOf" in errorMessages,
             "Expected error about mixed combinators, got: $errorMessages",
@@ -343,7 +350,8 @@ class SpecParserTest {
                     - name
             """.trimIndent()
 
-        val apiSpec = parseSpec(spec.toTempFile())
+        val result = parser.parse(spec.toTempFile())
+        val apiSpec = assertIs<ParseResult.Success>(result).spec
 
         val task = apiSpec.schemas.find { it.name == "Task" }
         assertNotNull(task)
@@ -365,7 +373,7 @@ class SpecParserTest {
         return tempFile
     }
 
-    private fun collectRefs(typeRef: TypeRef?, refs: MutableSet<String>) {
+    private fun collectRefs(typeRef: TypeRef?, refs: MutableSet<String>,) {
         when (typeRef) {
             is TypeRef.Reference -> {
                 refs.add(typeRef.schemaName)
@@ -386,7 +394,7 @@ class SpecParserTest {
                 }
             }
 
-            is TypeRef.Primitive, TypeRef.Unknown, null -> {}
+            is TypeRef.Primitive, null -> {}
         }
     }
 }
