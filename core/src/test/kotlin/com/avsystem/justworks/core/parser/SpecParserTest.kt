@@ -23,11 +23,10 @@ class SpecParserTest {
         return File(url.toURI())
     }
 
-    private fun parseSpec(file: File): ApiSpec =
-        when (val result = SpecParser.parse(file)) {
-            is SpecParser.ParseResult.Success -> result.apiSpec
-            is SpecParser.ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
-        }
+    private fun parseSpec(file: File): ApiSpec = when (val result = SpecParser.parse(file)) {
+        is SpecParser.ParseResult.Success -> result.apiSpec
+        is SpecParser.ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
+    }
 
     private fun parseSpecErrors(file: File): List<String> {
         val result = SpecParser.parse(file)

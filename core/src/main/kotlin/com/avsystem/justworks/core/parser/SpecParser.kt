@@ -235,13 +235,13 @@ object SpecParser {
 
     context(_: Raise<ParseResult.Failure>, _: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
-        val allOf = schema.allOf.resolveRefs()
+        val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
         // Check for oneOf wrapper pattern before standard extraction
         val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema)
-            ?: (schema.oneOf.resolveRefs() to null)
+            ?: (schema.oneOf?.mapNotNull { it.resolveName() } to null)
 
-        val anyOf = schema.anyOf.resolveRefs()
+        val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
 
         ensure(oneOf.isNullOrEmpty() || anyOf.isNullOrEmpty()) {
             ParseResult.Failure(listOf("Schema '$name' has both oneOf and anyOf. Use one combinator only."))
@@ -252,7 +252,7 @@ object SpecParser {
             if (!schema.allOf.isNullOrEmpty()) {
                 extractAllOfProperties(schema)
             } else {
-                val requiredProps = schema.requiredSet
+                val requiredProps = schema.required.orEmpty().toSet()
                 val props = schema
                     .propertyModels(requiredProps) { propName -> "$name.${propName.toPascalCase()}" }
                     .values
@@ -272,9 +272,9 @@ object SpecParser {
             properties = properties,
             requiredProperties = requiredProps,
             isEnum = false,
-            allOf = allOf?.toTypeRefs(),
-            oneOf = oneOf?.toTypeRefs(),
-            anyOf = anyOf?.toTypeRefs(),
+            allOf = allOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
+            oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
+            anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
         )
     }
@@ -289,7 +289,7 @@ object SpecParser {
 
     context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
     private fun extractAllOfProperties(schema: Schema<*>): Pair<List<PropertyModel>, Set<String>> {
-        val topRequired = schema.requiredSet
+        val topRequired = schema.required.orEmpty().toSet()
 
         // Collect properties from each allOf sub-schema.
         // For $ref sub-schemas (or identity-matched resolved refs), look up the
@@ -298,7 +298,7 @@ object SpecParser {
             .orEmpty()
             .fold(topRequired to emptyMap<String, PropertyModel>()) { (accRequired, accProperties), subSchema ->
                 val resolvedSchema = subSchema.resolveSubSchema()
-                val mergedRequired = accRequired + resolvedSchema.requiredSet
+                val mergedRequired = accRequired + resolvedSchema.required.orEmpty().toSet()
 
                 mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired)
             }
@@ -311,20 +311,6 @@ object SpecParser {
 
         return finalProperties to required
     }
-
-    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
-    private fun createPropertyModel(
-        propName: String,
-        propSchema: Schema<*>,
-        required: Set<String>,
-        contextName: String? = null,
-    ) = PropertyModel(
-        name = propName,
-        type = propSchema.toTypeRef(contextName),
-        description = propSchema.description,
-        nullable = propName !in required,
-        defaultValue = propSchema.default,
-    )
 
     /**
      * Resolves a sub-schema that may be a `$ref` or an identity-matched ref to the
@@ -349,14 +335,14 @@ object SpecParser {
      * Creates a TypeRef.Inline for an inline object schema.
      */
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
-    private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? =
-        takeIf { isInlineObject }?.requiredSet?.let { required ->
-            TypeRef.Inline(
-                properties = propertyModels(required) { "$contextName.${it.toPascalCase()}" }.values.toList(),
-                requiredProperties = required,
-                contextHint = contextName,
-            )
-        }
+    private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? = takeIf { isInlineObject }?.let {
+        val required = required.orEmpty().toSet()
+        TypeRef.Inline(
+            properties = propertyModels(required) { "$contextName.${it.toPascalCase()}" }.values.toList(),
+            requiredProperties = required,
+            contextHint = contextName,
+        )
+    }
 
     private fun generateOperationId(method: String, path: String): String {
         val segments =
@@ -382,34 +368,33 @@ object SpecParser {
     private fun Schema<*>.resolveName(): String? =
         this.`$ref`?.removePrefix(SCHEMA_PREFIX) ?: componentSchemaIdentity[this]
 
-    context(_: ComponentSchemaIdentity)
-    private fun List<Schema<*>>?.resolveRefs(): List<String>? = this?.mapNotNull { it.resolveName() }
-
-    private fun List<String>.toTypeRefs(): List<TypeRef.Reference>? = map(TypeRef::Reference).ifEmpty { null }
-
-    private val Schema<*>.requiredSet: Set<String> get() = required.orEmpty().toSet()
-
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.propertyModels(required: Set<String>, createContext: (String) -> String? = { null }) =
         properties
             .orEmpty()
             .mapValues { (propName, propSchema) ->
-                createPropertyModel(propName, propSchema, required, createContext(propName))
+                PropertyModel(
+                    name = propName,
+                    type = propSchema.toTypeRef(createContext(propName)),
+                    description = propSchema.description,
+                    nullable = propName !in required,
+                    defaultValue = propSchema.default,
+                )
             }
+
+    private const val SCHEMA_PREFIX = "#/components/schemas/"
+
+    private val STRING_FORMAT_MAP = mapOf(
+        "byte" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+        "date-time" to TypeRef.Primitive(PrimitiveType.DATE_TIME),
+        "date" to TypeRef.Primitive(PrimitiveType.DATE),
+    )
+
+    private val INTEGER_FORMAT_MAP = mapOf(
+        "int64" to TypeRef.Primitive(PrimitiveType.LONG),
+    )
+
+    private val NUMBER_FORMAT_MAP = mapOf(
+        "float" to TypeRef.Primitive(PrimitiveType.FLOAT),
+    )
 }
-
-private const val SCHEMA_PREFIX = "#/components/schemas/"
-
-private val STRING_FORMAT_MAP = mapOf(
-    "byte" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
-    "date-time" to TypeRef.Primitive(PrimitiveType.DATE_TIME),
-    "date" to TypeRef.Primitive(PrimitiveType.DATE),
-)
-
-private val INTEGER_FORMAT_MAP = mapOf(
-    "int64" to TypeRef.Primitive(PrimitiveType.LONG),
-)
-
-private val NUMBER_FORMAT_MAP = mapOf(
-    "float" to TypeRef.Primitive(PrimitiveType.FLOAT),
-)
