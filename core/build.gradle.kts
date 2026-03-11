@@ -1,3 +1,5 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
 plugins {
     kotlin("jvm")
     `maven-publish`
@@ -12,6 +14,7 @@ dependencies {
     implementation("io.swagger.parser.v3:swagger-parser:2.1.39")
     implementation("com.squareup:kotlinpoet:2.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
+    implementation("io.arrow-kt:arrow-core:2.2.1.1")
     testImplementation(kotlin("test"))
 }
 
@@ -25,4 +28,8 @@ publishing {
             from(components["java"])
         }
     }
+}
+val compileKotlin: KotlinCompile by tasks
+compileKotlin.compilerOptions {
+    freeCompilerArgs.set(listOf("-Xcontext-parameters"))
 }

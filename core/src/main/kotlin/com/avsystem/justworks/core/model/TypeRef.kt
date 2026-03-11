@@ -1,5 +1,8 @@
 package com.avsystem.justworks.core.model
 
+import arrow.core.raise.nullable
+import io.swagger.v3.oas.models.media.Schema
+
 sealed interface TypeRef {
     data class Primitive(val type: PrimitiveType) : TypeRef
 

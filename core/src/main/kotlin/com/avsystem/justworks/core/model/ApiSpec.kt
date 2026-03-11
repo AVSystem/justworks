@@ -29,11 +29,27 @@ data class Parameter(
     val description: String?,
 )
 
-enum class ParameterLocation { PATH, QUERY, HEADER }
+enum class ParameterLocation {
+    PATH,
+    QUERY,
+    HEADER;
 
-data class RequestBody(val required: Boolean, val contentType: String, val schema: TypeRef)
+    companion object {
+        fun parse(name: String): ParameterLocation? = entries.find { it.name.equals(name, true) }
+    }
+}
 
-data class Response(val statusCode: String, val description: String?, val schema: TypeRef?)
+data class RequestBody(
+    val required: Boolean,
+    val contentType: String,
+    val schema: TypeRef,
+)
+
+data class Response(
+    val statusCode: String,
+    val description: String?,
+    val schema: TypeRef?,
+)
 
 data class SchemaModel(
     val name: String,
@@ -55,8 +71,20 @@ data class PropertyModel(
     val defaultValue: Any? = null,
 )
 
-data class EnumModel(val name: String, val description: String?, val type: EnumBackingType, val values: List<String>)
+data class EnumModel(
+    val name: String,
+    val description: String?,
+    val type: EnumBackingType,
+    val values: List<String>,
+)
 
-enum class EnumBackingType { STRING, INTEGER }
+enum class EnumBackingType {
+    STRING,
+    INTEGER;
+
+    companion object {
+        fun parse(name: String): EnumBackingType? = entries.find { it.name.equals(name, true) }
+    }
+}
 
 data class Discriminator(val propertyName: String, val mapping: Map<String, String>)

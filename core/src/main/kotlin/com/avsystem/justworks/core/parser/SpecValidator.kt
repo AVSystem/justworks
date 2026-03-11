@@ -1,38 +1,45 @@
 package com.avsystem.justworks.core.parser
 
+import arrow.core.NonEmptyList
+import arrow.core.raise.ExperimentalRaiseAccumulateApi
+import arrow.core.raise.context.Raise
+import arrow.core.raise.context.accumulate
+import arrow.core.raise.context.ensure
+import arrow.core.raise.context.ensureNotNull
 import io.swagger.v3.oas.models.OpenAPI
 
 object SpecValidator {
-    fun validate(openApi: OpenAPI): List<String> {
-        val errors = mutableListOf<String>()
+    sealed class ValidationIssue {
+        abstract val message: String
 
-        // Missing info is an error -- required by OpenAPI spec
-        if (openApi.info == null) {
-            errors.add("[JUSTWORKS] Spec is missing required 'info' section")
+        class Error(override val message: String) : ValidationIssue()
+
+        class Warning(override val message: String) : ValidationIssue()
+    }
+
+    @OptIn(ExperimentalRaiseAccumulateApi::class)
+    context(_: Raise<NonEmptyList<ValidationIssue>>)
+    fun validate(openApi: OpenAPI): Unit = accumulate {
+        ensureNotNull(openApi.info) {
+            ValidationIssue.Error("Spec is missing required 'info' section")
         }
 
-        // Missing paths is a warning logged but not an error
-        if (openApi.paths.isNullOrEmpty()) {
-            errors.add("[JUSTWORKS] Warning: Spec has no paths defined")
+        ensure(!openApi.paths.isNullOrEmpty()) {
+            ValidationIssue.Warning("Spec has no paths defined")
         }
-
         // Detect unsupported constructs for v1
         openApi.paths?.values?.forEach { pathItem ->
             pathItem.readOperationsMap()?.values?.forEach { operation ->
-                if (!operation.callbacks.isNullOrEmpty()) {
-                    errors.add("[JUSTWORKS] Warning: Callbacks are not supported in v1 and will be ignored")
-                    return@forEach
+                ensure(operation.callbacks.isNullOrEmpty()) {
+                    ValidationIssue.Warning("Callbacks are not supported in v1 and will be ignored")
                 }
             }
         }
 
         openApi.components?.links?.let { links ->
-            if (links.isNotEmpty()) {
-                errors.add("[JUSTWORKS] Warning: Links are not supported in v1 and will be ignored")
+            ensure(links.isEmpty()) {
+                ValidationIssue.Warning("Links are not supported in v1 and will be ignored")
             }
         }
-
-        // Only return actual errors (non-warnings) as blockers
-        return errors.filter { !it.contains("Warning:") }
     }
 }
