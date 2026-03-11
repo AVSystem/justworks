@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.parser
 
+import arrow.core.raise.either
 import com.avsystem.justworks.core.model.TypeRef
 import java.io.File
 import kotlin.test.Test
@@ -10,8 +11,6 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 class SpecParserPolymorphicTest {
-    private val parser = SpecParser()
-
     private fun loadResource(name: String): File {
         val url =
             javaClass.getResource("/$name")
@@ -19,10 +18,12 @@ class SpecParserPolymorphicTest {
         return File(url.toURI())
     }
 
+    private fun parseSpec(file: File) =
+        either { SpecParser.parse(file) }.getOrElse { fail("Expected success but got errors: $it") }
+
     @Test
     fun `allOf schema has merged properties from referenced schema`() {
-        val result = parser.parse(loadResource("polymorphic-spec.yaml"))
-        val spec = assertIs<ParseResult.Success>(result).spec
+        val spec = parseSpec(loadResource("polymorphic-spec.yaml"))
 
         val extendedDog =
             spec.schemas.find { it.name == "ExtendedDog" }
@@ -42,8 +43,7 @@ class SpecParserPolymorphicTest {
 
     @Test
     fun `oneOf schema preserves oneOf refs`() {
-        val result = parser.parse(loadResource("polymorphic-spec.yaml"))
-        val spec = assertIs<ParseResult.Success>(result).spec
+        val spec = parseSpec(loadResource("polymorphic-spec.yaml"))
 
         val shape =
             spec.schemas.find { it.name == "Shape" }
@@ -57,8 +57,7 @@ class SpecParserPolymorphicTest {
 
     @Test
     fun `discriminator is preserved in parsed model`() {
-        val result = parser.parse(loadResource("polymorphic-spec.yaml"))
-        val spec = assertIs<ParseResult.Success>(result).spec
+        val spec = parseSpec(loadResource("polymorphic-spec.yaml"))
 
         val shape =
             spec.schemas.find { it.name == "Shape" }

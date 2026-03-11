@@ -1,8 +1,5 @@
 package com.avsystem.justworks.core.model
 
-import arrow.core.raise.nullable
-import io.swagger.v3.oas.models.media.Schema
-
 sealed interface TypeRef {
     data class Primitive(val type: PrimitiveType) : TypeRef
 
@@ -17,6 +14,8 @@ sealed interface TypeRef {
         val requiredProperties: Set<String>,
         val contextHint: String, // "request"|"response"|property name for context-aware naming
     ) : TypeRef
+
+    data object Unknown : TypeRef
 }
 
 enum class PrimitiveType { STRING, INT, LONG, DOUBLE, FLOAT, BOOLEAN, BYTE_ARRAY, DATE_TIME, DATE }
