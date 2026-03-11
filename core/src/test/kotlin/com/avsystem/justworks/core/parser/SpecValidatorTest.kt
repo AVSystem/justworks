@@ -38,11 +38,11 @@ class SpecValidatorTest {
                     }
             }
 
-        val errors = SpecValidator.validate(openApi)
-        assertTrue(errors.isNotEmpty(), "Missing info should produce errors")
+        val issues = SpecValidator.validate(openApi)
+        assertTrue(issues.isNotEmpty(), "Missing info should produce issues")
         assertTrue(
-            errors.any { it.contains("info", ignoreCase = true) },
-            "Error should mention 'info': $errors",
+            issues.any { it.message.contains("info", ignoreCase = true) },
+            "Error should mention 'info': $issues",
         )
     }
 }

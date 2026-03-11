@@ -163,7 +163,7 @@ object SpecParser {
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
-        ?: (this.name ?: allOf.singleOrNull()?.name)?.let(TypeRef::Reference)
+        ?: (this.resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
         ?: when (this.type) {
             "string" -> STRING_FORMAT_MAP[this.format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 

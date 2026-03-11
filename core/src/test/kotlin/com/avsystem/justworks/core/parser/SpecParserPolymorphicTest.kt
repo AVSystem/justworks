@@ -1,6 +1,6 @@
 package com.avsystem.justworks.core.parser
 
-import arrow.core.raise.either
+import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.TypeRef
 import java.io.File
 import kotlin.test.Test
@@ -17,8 +17,11 @@ class SpecParserPolymorphicTest {
         return File(url.toURI())
     }
 
-    private fun parseSpec(file: File) =
-        either { SpecParser.parse(file) }.getOrElse { fail("Expected success but got errors: $it") }
+    private fun parseSpec(file: File): ApiSpec =
+        when (val result = SpecParser.parse(file)) {
+            is SpecParser.ParseResult.Success -> result.apiSpec
+            is SpecParser.ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
+        }
 
     @Test
     fun `allOf schema has merged properties from referenced schema`() {
