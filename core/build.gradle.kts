@@ -1,6 +1,7 @@
 plugins {
     kotlin("jvm")
     `maven-publish`
+    id("org.jetbrains.kotlinx.kover") version "0.9.1"
 }
 
 kotlin {
