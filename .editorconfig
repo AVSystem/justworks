@@ -51,6 +51,7 @@ ktlint_standard_trailing-comma-on-declaration-site = disabled
 # This allows, for example, a variable declaration and a multi-line expression
 # to start on the same line (e.g., `val x = multiline_expression_start`).
 ktlint_standard_multiline-expression-wrapping = disabled
+ktlint_standard_string-template-indent = disabled
 
 # When set to default, the first line of a body expression is appended to the function signature
 # as long as the max line length is not exceeded.
