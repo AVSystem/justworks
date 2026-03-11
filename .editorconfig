@@ -1,0 +1,86 @@
+# .editorconfig
+
+# Top-level settings (stop searching in parent directories)
+root = true
+
+################################################################
+# GLOBAL SETTINGS (Applies to ALL files in the project)
+################################################################
+
+[*]
+# Use UTF-8 encoding for all files
+charset = utf-8
+# Use space for indentation
+indent_style = space
+# Standard indentation size is 4 spaces (required by Kotlin conventions)
+indent_size = 4
+# Ensure a newline character is present at the end of the file
+insert_final_newline = true
+# Remove any trailing whitespace characters at the end of lines
+trim_trailing_whitespace = true
+
+################################################################
+# KOTLIN FILES (*.kt and *.kts)
+################################################################
+
+[*.{kt,kts}]
+# ---------------------------------
+# Official Kotlin Code Style Settings (used by Ktlint and IDE)
+# ---------------------------------
+
+# Set the code style to the official Kotlin conventions
+ktlint_code_style = ktlint_official
+
+# Decided to enforce a maximum line length of 120 characters because 100 is too restrictive
+max_line_length = 120
+
+# Force multiline class signatures when parameter count >= 3
+ktlint_class_signature_rule_force_multiline_when_parameter_count_greater_or_equal_than = 3
+
+# Force multiline function signatures when parameter count >= 3
+ktlint_function_signature_rule_force_multiline_when_parameter_count_greater_or_equal_than = 3
+
+# Enable trailing commas for cleaner Git diffs (Ktlint default)
+ij_kotlin_allow_trailing_comma = true
+ij_kotlin_allow_trailing_comma_on_call_site = true
+
+# Disable trailing commas in declaration site (for example for enums)
+ktlint_standard_trailing-comma-on-declaration-site = disabled
+
+# Disable the rule: "A multiline expression should start on a new line"
+# This allows, for example, a variable declaration and a multi-line expression
+# to start on the same line (e.g., `val x = multiline_expression_start`).
+ktlint_standard_multiline-expression-wrapping = disabled
+ktlint_standard_string-template-indent = disabled
+
+# When set to default, the first line of a body expression is appended to the function signature
+# as long as the max line length is not exceeded.
+# Useful for functions starting from `flow {` or `runTest{`
+ktlint_function_signature_body_expression_wrapping = default
+
+################################################################
+# BUILD SCRIPT EXCLUSIONS (*.kts)
+# Often, you don't want strict formatting on build scripts
+################################################################
+
+[**/*.gradle.kts]
+# Disable Ktlint checks entirely for Gradle Kotlin DSL scripts
+ktlint = disabled
+# Sometimes build scripts have longer lines
+max_line_length = unset
+
+################################################################
+# IGNORE GENERATED AND UTILITY FILES
+# (Recommended for clean builds and performance)
+################################################################
+
+[**/build/**/*.kt]
+# Disable Ktlint checks for all files in 'build' directories
+ktlint = disabled
+
+[**/generated/**/*.kt]
+# Disable Ktlint checks for all files in 'generated' directories
+ktlint = disabled
+
+[*.yml]
+indent_size = 2
