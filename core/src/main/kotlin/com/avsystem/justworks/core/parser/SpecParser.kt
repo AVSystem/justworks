@@ -1,6 +1,5 @@
 package com.avsystem.justworks.core.parser
 
-import arrow.core.mapValuesNotNull
 import arrow.core.merge
 import arrow.core.raise.context.Raise
 import arrow.core.raise.context.ensure
@@ -269,17 +268,22 @@ object SpecParser {
         ensure(variants.all { it.isInlineObject })
 
         val unwrapped = variants
-            .mapNotNull {
-                it.properties
-                    ?.entries
-                    ?.singleOrNull()
-                    ?.toPair()
-            }.toMap()
-            .mapValuesNotNull { (propertyName, propertySchema) ->
-                propertySchema.resolveName() ?: propertyName.takeIf { propertySchema.isInlineObject }?.also { name ->
-                    componentSchemas[name] = propertySchema
-                    componentSchemaIdentity[propertySchema] = name
-                }
+            .associate {
+                ensure(it.isInlineObject)
+                val (propertyName, propertySchema) = ensureNotNull(
+                    it.properties?.entries?.singleOrNull(),
+                )
+
+                val schemaName = ensureNotNull(
+                    propertySchema.resolveName() ?: propertyName
+                        .takeIf { propertySchema.isInlineObject }
+                        ?.also { name ->
+                            componentSchemas[name] = propertySchema
+                            componentSchemaIdentity[propertySchema] = name
+                        },
+                )
+
+                propertyName to schemaName
             }
 
         ensure(unwrapped.size == variants.size)
@@ -291,6 +295,7 @@ object SpecParser {
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
         ?: (resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
+        ?: TypeRef.Unknown.takeIf { allOf.size > 1 }
         ?: when (type) {
             "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 
@@ -303,9 +308,11 @@ object SpecParser {
             "array" -> items?.toTypeRef(contextName?.let { "${it}Item" })?.let(TypeRef::Array)
                 ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-            "object" -> TypeRef.Map(
-                (additionalProperties as? Schema<*>)?.toTypeRef() ?: TypeRef.Primitive(PrimitiveType.STRING),
-            )
+            "object" -> when (val ap = additionalProperties) {
+                is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+                is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
+                else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
+            }
 
             else -> TypeRef.Primitive(PrimitiveType.STRING)
         }
