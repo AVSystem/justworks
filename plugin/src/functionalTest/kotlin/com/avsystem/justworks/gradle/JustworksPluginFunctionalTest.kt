@@ -21,10 +21,7 @@ class JustworksPluginFunctionalTest {
     @TempDir
     lateinit var projectDir: File
 
-    private fun writeFile(
-        path: String,
-        content: String,
-    ) {
+    private fun writeFile(path: String, content: String) {
         val file = projectDir.resolve(path)
         file.parentFile.mkdirs()
         file.writeText(content)
@@ -110,7 +107,7 @@ class JustworksPluginFunctionalTest {
 
             kotlin {
                 compilerOptions {
-                    freeCompilerArgs.add("-Xcontext-parameters")
+                    freeCompilerArgs.add("-Xcontext-receivers")
                 }
             }
 
@@ -127,13 +124,12 @@ class JustworksPluginFunctionalTest {
         )
     }
 
-    private fun runner(vararg args: String): GradleRunner =
-        GradleRunner
-            .create()
-            .withProjectDir(projectDir)
-            .withPluginClasspath()
-            .withArguments(*args, "--stacktrace")
-            .forwardOutput()
+    private fun runner(vararg args: String): GradleRunner = GradleRunner
+        .create()
+        .withProjectDir(projectDir)
+        .withPluginClasspath()
+        .withArguments(*args, "--stacktrace")
+        .forwardOutput()
 
     @Test
     fun `plugin applies and justworksGenerate runs successfully`() {
@@ -310,7 +306,7 @@ class JustworksPluginFunctionalTest {
 
             kotlin {
                 compilerOptions {
-                    freeCompilerArgs.add("-Xcontext-parameters")
+                    freeCompilerArgs.add("-Xcontext-receivers")
                 }
             }
 
@@ -462,7 +458,9 @@ class JustworksPluginFunctionalTest {
 
         // Verify generated files in correct packages
         assertTrue(projectDir.resolve("build/generated/justworks/petstore/com/example/petstore/model/Pet.kt").exists())
-        assertTrue(projectDir.resolve("build/generated/justworks/payments/com/example/payments/model/Payment.kt").exists())
+        assertTrue(
+            projectDir.resolve("build/generated/justworks/payments/com/example/payments/model/Payment.kt").exists(),
+        )
     }
 
     @Test

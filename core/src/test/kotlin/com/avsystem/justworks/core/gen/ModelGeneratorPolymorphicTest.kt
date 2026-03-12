@@ -18,10 +18,7 @@ class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
     private val generator = ModelGenerator(modelPackage)
 
-    private fun spec(
-        schemas: List<SchemaModel> = emptyList(),
-        enums: List<EnumModel> = emptyList(),
-    ) = ApiSpec(
+    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList(),) = ApiSpec(
         title = "Test",
         version = "1.0",
         endpoints = emptyList(),
@@ -49,10 +46,7 @@ class ModelGeneratorPolymorphicTest {
         discriminator = discriminator,
     )
 
-    private fun findType(
-        files: List<com.squareup.kotlinpoet.FileSpec>,
-        name: String,
-    ): TypeSpec {
+    private fun findType(files: List<com.squareup.kotlinpoet.FileSpec>, name: String,): TypeSpec {
         for (file in files) {
             val found = file.members.filterIsInstance<TypeSpec>().find { it.name == name }
             if (found != null) return found
@@ -181,7 +175,10 @@ class ModelGeneratorPolymorphicTest {
                 discriminator =
                     Discriminator(
                         propertyName = "shapeType",
-                        mapping = mapOf("circle" to "#/components/schemas/Circle", "square" to "#/components/schemas/Square"),
+                        mapping = mapOf(
+                            "circle" to "#/components/schemas/Circle",
+                            "square" to "#/components/schemas/Square",
+                        ),
                     ),
             )
         val circleSchema = schema(name = "Circle")
@@ -378,7 +375,9 @@ class ModelGeneratorPolymorphicTest {
                     ),
             )
 
-        val files = generator.generate(spec(schemas = listOf(networkMeshSchema, extenderPropsSchema, ethernetPropsSchema)))
+        val files = generator.generate(
+            spec(schemas = listOf(networkMeshSchema, extenderPropsSchema, ethernetPropsSchema)),
+        )
         val networkMeshType = findType(files, "NetworkMeshDevice")
 
         // Verify sealed interface with discriminator
@@ -607,7 +606,11 @@ class ModelGeneratorPolymorphicTest {
         // ShapeSerializer should NOT be generated
         val serializerTypes = files.flatMap { it.members.filterIsInstance<TypeSpec>() }
         val shapeSerializerType = serializerTypes.find { it.name == "ShapeSerializer" }
-        assertEquals(null, shapeSerializerType, "Discriminated anyOf should NOT generate a JsonContentPolymorphicSerializer")
+        assertEquals(
+            null,
+            shapeSerializerType,
+            "Discriminated anyOf should NOT generate a JsonContentPolymorphicSerializer",
+        )
     }
 
     // -- POLY-06: allOf with sealed parent --

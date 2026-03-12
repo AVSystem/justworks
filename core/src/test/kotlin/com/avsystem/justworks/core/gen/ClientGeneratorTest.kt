@@ -228,12 +228,12 @@ class ClientGeneratorTest {
 
     @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
-    fun `endpoint functions have Raise HttpError context parameter`() {
+    fun `endpoint functions have Raise HttpError context receiver`() {
         val cls = clientClass(listOf(endpoint()))
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
-        val contextParameters = funSpec.contextParameters
-        assertTrue(contextParameters.isNotEmpty(), "Expected context parameter")
-        val contextType = contextParameters.first().type
+        val contextReceivers = funSpec.contextReceiverTypes
+        assertTrue(contextReceivers.isNotEmpty(), "Expected context receiver")
+        val contextType = contextReceivers.first()
         assertTrue(contextType is ParameterizedTypeName, "Expected parameterized Raise type")
         assertEquals("arrow.core.raise.Raise", contextType.rawType.toString())
         assertEquals("com.avsystem.justworks.HttpError", contextType.typeArguments.first().toString())
@@ -329,7 +329,10 @@ class ClientGeneratorTest {
 
     @Test
     fun `polymorphic spec wires serializersModule in json block`() {
-        val files = ClientGenerator(apiPackage, modelPackage).generate(spec(listOf(endpoint())), hasPolymorphicTypes = true)
+        val files = ClientGenerator(
+            apiPackage,
+            modelPackage,
+        ).generate(spec(listOf(endpoint())), hasPolymorphicTypes = true)
         val clientProperty = files
             .first()
             .members
@@ -339,12 +342,18 @@ class ClientGeneratorTest {
             .first { it.name == "client" }
         val clientInitializer = clientProperty.initializer.toString()
         assertTrue(clientInitializer.contains("serializersModule"), "Expected serializersModule in client initializer")
-        assertTrue(clientInitializer.contains("generatedSerializersModule"), "Expected generatedSerializersModule reference")
+        assertTrue(
+            clientInitializer.contains("generatedSerializersModule"),
+            "Expected generatedSerializersModule reference",
+        )
     }
 
     @Test
     fun `non-polymorphic spec has plain json() with no serializersModule`() {
-        val files = ClientGenerator(apiPackage, modelPackage).generate(spec(listOf(endpoint())), hasPolymorphicTypes = false)
+        val files = ClientGenerator(
+            apiPackage,
+            modelPackage,
+        ).generate(spec(listOf(endpoint())), hasPolymorphicTypes = false)
         val clientProperty = files
             .first()
             .members
@@ -353,7 +362,10 @@ class ClientGeneratorTest {
             .propertySpecs
             .first { it.name == "client" }
         val clientInitializer = clientProperty.initializer.toString()
-        assertTrue(!clientInitializer.contains("serializersModule"), "Expected no serializersModule for non-polymorphic spec")
+        assertTrue(
+            !clientInitializer.contains("serializersModule"),
+            "Expected no serializersModule for non-polymorphic spec",
+        )
     }
 
     // -- AUTH-02, AUTH-03: Generated code contains bearer auth header --

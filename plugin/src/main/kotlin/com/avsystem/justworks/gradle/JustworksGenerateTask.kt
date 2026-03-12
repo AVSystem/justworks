@@ -46,6 +46,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
+    /** Parses the OpenAPI spec and generates Kotlin source files into [outputDir]. */
     @TaskAction
     fun generate() {
         val outDir = outputDir.get().asFile
@@ -57,7 +58,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
         outDir.mkdirs()
 
         val spec = specFile.get().asFile
-        val result = SpecParser.parse(spec)
+        val result = SpecParser().parse(spec)
 
         when (result) {
             is ParseResult.Failure -> {
@@ -68,11 +69,11 @@ abstract class JustworksGenerateTask : DefaultTask() {
 
             is ParseResult.Success -> {
                 val modelGen = ModelGenerator(modelPackage.get())
-                val modelCount = modelGen.generateTo(result.apiSpec, outDir)
+                val modelCount = modelGen.generateTo(result.spec, outDir)
 
                 val hasPolymorphicTypes = modelGen.getSealedHierarchies().isNotEmpty()
                 val clientGen = ClientGenerator(apiPackage.get(), modelPackage.get())
-                val clientCount = clientGen.generateTo(result.apiSpec, outDir, hasPolymorphicTypes)
+                val clientCount = clientGen.generateTo(result.spec, outDir, hasPolymorphicTypes)
 
                 logger.lifecycle("Generated $modelCount model files, $clientCount client files from ${spec.name}")
             }

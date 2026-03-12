@@ -16,8 +16,8 @@ import javax.inject.Inject
  * justworks {
  *     specs {
  *         register("petstore") {
- *             specFile = file("api/petstore.yaml")
- *             packageName = "com.example.petstore"
+ *             specFile.set(file("api/petstore.yaml"))
+ *             packageName.set("com.example.petstore")
  *         }
  *     }
  * }
@@ -28,7 +28,7 @@ import javax.inject.Inject
  */
 abstract class JustworksSpecConfiguration
     @Inject
-    constructor(private val name: String,) : Named {
+    constructor(private val name: String) : Named {
         /** Path to the OpenAPI spec file (.yaml or .json). */
         abstract val specFile: RegularFileProperty
 

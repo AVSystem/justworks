@@ -13,6 +13,10 @@ import org.gradle.api.plugins.JavaPluginExtension
  * into Kotlin source sets, and hooks `compileKotlin` to depend on code generation.
  */
 class JustworksPlugin : Plugin<Project> {
+    /** Computes the per-spec Gradle task name from a spec name, e.g. "petstore" → "justworksGeneratePetstore". */
+    private fun specTaskName(specName: String): String =
+        "justworksGenerate${specName.replaceFirstChar { it.uppercase() }}"
+
     override fun apply(project: Project) {
         // 1. Create extension
         val extension = project.extensions.create("justworks", JustworksExtension::class.java)
@@ -40,7 +44,7 @@ class JustworksPlugin : Plugin<Project> {
             }
 
             // Compute task name: justworksGenerate<Name>
-            val taskName = "justworksGenerate${spec.name.replaceFirstChar { it.uppercase() }}"
+            val taskName = specTaskName(spec.name)
 
             // Register per-spec generate task
             val specTask =
@@ -69,7 +73,7 @@ class JustworksPlugin : Plugin<Project> {
 
                 // Wire each spec's output directory
                 extension.specs.all { spec ->
-                    val taskName = "justworksGenerate${spec.name.replaceFirstChar { it.uppercase() }}"
+                    val taskName = specTaskName(spec.name)
                     val specTask = project.tasks.named(taskName, JustworksGenerateTask::class.java)
                     sourceSet.java.srcDir(specTask.flatMap { it.outputDir })
                 }

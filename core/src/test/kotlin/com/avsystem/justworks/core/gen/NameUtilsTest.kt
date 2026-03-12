@@ -89,7 +89,10 @@ class NameUtilsTest {
 
     @Test
     fun `operationNameFromPath handles multiple path parameters`() {
-        assertEquals("PutUsersByUserIdOrdersByOrderId", operationNameFromPath("PUT", "/users/{userId}/orders/{orderId}"))
+        assertEquals(
+            "PutUsersByUserIdOrdersByOrderId",
+            operationNameFromPath("PUT", "/users/{userId}/orders/{orderId}"),
+        )
     }
 
     @Test

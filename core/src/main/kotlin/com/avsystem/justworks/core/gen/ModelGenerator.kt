@@ -18,6 +18,7 @@ import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.WildcardTypeName
 import com.squareup.kotlinpoet.asTypeName
 import java.io.File
 import kotlin.time.Instant
@@ -84,9 +85,6 @@ class ModelGenerator(private val modelPackage: String) {
                         inlineTypeRef.requiredProperties,
                         inlineTypeRef.contextHint,
                     )
-
-                // Check if this is a nested inline (contains dot)
-                val isNested = name.contains(".")
 
                 inlineSchemas.add(
                     SchemaModel(
@@ -158,8 +156,7 @@ class ModelGenerator(private val modelPackage: String) {
 
                         isPrimitiveOnly(schema) -> {
                             // For primitive-only schemas, generate type alias
-                            // TODO: Extend SchemaModel to include primitiveType field for primitive-only schemas
-                            // For now, defaulting to String as the most common case
+                            // DEFERRED(Phase 4 - ENHN-04): primitive-only schema defaults to String; needs SchemaModel.primitiveType field
                             listOf(generateTypeAlias(schema, STRING))
                         }
 
@@ -189,10 +186,7 @@ class ModelGenerator(private val modelPackage: String) {
      * Generates model files from [spec] and writes them to [outputDir].
      * Returns the number of files written.
      */
-    fun generateTo(
-        spec: ApiSpec,
-        outputDir: File,
-    ): Int {
+    fun generateTo(spec: ApiSpec, outputDir: File,): Int {
         val files = generate(spec)
         for (fileSpec in files) {
             fileSpec.writeTo(outputDir)
@@ -261,11 +255,9 @@ class ModelGenerator(private val modelPackage: String) {
      * (not shared with any other variant) and uses it as a discriminating condition in selectDeserializer.
      *
      * If no unique field is found for a variant, a TODO() placeholder is emitted.
+     * DEFERRED(Phase 4 - ENHN-02): anyOf without discriminator generates TODO(); requires heuristic or spec constraint
      */
-    private fun generatePolymorphicSerializer(
-        schema: SchemaModel,
-        schemasById: Map<String, SchemaModel>,
-    ): FileSpec {
+    private fun generatePolymorphicSerializer(schema: SchemaModel, schemasById: Map<String, SchemaModel>,): FileSpec {
         val sealedClassName = ClassName(modelPackage, schema.name)
         val serializerClassName = ClassName(modelPackage, "${schema.name}Serializer")
 
@@ -291,7 +283,7 @@ class ModelGenerator(private val modelPackage: String) {
         val selectDeserializerBody = buildSelectDeserializerBody(schema.name, sealedClassName, uniqueFieldsPerVariant)
 
         val deserializationStrategy = ClassName("kotlinx.serialization", "DeserializationStrategy")
-            .parameterizedBy(com.squareup.kotlinpoet.STAR)
+            .parameterizedBy(WildcardTypeName.producerOf(sealedClassName))
 
         val selectFun = FunSpec
             .builder("selectDeserializer")
@@ -328,6 +320,7 @@ class ModelGenerator(private val modelPackage: String) {
         val builder = CodeBlock.builder()
         builder.beginControlFlow("return when")
 
+        // First pass: emit only variants with unique discriminating fields
         for ((variantName, uniqueField) in uniqueFieldsPerVariant) {
             val variantClassName = ClassName(modelPackage, variantName)
             if (uniqueField != null) {
@@ -337,24 +330,24 @@ class ModelGenerator(private val modelPackage: String) {
                     JSON_OBJECT_EXT,
                     variantClassName,
                 )
-            } else {
-                builder.addStatement(
-                    "// No unique discriminating fields found for variant '$variantName'",
-                )
-                builder.addStatement(
-                    "else -> TODO(%S)",
-                    "No unique discriminating fields found for variant '$variantName' of anyOf '$parentName' - manual selectDeserializer required",
-                )
             }
         }
 
-        // Add a final else clause with SerializationException (only if all variants had unique fields)
+        // Trailing else branch (always exactly one, after the loop)
         val allHaveUniqueFields = uniqueFieldsPerVariant.all { it.second != null }
         if (allHaveUniqueFields) {
             builder.addStatement(
                 "else -> throw %T(%S + element)",
                 SERIALIZATION_EXCEPTION,
                 "Unknown $parentName variant: ",
+            )
+        } else {
+            val missingVariants = uniqueFieldsPerVariant
+                .filter { it.second == null }
+                .joinToString(", ") { it.first }
+            builder.addStatement(
+                "else -> TODO(%S)",
+                "No unique discriminating fields found for variant(s) '$missingVariants' of anyOf '$parentName' - manual selectDeserializer required",
             )
         }
 
@@ -366,10 +359,7 @@ class ModelGenerator(private val modelPackage: String) {
      * Generates a data class for an allOf schema with merged properties.
      * If any allOf ref target is a oneOf sealed interface, adds it as a superinterface.
      */
-    private fun generateAllOfDataClass(
-        schema: SchemaModel,
-        schemasById: Map<String, SchemaModel>,
-    ): FileSpec {
+    private fun generateAllOfDataClass(schema: SchemaModel, schemasById: Map<String, SchemaModel>,): FileSpec {
         // Determine superinterfaces from allOf refs that point to sealed interfaces
         val superinterfaces = mutableListOf<ClassName>()
         for (ref in schema.allOf.orEmpty()) {
@@ -586,10 +576,7 @@ class ModelGenerator(private val modelPackage: String) {
      * Resolves the @SerialName value for a variant within a oneOf schema.
      * Uses discriminator mapping if available, otherwise defaults to the schema name.
      */
-    private fun resolveSerialName(
-        parentSchema: SchemaModel,
-        variantSchemaName: String,
-    ): String {
+    private fun resolveSerialName(parentSchema: SchemaModel, variantSchemaName: String,): String {
         val mapping = parentSchema.discriminator?.mapping
         if (!mapping.isNullOrEmpty()) {
             // mapping is: serialName -> ref path (e.g., "circle" -> "#/components/schemas/Circle")
@@ -663,7 +650,7 @@ class ModelGenerator(private val modelPackage: String) {
                 collectInlineTypeRefs(typeRef.valueType, result, visited)
             }
 
-            is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.Unknown -> {}
+            is TypeRef.Primitive, is TypeRef.Reference -> {}
         }
     }
 
@@ -671,7 +658,7 @@ class ModelGenerator(private val modelPackage: String) {
      * Generates a nested inline class (e.g., Pet.Address).
      * The name format is "Parent.Child" which we split and generate as a nested class.
      * For now, we generate it as a top-level class with the full name.
-     * TODO: In the future, this could use TypeSpec.addType() for true nested classes.
+     * DEFERRED(Phase 4): nested inline classes generated as top-level; true nesting requires architecture change
      */
     private fun generateNestedInlineClass(schema: SchemaModel): FileSpec {
         // For nested classes like "Pet.Address", generate as top-level for now
@@ -692,10 +679,7 @@ class ModelGenerator(private val modelPackage: String) {
      * Generates a type alias FileSpec for primitive-only schemas.
      * Example: typealias GroupId = String
      */
-    private fun generateTypeAlias(
-        schema: SchemaModel,
-        primitiveType: com.squareup.kotlinpoet.TypeName,
-    ): FileSpec {
+    private fun generateTypeAlias(schema: SchemaModel, primitiveType: com.squareup.kotlinpoet.TypeName,): FileSpec {
         val className = ClassName(modelPackage, schema.name)
 
         val typeAlias = TypeAliasSpec.builder(schema.name, primitiveType)

@@ -17,6 +17,7 @@ abstract class JustworksSharedTypesTask : DefaultTask() {
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
+    /** Generates the shared HttpError and Success type files into [outputDir]. */
     @TaskAction
     fun generate() {
         val outDir = outputDir.get().asFile

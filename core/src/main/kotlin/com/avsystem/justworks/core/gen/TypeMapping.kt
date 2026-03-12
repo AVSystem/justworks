@@ -2,7 +2,6 @@ package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.TypeRef
-import com.squareup.kotlinpoet.ANY
 import com.squareup.kotlinpoet.BOOLEAN
 import com.squareup.kotlinpoet.BYTE_ARRAY
 import com.squareup.kotlinpoet.ClassName
@@ -20,10 +19,7 @@ import com.squareup.kotlinpoet.TypeName
  * Maps [TypeRef] sealed variants to KotlinPoet [TypeName] instances.
  */
 object TypeMapping {
-    fun toTypeName(
-        typeRef: TypeRef,
-        modelPackage: String,
-    ): TypeName = when (typeRef) {
+    fun toTypeName(typeRef: TypeRef, modelPackage: String,): TypeName = when (typeRef) {
         is TypeRef.Primitive -> {
             primitiveTypeName(typeRef.type)
         }
@@ -45,8 +41,6 @@ object TypeMapping {
             val sanitizedName = typeRef.contextHint.replace(".", "")
             ClassName(modelPackage, sanitizedName)
         }
-
-        is TypeRef.Unknown -> ANY
     }
 
     private fun primitiveTypeName(type: PrimitiveType): TypeName = when (type) {
