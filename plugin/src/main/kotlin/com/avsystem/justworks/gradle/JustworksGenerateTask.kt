@@ -46,6 +46,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
 
+    /** Parses the OpenAPI spec and generates Kotlin source files into [outputDir]. */
     @TaskAction
     fun generate() {
         val outDir = outputDir.get().asFile
