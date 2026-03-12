@@ -63,7 +63,6 @@ data class SchemaModel(
     val description: String?,
     val properties: List<PropertyModel>,
     val requiredProperties: Set<String>,
-    val isEnum: Boolean,
     val allOf: List<TypeRef>?,
     val oneOf: List<TypeRef>?,
     val anyOf: List<TypeRef>?,

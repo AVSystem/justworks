@@ -88,7 +88,7 @@ object SpecParser {
             ParseResult.Failure(errors.map { it.message }, allWarnings)
         }
 
-        return ParseResult.Success(openApi.toApiSpec(), warnings = allWarnings)
+        ParseResult.Success(openApi.toApiSpec(), warnings = allWarnings)
     }.merge()
 
     private typealias ComponentSchemaIdentity = IdentityHashMap<Schema<*>, String>
@@ -121,20 +121,17 @@ object SpecParser {
         pathItem.readOperationsMap().map { (method, operation) ->
             val operationId = operation.operationId ?: generateOperationId(method.name, path)
 
-            val mergedParams = (pathItem.parameters.orEmpty() + operation.parameters.orEmpty())
+            val mergedParams = (operation.parameters.orEmpty() + pathItem.parameters.orEmpty())
                 .distinctBy { "${it.name}:${it.`in`}" }
                 .map { it.toParameter() }
 
             val requestBody = nullable {
                 val body = operation.requestBody.bind()
-                val (contentType, mediaType) = body.content
-                    ?.entries
-                    ?.firstOrNull()
-                    .bind()
-                val schema = mediaType.schema.bind()
+                val content = body.content.bind()
+                val schema = content[JSON_CONTENT_TYPE]?.schema.bind()
                 RequestBody(
                     required = body.required ?: false,
-                    contentType = contentType,
+                    contentType = JSON_CONTENT_TYPE,
                     schema = schema.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request"),
                 )
             }
@@ -146,7 +143,7 @@ object SpecParser {
                         statusCode = code,
                         description = resp.description,
                         schema = resp.content
-                            ?.get("application/json")
+                            ?.get(JSON_CONTENT_TYPE)
                             ?.schema
                             ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                     )
@@ -191,7 +188,7 @@ object SpecParser {
 
         val (properties, requiredProps) =
             if (!schema.allOf.isNullOrEmpty()) {
-                extractAllOfProperties(schema)
+                extractAllOfProperties(name, schema)
             } else {
                 val requiredProps = schema.required.orEmpty().toSet()
                 val props = schema
@@ -212,7 +209,6 @@ object SpecParser {
             description = schema.description,
             properties = properties,
             requiredProperties = requiredProps,
-            isEnum = false,
             allOf = allOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
@@ -230,18 +226,19 @@ object SpecParser {
     // --- allOf property merging ---
 
     context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
-    private fun extractAllOfProperties(schema: Schema<*>): Pair<List<PropertyModel>, Set<String>> {
+    private fun extractAllOfProperties(parentName: String, schema: Schema<*>): Pair<List<PropertyModel>, Set<String>> {
         val topRequired = schema.required.orEmpty().toSet()
+        val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
 
         val (required, properties) = schema.allOf
             .orEmpty()
             .fold(topRequired to emptyMap<String, PropertyModel>()) { (accRequired, accProperties), subSchema ->
                 val resolvedSchema = subSchema.resolveSubSchema()
                 val mergedRequired = accRequired + resolvedSchema.required.orEmpty().toSet()
-                mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired)
+                mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired, contextCreator)
             }
 
-        val topLevelProperties = schema.propertyModels(required)
+        val topLevelProperties = schema.propertyModels(required, contextCreator)
         val finalProperties =
             properties.plus(topLevelProperties).values.map { prop -> prop.copy(nullable = prop.name !in required) }
 
@@ -268,10 +265,10 @@ object SpecParser {
     private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Discriminator>? = nullable {
         ensure(!schema.oneOf.isNullOrEmpty() && schema.discriminator == null)
 
-        val unwrapped = schema.oneOf
-            .orEmpty()
-            .asSequence()
-            .filter { it.isInlineObject }
+        val variants = schema.oneOf.orEmpty()
+        ensure(variants.all { it.isInlineObject })
+
+        val unwrapped = variants
             .mapNotNull {
                 it.properties
                     ?.entries
@@ -285,7 +282,7 @@ object SpecParser {
                 }
             }
 
-        ensure(unwrapped.isNotEmpty())
+        ensure(unwrapped.size == variants.size)
 
         val mapping = unwrapped.mapValues { (_, schemaName) -> "$SCHEMA_PREFIX$schemaName" }
         unwrapped.values.toList() to Discriminator(propertyName = "type", mapping = mapping)
@@ -303,11 +300,12 @@ object SpecParser {
 
             "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-            "array" -> items?.toTypeRef()?.let(TypeRef::Array) ?: TypeRef.Primitive(PrimitiveType.STRING)
+            "array" -> items?.toTypeRef(contextName?.let { "${it}Item" })?.let(TypeRef::Array)
+                ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-            "object" -> (additionalProperties as? Schema<*>)?.toTypeRef()
-                ?: title?.let(TypeRef::Reference)
-                ?: TypeRef.Unknown
+            "object" -> TypeRef.Map(
+                (additionalProperties as? Schema<*>)?.toTypeRef() ?: TypeRef.Primitive(PrimitiveType.STRING),
+            )
 
             else -> TypeRef.Primitive(PrimitiveType.STRING)
         }
@@ -363,6 +361,7 @@ object SpecParser {
     private fun String.toPascalCase(): String =
         split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
 
+    private const val JSON_CONTENT_TYPE = "application/json"
     private const val SCHEMA_PREFIX = "#/components/schemas/"
 
     private val STRING_FORMAT_MAP = mapOf(
