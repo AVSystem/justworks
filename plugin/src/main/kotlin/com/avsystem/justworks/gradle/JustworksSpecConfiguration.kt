@@ -16,8 +16,8 @@ import javax.inject.Inject
  * justworks {
  *     specs {
  *         register("petstore") {
- *             specFile = file("api/petstore.yaml")
- *             packageName = "com.example.petstore"
+ *             specFile.set(file("api/petstore.yaml"))
+ *             packageName.set("com.example.petstore")
  *         }
  *     }
  * }

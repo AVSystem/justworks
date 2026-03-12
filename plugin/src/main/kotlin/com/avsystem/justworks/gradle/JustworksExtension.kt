@@ -14,12 +14,12 @@ import javax.inject.Inject
  * justworks {
  *     specs {
  *         register("petstore") {
- *             specFile = file("api/petstore.yaml")
- *             packageName = "com.example.petstore"
+ *             specFile.set(file("api/petstore.yaml"))
+ *             packageName.set("com.example.petstore")
  *         }
  *         register("payments") {
- *             specFile = file("api/payments.yaml")
- *             packageName = "com.example.payments"
+ *             specFile.set(file("api/payments.yaml"))
+ *             packageName.set("com.example.payments")
  *         }
  *     }
  * }

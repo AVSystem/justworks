@@ -1,7 +1,6 @@
 package com.avsystem.justworks.core.parser
 
 import com.avsystem.justworks.core.gen.operationNameFromPath
-import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.Endpoint

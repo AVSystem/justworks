@@ -16,9 +16,9 @@ import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
-import com.squareup.kotlinpoet.WildcardTypeName
 import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.WildcardTypeName
 import com.squareup.kotlinpoet.asTypeName
 import java.io.File
 import kotlin.time.Instant
@@ -85,9 +85,6 @@ class ModelGenerator(private val modelPackage: String) {
                         inlineTypeRef.requiredProperties,
                         inlineTypeRef.contextHint,
                     )
-
-                // Check if this is a nested inline (contains dot)
-                val isNested = name.contains(".")
 
                 inlineSchemas.add(
                     SchemaModel(

@@ -11,7 +11,7 @@ object SpecValidator {
             errors.add("[JUSTWORKS] Spec is missing required 'info' section")
         }
 
-        // Missing paths is a warning logged but not an error
+        // Missing paths is a warning — accumulated but filtered out (not returned to caller)
         if (openApi.paths.isNullOrEmpty()) {
             errors.add("[JUSTWORKS] Warning: Spec has no paths defined")
         }
