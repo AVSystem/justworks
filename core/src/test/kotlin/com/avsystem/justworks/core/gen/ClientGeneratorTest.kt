@@ -228,12 +228,12 @@ class ClientGeneratorTest {
 
     @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
-    fun `endpoint functions have Raise HttpError context parameter`() {
+    fun `endpoint functions have Raise HttpError context receiver`() {
         val cls = clientClass(listOf(endpoint()))
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
-        val contextParameters = funSpec.contextParameters
-        assertTrue(contextParameters.isNotEmpty(), "Expected context parameter")
-        val contextType = contextParameters.first().type
+        val contextReceivers = funSpec.contextReceiverTypes
+        assertTrue(contextReceivers.isNotEmpty(), "Expected context receiver")
+        val contextType = contextReceivers.first()
         assertTrue(contextType is ParameterizedTypeName, "Expected parameterized Raise type")
         assertEquals("arrow.core.raise.Raise", contextType.rawType.toString())
         assertEquals("com.avsystem.justworks.HttpError", contextType.typeArguments.first().toString())

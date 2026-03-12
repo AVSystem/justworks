@@ -6,12 +6,10 @@ import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.ContextParameter
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.LambdaTypeName
 import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
@@ -158,7 +156,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             FunSpec
                 .builder(functionName)
                 .addModifiers(KModifier.SUSPEND)
-                .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
+                .contextReceivers(listOf(RAISE.parameterizedBy(HTTP_ERROR)))
                 .returns(returnType)
 
         // Add parameters: PATH first, then QUERY, then HEADER, then body
@@ -297,7 +295,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
 
         code.nextControlFlow("catch (e: %T)", Exception::class)
         code.addStatement(
-            "%M(%T(0, e.message ?: \"Network error\", %T.Network))",
+            "%L(%T(0, e.message ?: \"Network error\", %T.Network))",
             RAISE_FUN,
             HTTP_ERROR,
             HTTP_ERROR_TYPE,
@@ -312,14 +310,14 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             code.addStatement("in 200..299 -> %T(response.status.value, response.%M())", HTTP_SUCCESS, BODY_FUN)
         }
         code.addStatement(
-            "in 400..499 -> %M(%T(response.status.value, response.%M(), %T.Client))",
+            "in 400..499 -> %L(%T(response.status.value, response.%M(), %T.Client))",
             RAISE_FUN,
             HTTP_ERROR,
             BODY_AS_TEXT_FUN,
             HTTP_ERROR_TYPE,
         )
         code.addStatement(
-            "else -> %M(%T(response.status.value, response.%M(), %T.Server))",
+            "else -> %L(%T(response.status.value, response.%M(), %T.Server))",
             RAISE_FUN,
             HTTP_ERROR,
             BODY_AS_TEXT_FUN,

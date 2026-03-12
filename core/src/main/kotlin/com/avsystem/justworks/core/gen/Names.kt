@@ -61,7 +61,13 @@ val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
 // ============================================================================
 
 val RAISE = ClassName("arrow.core.raise", "Raise")
-val RAISE_FUN = MemberName("arrow.core.raise.context", "raise")
+
+// `raise` is a member of Raise<T> and is called directly via context parameter —
+// no MemberName import needed; use literal "raise" in code blocks to avoid
+// emitting `import arrow.core.raise.context.raise` which fails when
+// `-Xcontext-parameters` is active because `context` becomes a keyword.
+const val RAISE_FUN = "raise"
+
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
 val HTTP_ERROR_TYPE = ClassName("com.avsystem.justworks", "HttpErrorType")
 val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")

@@ -107,7 +107,7 @@ class JustworksPluginFunctionalTest {
 
             kotlin {
                 compilerOptions {
-                    freeCompilerArgs.add("-Xcontext-parameters")
+                    freeCompilerArgs.add("-Xcontext-receivers")
                 }
             }
 
@@ -306,7 +306,7 @@ class JustworksPluginFunctionalTest {
 
             kotlin {
                 compilerOptions {
-                    freeCompilerArgs.add("-Xcontext-parameters")
+                    freeCompilerArgs.add("-Xcontext-receivers")
                 }
             }
 
