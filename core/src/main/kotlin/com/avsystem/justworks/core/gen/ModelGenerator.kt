@@ -158,8 +158,7 @@ class ModelGenerator(private val modelPackage: String) {
 
                         isPrimitiveOnly(schema) -> {
                             // For primitive-only schemas, generate type alias
-                            // TODO: Extend SchemaModel to include primitiveType field for primitive-only schemas
-                            // For now, defaulting to String as the most common case
+                            // DEFERRED(Phase 4 - ENHN-04): primitive-only schema defaults to String; needs SchemaModel.primitiveType field
                             listOf(generateTypeAlias(schema, STRING))
                         }
 
@@ -258,6 +257,7 @@ class ModelGenerator(private val modelPackage: String) {
      * (not shared with any other variant) and uses it as a discriminating condition in selectDeserializer.
      *
      * If no unique field is found for a variant, a TODO() placeholder is emitted.
+     * DEFERRED(Phase 4 - ENHN-02): anyOf without discriminator generates TODO(); requires heuristic or spec constraint
      */
     private fun generatePolymorphicSerializer(schema: SchemaModel, schemasById: Map<String, SchemaModel>,): FileSpec {
         val sealedClassName = ClassName(modelPackage, schema.name)
@@ -659,7 +659,7 @@ class ModelGenerator(private val modelPackage: String) {
      * Generates a nested inline class (e.g., Pet.Address).
      * The name format is "Parent.Child" which we split and generate as a nested class.
      * For now, we generate it as a top-level class with the full name.
-     * TODO: In the future, this could use TypeSpec.addType() for true nested classes.
+     * DEFERRED(Phase 4): nested inline classes generated as top-level; true nesting requires architecture change
      */
     private fun generateNestedInlineClass(schema: SchemaModel): FileSpec {
         // For nested classes like "Pet.Address", generate as top-level for now
