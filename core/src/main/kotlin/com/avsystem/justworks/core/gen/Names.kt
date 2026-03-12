@@ -3,14 +3,10 @@ package com.avsystem.justworks.core.gen
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.MemberName
 
-/**
- * Centralized repository of type and function references used across code generators.
- * Organized by domain (HTTP client, serialization, dates, error handling).
- */
+// Centralized repository of type and function references used across code generators.
+// Organized by domain (HTTP client, serialization, dates, error handling).
 
-// ============================================================================
-// Ktor HTTP Client
-// ============================================================================
+// -- Ktor HTTP Client --
 
 val HTTP_CLIENT = ClassName("io.ktor.client", "HttpClient")
 val CONTENT_NEGOTIATION = ClassName("io.ktor.client.plugins.contentnegotiation", "ContentNegotiation")
