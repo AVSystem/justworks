@@ -1,5 +1,12 @@
 package com.avsystem.justworks.core.model
 
+/**
+ * Intermediate model representing a fully parsed OpenAPI specification.
+ *
+ * Produced by [com.avsystem.justworks.core.parser.SpecParser] and consumed by the
+ * code generators. Bridges the raw Swagger Parser OAS model and the generated
+ * Kotlin client/model source files.
+ */
 data class ApiSpec(
     val title: String,
     val version: String,

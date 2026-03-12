@@ -30,6 +30,20 @@ import java.io.File
 import java.util.IdentityHashMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
+/**
+ * Result of parsing an OpenAPI specification file.
+ *
+ * Use pattern matching to handle both outcomes:
+ * ```kotlin
+ * when (val result = SpecParser.parse(file)) {
+ *     is ParseResult.Success -> result.apiSpec
+ *     is ParseResult.Failure -> handleErrors(result.errors)
+ * }
+ * ```
+ *
+ * Both [Success] and [Failure] may carry [warnings] about non-fatal issues
+ * encountered during parsing or validation.
+ */
 sealed interface ParseResult {
     data class Success(val apiSpec: ApiSpec, val warnings: List<String> = emptyList()) : ParseResult
 
@@ -37,6 +51,20 @@ sealed interface ParseResult {
 }
 
 object SpecParser {
+    /**
+     * Parses an OpenAPI 3.0 specification file into an [ApiSpec] intermediate model.
+     *
+     * Accepts YAML or JSON files. Swagger 2.0 specs are automatically converted to
+     * OpenAPI 3.0 by the underlying Swagger Parser before model extraction.
+     *
+     * Uses Arrow [either] for the internal parse pipeline; the result is collapsed
+     * to [ParseResult] via [arrow.core.merge] so callers always receive a [ParseResult]
+     * and never an [arrow.core.Either].
+     *
+     * @param specFile path to the OpenAPI or Swagger 2.0 specification file
+     * @return [ParseResult.Success] with the parsed model and any warnings, or
+     *         [ParseResult.Failure] with a non-empty list of error messages
+     */
     fun parse(specFile: File): ParseResult = either {
         val parseOptions = ParseOptions().apply {
             isResolve = true
