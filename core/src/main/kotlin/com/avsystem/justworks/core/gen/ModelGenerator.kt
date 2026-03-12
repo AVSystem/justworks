@@ -16,6 +16,7 @@ import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
+import com.squareup.kotlinpoet.WildcardTypeName
 import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.asTypeName
@@ -285,7 +286,7 @@ class ModelGenerator(private val modelPackage: String) {
         val selectDeserializerBody = buildSelectDeserializerBody(schema.name, sealedClassName, uniqueFieldsPerVariant)
 
         val deserializationStrategy = ClassName("kotlinx.serialization", "DeserializationStrategy")
-            .parameterizedBy(com.squareup.kotlinpoet.STAR)
+            .parameterizedBy(WildcardTypeName.producerOf(sealedClassName))
 
         val selectFun = FunSpec
             .builder("selectDeserializer")
@@ -322,6 +323,7 @@ class ModelGenerator(private val modelPackage: String) {
         val builder = CodeBlock.builder()
         builder.beginControlFlow("return when")
 
+        // First pass: emit only variants with unique discriminating fields
         for ((variantName, uniqueField) in uniqueFieldsPerVariant) {
             val variantClassName = ClassName(modelPackage, variantName)
             if (uniqueField != null) {
@@ -331,24 +333,24 @@ class ModelGenerator(private val modelPackage: String) {
                     JSON_OBJECT_EXT,
                     variantClassName,
                 )
-            } else {
-                builder.addStatement(
-                    "// No unique discriminating fields found for variant '$variantName'",
-                )
-                builder.addStatement(
-                    "else -> TODO(%S)",
-                    "No unique discriminating fields found for variant '$variantName' of anyOf '$parentName' - manual selectDeserializer required",
-                )
             }
         }
 
-        // Add a final else clause with SerializationException (only if all variants had unique fields)
+        // Trailing else branch (always exactly one, after the loop)
         val allHaveUniqueFields = uniqueFieldsPerVariant.all { it.second != null }
         if (allHaveUniqueFields) {
             builder.addStatement(
                 "else -> throw %T(%S + element)",
                 SERIALIZATION_EXCEPTION,
                 "Unknown $parentName variant: ",
+            )
+        } else {
+            val missingVariants = uniqueFieldsPerVariant
+                .filter { it.second == null }
+                .joinToString(", ") { it.first }
+            builder.addStatement(
+                "else -> TODO(%S)",
+                "No unique discriminating fields found for variant(s) '$missingVariants' of anyOf '$parentName' - manual selectDeserializer required",
             )
         }
 

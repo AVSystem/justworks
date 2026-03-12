@@ -464,14 +464,21 @@ class SpecParser {
         // referenced component schema to get its properties and required fields.
         for (subSchema in schema.allOf.orEmpty()) {
             val resolvedSchema = resolveSubSchema(subSchema)
+            val resolvedSchemaName = componentSchemaIdentity[resolvedSchema] ?: "Unknown"
             val subRequired = resolvedSchema.required.orEmpty().toSet()
             mergedRequired.addAll(subRequired)
 
             resolvedSchema.properties.orEmpty().forEach { (propName, propSchema) ->
+                val propType = if (isInlineObjectSchema(propSchema)) {
+                    val contextName = "$resolvedSchemaName.${propName.toPascalCase()}"
+                    createInlineTypeRef(propSchema, contextName)
+                } else {
+                    schemaToTypeRef(propSchema)
+                }
                 mergedProperties[propName] =
                     PropertyModel(
                         name = propName,
-                        type = schemaToTypeRef(propSchema),
+                        type = propType,
                         description = propSchema.description,
                         nullable = propName !in mergedRequired,
                         defaultValue = propSchema.default,
@@ -482,12 +489,19 @@ class SpecParser {
         // Add top-level properties (inline alongside allOf)
         val topRequired = schema.required.orEmpty().toSet()
         mergedRequired.addAll(topRequired)
+        val parentSchemaName = componentSchemaIdentity[schema] ?: "Unknown"
 
         schema.properties.orEmpty().forEach { (propName, propSchema) ->
+            val propType = if (isInlineObjectSchema(propSchema)) {
+                val contextName = "$parentSchemaName.${propName.toPascalCase()}"
+                createInlineTypeRef(propSchema, contextName)
+            } else {
+                schemaToTypeRef(propSchema)
+            }
             mergedProperties[propName] =
                 PropertyModel(
                     name = propName,
-                    type = schemaToTypeRef(propSchema),
+                    type = propType,
                     description = propSchema.description,
                     nullable = propName !in mergedRequired,
                     defaultValue = propSchema.default,
