@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.parser
 
+import arrow.core.fold
 import arrow.core.merge
 import arrow.core.raise.context.Raise
 import arrow.core.raise.context.ensure
@@ -108,9 +109,8 @@ object SpecParser {
 
             val (enumModels, schemaModels) =
                 componentSchemas
-                    .asSequence()
-                    .plus(allSchemas.asSequence())
-                    .distinctBy { it.key }
+                    .toMap()
+                    .plus(allSchemas.toMap())
                     .fold(emptyList<EnumModel>() to emptyList<SchemaModel>()) { (accEnum, accModels), (name, schema) ->
                         if (schema.isEnumSchema) {
                             accEnum + extractEnumModel(name, schema) to accModels
