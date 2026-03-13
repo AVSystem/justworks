@@ -1,0 +1,11 @@
+openapi: "3.0.3"
+# Deliberately missing 'info' section -- required by OpenAPI spec
+# This should cause SpecValidator to return errors
+
+paths:
+  /broken:
+    get:
+      summary: An endpoint in a spec with no info
+      responses:
+        "200":
+          description: Should never get here
