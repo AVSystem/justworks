@@ -1,26 +1,13 @@
 package com.avsystem.justworks.core.parser
 
-import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.TypeRef
-import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
-class SpecParserPolymorphicTest {
-    private fun loadResource(name: String): File {
-        val url =
-            javaClass.getResource("/$name")
-                ?: fail("Test resource not found: $name")
-        return File(url.toURI())
-    }
-
-    private fun parseSpec(file: File): ApiSpec = when (val result = SpecParser.parse(file)) {
-        is ParseResult.Success -> result.apiSpec
-        is ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
-    }
+class SpecParserPolymorphicTest : SpecParserTestBase() {
 
     @Test
     fun `allOf schema has merged properties from referenced schema`() {

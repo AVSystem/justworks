@@ -289,7 +289,6 @@ object SpecParser {
 
         val unwrapped = variants
             .associate {
-                ensure(it.isInlineObject)
                 val (propertyName, propertySchema) = ensureNotNull(
                     it.properties?.entries?.singleOrNull(),
                 )
