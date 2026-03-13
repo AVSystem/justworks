@@ -113,9 +113,9 @@ object SpecParser {
                     .distinctBy { it.key }
                     .fold(emptyList<EnumModel>() to emptyList<SchemaModel>()) { (accEnum, accModels), (name, schema) ->
                         if (schema.isEnumSchema) {
-                            accEnum to accModels + extractSchemaModel(name, schema)
-                        } else {
                             accEnum + extractEnumModel(name, schema) to accModels
+                        } else {
+                            accEnum to accModels + extractSchemaModel(name, schema)
                         }
                     }
 
