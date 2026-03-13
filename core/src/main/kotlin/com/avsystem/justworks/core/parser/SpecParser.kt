@@ -101,65 +101,85 @@ object SpecParser {
             allSchemas.forEach { (name, schema) -> this[schema] = name }
         }
 
-        context(componentSchemaIdentity, allSchemas.toMutableMap()) {
+        val componentSchemas: ComponentSchemas = allSchemas.toMutableMap()
+
+        context(componentSchemaIdentity, componentSchemas) {
+            val endpoints = extractEndpoints(paths.orEmpty())
+
             val (enumModels, schemaModels) =
-                allSchemas.asSequence().partition { (_, schema) -> schema.isEnumSchema }
+                componentSchemas
+                    .asSequence()
+                    .plus(allSchemas.asSequence())
+                    .distinctBy { it.key }
+                    .fold(emptyList<EnumModel>() to emptyList<SchemaModel>()) { (accEnum, accModels), (name, schema) ->
+                        if (schema.isEnumSchema) {
+                            accEnum to accModels + extractSchemaModel(name, schema)
+                        } else {
+                            accEnum + extractEnumModel(name, schema) to accModels
+                        }
+                    }
 
             return ApiSpec(
                 title = info?.title ?: "Untitled",
                 version = info?.version ?: "0.0.0",
-                endpoints = extractEndpoints(paths.orEmpty()),
-                schemas = schemaModels.map { (name, schema) -> extractSchemaModel(name, schema) },
-                enums = enumModels.map { (name, schema) -> extractEnumModel(name, schema) },
+                endpoints = endpoints,
+                schemas = schemaModels,
+                enums = enumModels,
             )
         }
     }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
-    private fun extractEndpoints(paths: Map<String, PathItem>): List<Endpoint> = paths.flatMap { (path, pathItem) ->
-        pathItem.readOperationsMap().map { (method, operation) ->
-            val operationId = operation.operationId ?: generateOperationId(method.name, path)
+    private fun extractEndpoints(paths: Map<String, PathItem>): List<Endpoint> = paths
+        .asSequence()
+        .flatMap { (path, pathItem) ->
+            pathItem
+                .readOperationsMap()
+                .asSequence()
+                .mapNotNull { (method, value) -> HttpMethod.parse(method.name)?.let { it to value } }
+                .map { (method, operation) ->
+                    val operationId = operation.operationId ?: generateOperationId(method, path)
 
-            val mergedParams = (operation.parameters.orEmpty() + pathItem.parameters.orEmpty())
-                .distinctBy { "${it.name}:${it.`in`}" }
-                .map { it.toParameter() }
+                    val mergedParams = (operation.parameters.orEmpty() + pathItem.parameters.orEmpty())
+                        .distinctBy { "${it.name}:${it.`in`}" }
+                        .map { it.toParameter() }
 
-            val requestBody = nullable {
-                val body = operation.requestBody.bind()
-                val content = body.content.bind()
-                val schema = content[JSON_CONTENT_TYPE]?.schema.bind()
-                RequestBody(
-                    required = body.required ?: false,
-                    contentType = JSON_CONTENT_TYPE,
-                    schema = schema.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request"),
-                )
-            }
+                    val requestBody = nullable {
+                        val body = operation.requestBody.bind()
+                        val content = body.content.bind()
+                        val schema = content[JSON_CONTENT_TYPE]?.schema.bind()
+                        RequestBody(
+                            required = body.required ?: false,
+                            contentType = JSON_CONTENT_TYPE,
+                            schema = schema.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request"),
+                        )
+                    }
 
-            val responses = operation.responses
-                .orEmpty()
-                .mapValues { (code, resp) ->
-                    Response(
-                        statusCode = code,
-                        description = resp.description,
-                        schema = resp.content
-                            ?.get(JSON_CONTENT_TYPE)
-                            ?.schema
-                            ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
+                    val responses = operation.responses
+                        .orEmpty()
+                        .mapValues { (code, resp) ->
+                            Response(
+                                statusCode = code,
+                                description = resp.description,
+                                schema = resp.content
+                                    ?.get(JSON_CONTENT_TYPE)
+                                    ?.schema
+                                    ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
+                            )
+                        }
+
+                    Endpoint(
+                        path = path,
+                        method = method,
+                        operationId = operationId,
+                        summary = operation.summary,
+                        tags = operation.tags.orEmpty(),
+                        parameters = mergedParams,
+                        requestBody = requestBody,
+                        responses = responses,
                     )
                 }
-
-            Endpoint(
-                path = path,
-                method = HttpMethod.valueOf(method.name),
-                operationId = operationId,
-                summary = operation.summary,
-                tags = operation.tags.orEmpty(),
-                parameters = mergedParams,
-                requestBody = requestBody,
-                responses = responses,
-            )
-        }
-    }
+        }.toList()
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun SwaggerParameter.toParameter(): Parameter = Parameter(
@@ -295,7 +315,7 @@ object SpecParser {
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
         ?: (resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
-        ?: TypeRef.Unknown.takeIf { allOf.size > 1 }
+        ?: TypeRef.Unknown.takeIf { (allOf?.size ?: 0) > 1 }
         ?: when (type) {
             "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 
@@ -351,7 +371,7 @@ object SpecParser {
                 )
             }
 
-    private fun generateOperationId(method: String, path: String): String {
+    private fun generateOperationId(method: HttpMethod, path: String): String {
         val segments = path
             .split("/")
             .filter { it.isNotEmpty() }
@@ -362,7 +382,7 @@ object SpecParser {
                     segment.toPascalCase()
                 }
             }
-        return method.lowercase() + segments
+        return method.name.lowercase() + segments
     }
 
     private fun String.toPascalCase(): String =

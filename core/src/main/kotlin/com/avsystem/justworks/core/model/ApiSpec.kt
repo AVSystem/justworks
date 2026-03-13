@@ -26,7 +26,17 @@ data class Endpoint(
     val responses: Map<String, Response>,
 )
 
-enum class HttpMethod { GET, POST, PUT, DELETE, PATCH }
+enum class HttpMethod {
+    GET,
+    POST,
+    PUT,
+    DELETE,
+    PATCH;
+
+    companion object {
+        fun parse(name: String): HttpMethod? = entries.find { it.name.equals(name, true) }
+    }
+}
 
 data class Parameter(
     val name: String,
