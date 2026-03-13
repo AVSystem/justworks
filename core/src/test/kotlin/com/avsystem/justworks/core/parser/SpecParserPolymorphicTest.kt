@@ -8,7 +8,6 @@ import kotlin.test.assertTrue
 import kotlin.test.fail
 
 class SpecParserPolymorphicTest : SpecParserTestBase() {
-
     @Test
     fun `allOf schema has merged properties from referenced schema`() {
         val spec = parseSpec(loadResource("polymorphic-spec.yaml"))
