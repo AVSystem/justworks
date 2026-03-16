@@ -27,7 +27,7 @@ import io.swagger.v3.oas.models.PathItem
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
-import java.util.IdentityHashMap
+import java.util.*
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
 /**
@@ -107,17 +107,13 @@ object SpecParser {
         context(componentSchemaIdentity, componentSchemas) {
             val endpoints = extractEndpoints(paths.orEmpty())
 
-            val (enumModels, schemaModels) =
-                componentSchemas
-                    .toMap()
-                    .plus(allSchemas.toMap())
-                    .fold(emptyList<EnumModel>() to emptyList<SchemaModel>()) { (accEnum, accModels), (name, schema) ->
-                        if (schema.isEnumSchema) {
-                            accEnum + extractEnumModel(name, schema) to accModels
-                        } else {
-                            accEnum to accModels + extractSchemaModel(name, schema)
-                        }
-                    }
+            val (enumModels, schemaModels) = allSchemas.fold(emptyList<EnumModel>() to emptyList<SchemaModel>()) { (accEnum, accModels), (name, schema) ->
+                if (schema.isEnumSchema) {
+                    accEnum + extractEnumModel(name, schema) to accModels
+                } else {
+                    accEnum to accModels + extractSchemaModel(name, schema)
+                }
+            }
 
             return ApiSpec(
                 title = info?.title ?: "Untitled",
@@ -196,7 +192,7 @@ object SpecParser {
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
-        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema)
+        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
             ?: (schema.oneOf?.mapNotNull { it.resolveName() } to null)
 
         val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
@@ -324,8 +320,7 @@ object SpecParser {
 
             "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-            "array" -> items?.toTypeRef(contextName?.let { "${it}Item" })?.let(TypeRef::Array)
-                ?: TypeRef.Primitive(PrimitiveType.STRING)
+            "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
 
             "object" -> when (val ap = additionalProperties) {
                 is Schema<*> -> TypeRef.Map(ap.toTypeRef())
@@ -333,7 +328,7 @@ object SpecParser {
                 else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
             }
 
-            else -> TypeRef.Primitive(PrimitiveType.STRING)
+            else -> TypeRef.Unknown
         }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
