@@ -27,7 +27,7 @@ import io.swagger.v3.oas.models.PathItem
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
-import java.util.*
+import java.util.IdentityHashMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
 /**
@@ -107,7 +107,9 @@ object SpecParser {
         context(componentSchemaIdentity, componentSchemas) {
             val endpoints = extractEndpoints(paths.orEmpty())
 
-            val (enumModels, schemaModels) = allSchemas.fold(emptyList<EnumModel>() to emptyList<SchemaModel>()) { (accEnum, accModels), (name, schema) ->
+            val (enumModels, schemaModels) = allSchemas.fold(
+                emptyList<EnumModel>() to emptyList<SchemaModel>(),
+            ) { (accEnum, accModels), (name, schema) ->
                 if (schema.isEnumSchema) {
                     accEnum + extractEnumModel(name, schema) to accModels
                 } else {
