@@ -1,10 +1,7 @@
 package com.avsystem.justworks.core.gen
 
-import com.avsystem.justworks.core.model.SchemaModel
-import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.PropertySpec
 import kotlin.test.Test
-import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertNull
 import kotlin.test.assertTrue

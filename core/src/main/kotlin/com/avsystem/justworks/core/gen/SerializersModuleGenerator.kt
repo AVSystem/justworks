@@ -4,9 +4,7 @@ import com.avsystem.justworks.core.gen.ModelGenerator.HierarchyInfo
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
-import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.PropertySpec
-import java.io.File
 
 /**
  * Generates a `SerializersModule` registration file for all polymorphic sealed hierarchies.
@@ -17,9 +15,7 @@ import java.io.File
 class SerializersModuleGenerator(private val modelPackage: String) {
     /**
      * Generates a [FileSpec] containing the SerializersModule registration.
-     * Returns null if [sealedHierarchies] is empty (no polymorphic types to register).
-     *
-     * @param sealedHierarchies map of sealed parent name to list of variant schema names
+     * Returns null if the hierarchy has no sealed types to register.
      */
 
     context(hierarchy: HierarchyInfo)

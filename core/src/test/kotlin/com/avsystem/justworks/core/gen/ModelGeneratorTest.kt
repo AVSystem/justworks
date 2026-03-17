@@ -7,9 +7,7 @@ import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
-import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.ParameterizedTypeName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -808,20 +806,20 @@ class ModelGeneratorTest {
     // -- ROB-01: Circular schema visited-set guard --
 
     @Test
-    fun `collectInlineTypeRefs with circular TypeRef does not stack overflow`() {
-        // Create a circular inline TypeRef: TreeNode with a property 'children' of type Array<TreeNode>
-        // We use a self-referential arrangement via a property list
-        val treeNodeInline = TypeRef.Inline(
-            properties = emptyList(), // We'll override with a property referencing itself below
+    fun `collectInlineTypeRefs with nested inline TypeRef does not stack overflow`() {
+        // Build a schema model containing a deeply nested inline structure
+        // (inline -> property -> another inline with the same shape)
+        val innerInline = TypeRef.Inline(
+            properties = listOf(
+                PropertyModel("value", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
             requiredProperties = emptySet(),
             contextHint = "treeNode",
         )
 
-        // Build a schema model containing a property that uses a nested Inline
-        // (circular structure: inline -> property -> same inline structure)
         val selfReferencingInline = TypeRef.Inline(
             properties = listOf(
-                PropertyModel("children", TypeRef.Array(treeNodeInline), null, true),
+                PropertyModel("children", TypeRef.Array(innerInline), null, true),
             ),
             requiredProperties = emptySet(),
             contextHint = "treeNode",

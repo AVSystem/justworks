@@ -217,7 +217,7 @@ class ModelGenerator(private val modelPackage: String) {
         val selectDeserializerBody = buildSelectDeserializerBody(schema.name, uniqueFieldsPerVariant)
 
         val deserializationStrategy = ClassName("kotlinx.serialization", "DeserializationStrategy")
-            .parameterizedBy(com.squareup.kotlinpoet.STAR)
+            .parameterizedBy(com.squareup.kotlinpoet.WildcardTypeName.producerOf(sealedClassName))
 
         val selectFun = FunSpec
             .builder("selectDeserializer")
