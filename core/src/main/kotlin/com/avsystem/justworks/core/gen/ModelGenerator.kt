@@ -56,16 +56,16 @@ class ModelGenerator(private val modelPackage: String) {
 
         // Scan endpoints for inline schemas in request/response bodies
         for (endpoint in spec.endpoints) {
-            endpoint.requestBody?.schema?.let { collectInlineTypeRefs(it, inlineTypeRefs) }
+            endpoint.requestBody?.schema?.let { inlineTypeRefs += collectInlineTypeRefs(todo = listOf(it)) }
             endpoint.responses.values.forEach { response ->
-                response.schema?.let { collectInlineTypeRefs(it, inlineTypeRefs) }
+                response.schema?.let { inlineTypeRefs += collectInlineTypeRefs(todo = listOf(it)) }
             }
         }
 
         // Scan component schemas for inline property schemas
         for (schema in spec.schemas) {
             for (property in schema.properties) {
-                collectInlineTypeRefs(property.type, inlineTypeRefs)
+                inlineTypeRefs += collectInlineTypeRefs(todo = listOf(property.type))
             }
         }
 
@@ -261,7 +261,7 @@ class ModelGenerator(private val modelPackage: String) {
         }
 
         // Build selectDeserializer function body
-        val selectDeserializerBody = buildSelectDeserializerBody(schema.name, sealedClassName, uniqueFieldsPerVariant)
+        val selectDeserializerBody = buildSelectDeserializerBody(schema.name, uniqueFieldsPerVariant)
 
         val deserializationStrategy = ClassName("kotlinx.serialization", "DeserializationStrategy")
             .parameterizedBy(com.squareup.kotlinpoet.STAR)
