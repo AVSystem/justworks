@@ -1,16 +1,10 @@
 package com.avsystem.justworks.core.parser
 
-import arrow.core.NonEmptyList
 import arrow.core.raise.ExperimentalRaiseAccumulateApi
-import arrow.core.raise.context.Raise
-import arrow.core.raise.context.RaiseAccumulate
 import arrow.core.raise.context.accumulate
-import arrow.core.raise.context.ensure
-import arrow.core.raise.context.ensureNotNull
 import arrow.core.raise.context.ensureNotNullOrAccumulate
 import arrow.core.raise.context.ensureOrAccumulate
 import arrow.core.raise.fold
-import arrow.core.raise.recover
 import io.swagger.v3.oas.models.OpenAPI
 
 object SpecValidator {
@@ -22,8 +16,20 @@ object SpecValidator {
         class Warning(override val message: String) : ValidationIssue()
     }
 
+    /**
+     * Validates a parsed OpenAPI model for required fields and unsupported constructs.
+     *
+     * Collects all issues without short-circuiting (using Arrow [accumulate]) so that
+     * callers receive the full list of problems in a single call.
+     *
+     * Returned issues are either [ValidationIssue.Error] (spec is unusable) or
+     * [ValidationIssue.Warning] (spec can be processed but some features will be ignored).
+     *
+     * @param openApi the parsed OpenAPI model from Swagger Parser
+     * @return list of [ValidationIssue]; empty when the spec is fully valid
+     */
     @OptIn(ExperimentalRaiseAccumulateApi::class)
-    fun validate(openApi: OpenAPI) = fold(
+    fun validate(openApi: OpenAPI): List<ValidationIssue> = fold(
         {
             accumulate {
                 ensureNotNullOrAccumulate(openApi.info) {

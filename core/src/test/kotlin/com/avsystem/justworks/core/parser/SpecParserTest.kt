@@ -6,26 +6,25 @@ import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.TypeRef
+import org.junit.jupiter.api.TestInstance
 import java.io.File
+import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertContains
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
 
-class SpecParserTest {
-    private fun loadResource(name: String): File {
-        val url =
-            javaClass.getResource("/$name")
-                ?: fail("Test resource not found: $name")
-        return File(url.toURI())
-    }
+@TestInstance(TestInstance.Lifecycle.PER_CLASS)
+class SpecParserTest : SpecParserTestBase() {
+    private lateinit var petstore: ApiSpec
 
-    private fun parseSpec(file: File): ApiSpec = when (val result = SpecParser.parse(file)) {
-        is ParseResult.Success -> result.apiSpec
-        is ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
+    @BeforeTest
+    fun setUp() {
+        if (!::petstore.isInitialized) {
+            petstore = parseSpec(loadResource("petstore.yaml"))
+        }
     }
 
     private fun parseSpecErrors(file: File): List<String> {
@@ -38,15 +37,12 @@ class SpecParserTest {
 
     @Test
     fun `parse petstore yaml produces Success with endpoints`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
-        assertEquals(3, spec.endpoints.size, "Expected 3 endpoints")
+        assertEquals(3, petstore.endpoints.size, "Expected 3 endpoints")
     }
 
     @Test
     fun `parse petstore yaml produces schemas`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
-
-        val schemaNames = spec.schemas.map { it.name }.toSet()
+        val schemaNames = petstore.schemas.map { it.name }.toSet()
         assertTrue("Pet" in schemaNames, "Pet schema missing")
         assertTrue("NewPet" in schemaNames, "NewPet schema missing")
         assertTrue("Error" in schemaNames, "Error schema missing")
@@ -54,9 +50,7 @@ class SpecParserTest {
 
     @Test
     fun `parse petstore yaml produces enums`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
-
-        val petStatus = spec.enums.find { it.name == "PetStatus" }
+        val petStatus = petstore.enums.find { it.name == "PetStatus" }
         assertNotNull(petStatus, "PetStatus enum missing")
         assertEquals(EnumBackingType.STRING, petStatus.type)
         assertEquals(listOf("available", "pending", "sold"), petStatus.values)
@@ -64,9 +58,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed Pet schema has correct properties`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
         val pet =
-            spec.schemas.find { it.name == "Pet" }
+            petstore.schemas.find { it.name == "Pet" }
                 ?: fail("Pet schema not found")
 
         val propMap = pet.properties.associateBy { it.name }
@@ -96,9 +89,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed GET pets endpoint has query parameter limit with INT type`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
         val listPets =
-            spec.endpoints.find { it.operationId == "listPets" }
+            petstore.endpoints.find { it.operationId == "listPets" }
                 ?: fail("listPets endpoint not found")
 
         assertEquals(HttpMethod.GET, listPets.method)
@@ -114,9 +106,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed GET pets petId has path parameter`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
         val getPet =
-            spec.endpoints.find { it.operationId == "getPetById" }
+            petstore.endpoints.find { it.operationId == "getPetById" }
                 ?: fail("getPetById endpoint not found")
 
         assertEquals(HttpMethod.GET, getPet.method)
@@ -130,9 +121,8 @@ class SpecParserTest {
 
     @Test
     fun `parsed POST pets has requestBody referencing NewPet`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
         val createPet =
-            spec.endpoints.find { it.operationId == "createPet" }
+            petstore.endpoints.find { it.operationId == "createPet" }
                 ?: fail("createPet endpoint not found")
 
         assertEquals(HttpMethod.POST, createPet.method)
@@ -147,16 +137,14 @@ class SpecParserTest {
 
     @Test
     fun `parsed endpoints have tags`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
-        val listPets = spec.endpoints.find { it.operationId == "listPets" }!!
+        val listPets = petstore.endpoints.find { it.operationId == "listPets" }!!
 
         assertTrue(listPets.tags.contains("pets"), "listPets should have 'pets' tag")
     }
 
     @Test
     fun `parsed GET pets response is array of Pet`() {
-        val spec = parseSpec(loadResource("petstore.yaml"))
-        val listPets = spec.endpoints.find { it.operationId == "listPets" }!!
+        val listPets = petstore.endpoints.find { it.operationId == "listPets" }!!
 
         val okResponse =
             listPets.responses["200"]

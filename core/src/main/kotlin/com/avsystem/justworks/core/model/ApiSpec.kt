@@ -1,5 +1,12 @@
 package com.avsystem.justworks.core.model
 
+/**
+ * Intermediate model representing a fully parsed OpenAPI specification.
+ *
+ * Produced by [com.avsystem.justworks.core.parser.SpecParser] and consumed by the
+ * code generators. Bridges the raw Swagger Parser OAS model and the generated
+ * Kotlin client/model source files.
+ */
 data class ApiSpec(
     val title: String,
     val version: String,
@@ -19,7 +26,17 @@ data class Endpoint(
     val responses: Map<String, Response>,
 )
 
-enum class HttpMethod { GET, POST, PUT, DELETE, PATCH }
+enum class HttpMethod {
+    GET,
+    POST,
+    PUT,
+    DELETE,
+    PATCH;
+
+    companion object {
+        fun parse(name: String): HttpMethod? = entries.find { it.name.equals(name, true) }
+    }
+}
 
 data class Parameter(
     val name: String,
@@ -29,6 +46,7 @@ data class Parameter(
     val description: String?,
 )
 
+// todo: add cookie
 enum class ParameterLocation {
     PATH,
     QUERY,
@@ -56,7 +74,6 @@ data class SchemaModel(
     val description: String?,
     val properties: List<PropertyModel>,
     val requiredProperties: Set<String>,
-    val isEnum: Boolean,
     val allOf: List<TypeRef>?,
     val oneOf: List<TypeRef>?,
     val anyOf: List<TypeRef>?,
