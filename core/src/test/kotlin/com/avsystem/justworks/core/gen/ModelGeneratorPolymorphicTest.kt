@@ -18,10 +18,7 @@ class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
     private val generator = ModelGenerator(modelPackage)
 
-    private fun spec(
-        schemas: List<SchemaModel> = emptyList(),
-        enums: List<EnumModel> = emptyList(),
-    ) = ApiSpec(
+    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList(),) = ApiSpec(
         title = "Test",
         version = "1.0",
         endpoints = emptyList(),
@@ -48,10 +45,7 @@ class ModelGeneratorPolymorphicTest {
         discriminator = discriminator,
     )
 
-    private fun findType(
-        files: List<com.squareup.kotlinpoet.FileSpec>,
-        name: String,
-    ): TypeSpec {
+    private fun findType(files: List<com.squareup.kotlinpoet.FileSpec>, name: String,): TypeSpec {
         for (file in files) {
             val found = file.members.filterIsInstance<TypeSpec>().find { it.name == name }
             if (found != null) return found

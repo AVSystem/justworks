@@ -109,10 +109,7 @@ fun String.toEnumConstantName(): String {
  * - ("PUT", "/users/{userId}/orders/{orderId}") -> "PutUsersByUserIdOrdersByOrderId"
  * - ("GET", "/api-tokens") -> "GetApiTokens"
  */
-fun operationNameFromPath(
-    method: String,
-    path: String
-): String {
+fun operationNameFromPath(method: String, path: String): String {
     val methodPart = method.lowercase().replaceFirstChar { it.uppercase() }
 
     val pathPart = path

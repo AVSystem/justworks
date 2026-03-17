@@ -10,17 +10,18 @@ import com.avsystem.justworks.core.model.TypeRef
  * (name, type, required status) regardless of property order.
  */
 data class InlineSchemaKey(val properties: List<PropertyKey>, val requiredProperties: Set<String>,) {
-    data class PropertyKey(val name: String, val type: TypeRef, val required: Boolean,)
+    data class PropertyKey(
+        val name: String,
+        val type: TypeRef,
+        val required: Boolean,
+    )
 
     companion object {
         /**
          * Creates an InlineSchemaKey from properties and required set.
          * Properties are sorted by name for deterministic equality.
          */
-        fun from(
-            properties: List<PropertyModel>,
-            required: Set<String>
-        ): InlineSchemaKey {
+        fun from(properties: List<PropertyModel>, required: Set<String>): InlineSchemaKey {
             val propKeys = properties
                 .map { PropertyKey(it.name, it.type, it.name in required) }
                 .sortedBy { it.name } // Deterministic ordering

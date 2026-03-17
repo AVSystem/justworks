@@ -19,10 +19,7 @@ class ModelGeneratorTest {
     private val modelPackage = "com.example.model"
     private val generator = ModelGenerator(modelPackage)
 
-    private fun spec(
-        schemas: List<SchemaModel> = emptyList(),
-        enums: List<EnumModel> = emptyList(),
-    ) = ApiSpec(
+    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
         title = "Test",
         version = "1.0",
         endpoints = emptyList(),

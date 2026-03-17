@@ -56,10 +56,7 @@ class SerializersModuleGenerator(private val modelPackage: String,) {
      * Generates the SerializersModule file and writes it to [outputDir].
      * Returns 0 if no polymorphic types exist, 1 if a file was written.
      */
-    fun generateTo(
-        sealedHierarchies: Map<String, List<String>>,
-        outputDir: File,
-    ): Int {
+    fun generateTo(sealedHierarchies: Map<String, List<String>>, outputDir: File,): Int {
         val fileSpec = generate(sealedHierarchies) ?: return 0
         fileSpec.writeTo(outputDir)
         return 1
