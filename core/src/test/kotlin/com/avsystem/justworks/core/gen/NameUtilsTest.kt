@@ -36,6 +36,16 @@ class NameUtilsTest {
         assertEquals("alreadyCamel", "already_camel".toCamelCase())
     }
 
+    @Test
+    fun `toCamelCase treats all-uppercase as single word`() {
+        assertEquals("url", "URL".toCamelCase())
+    }
+
+    @Test
+    fun `toPascalCase treats all-uppercase as single word`() {
+        assertEquals("Url", "URL".toPascalCase())
+    }
+
     // -- toEnumConstantName --
 
     @Test
@@ -99,7 +109,7 @@ class NameUtilsTest {
     }
 
     @Test
-    fun `operationNameFromPath handles mixed case method`() {
+    fun `operationNameFromPath handles uppercase method`() {
         assertEquals("DeletePets", operationNameFromPath("DELETE", "/pets"))
     }
 
