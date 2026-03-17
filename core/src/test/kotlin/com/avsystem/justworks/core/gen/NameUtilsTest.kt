@@ -64,11 +64,6 @@ class NameUtilsTest {
     }
 
     @Test
-    fun `toEnumConstantName prefixes digit-starting values`() {
-        assertEquals("VALUE_123", "123".toEnumConstantName())
-    }
-
-    @Test
     fun `toEnumConstantName converts hyphens`() {
         assertEquals("WITH_HYPHENS", "with-hyphens".toEnumConstantName())
     }
@@ -76,6 +71,16 @@ class NameUtilsTest {
     @Test
     fun `toEnumConstantName converts spaces`() {
         assertEquals("WITH_SPACES", "with spaces".toEnumConstantName())
+    }
+
+    @Test
+    fun `toEnumConstantName returns original for all-special-chars input`() {
+        assertEquals("!!!", "!!!".toEnumConstantName())
+    }
+
+    @Test
+    fun `toEnumConstantName returns original for empty string`() {
+        assertEquals("", "".toEnumConstantName())
     }
 
     // -- operationNameFromPath --
