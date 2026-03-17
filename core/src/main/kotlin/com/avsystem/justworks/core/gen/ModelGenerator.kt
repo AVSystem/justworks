@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import arrow.core.tail
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.PrimitiveType
@@ -294,7 +295,6 @@ class ModelGenerator(private val modelPackage: String) {
      */
     private fun buildSelectDeserializerBody(
         parentName: String,
-        sealedClassName: ClassName,
         uniqueFieldsPerVariant: List<Pair<String, String?>>,
     ): CodeBlock {
         val builder = CodeBlock.builder()
@@ -554,28 +554,19 @@ class ModelGenerator(private val modelPackage: String) {
      * Resolves the @SerialName value for a variant within a oneOf schema.
      * Uses discriminator mapping if available, otherwise defaults to the schema name.
      */
-    private fun resolveSerialName(parentSchema: SchemaModel, variantSchemaName: String): String {
-        val mapping = parentSchema.discriminator?.mapping
-        if (!mapping.isNullOrEmpty()) {
-            // mapping is: serialName -> ref path (e.g., "circle" -> "#/components/schemas/Circle")
-            for ((serialName, refPath) in mapping) {
-                val refName = refPath.removePrefix("#/components/schemas/")
-                if (refName == variantSchemaName) {
-                    return serialName
-                }
+    private fun resolveSerialName(parentSchema: SchemaModel, variantSchemaName: String): String =
+        parentSchema.discriminator
+            ?.mapping
+            .orEmpty()
+            .firstNotNullOfOrNull { (serialName, refPath) ->
+                serialName.takeIf { refPath.removePrefix("#/components/schemas/") == variantSchemaName }
             }
-        }
-        // Default: use schema name as serial name
-        return variantSchemaName
-    }
+            ?: variantSchemaName
 
     private fun generateEnumClass(enum: EnumModel): FileSpec {
         val className = ClassName(modelPackage, enum.name)
 
-        val typeSpec =
-            TypeSpec
-                .enumBuilder(className)
-                .addAnnotation(SERIALIZABLE)
+        val typeSpec = TypeSpec.enumBuilder(className).addAnnotation(SERIALIZABLE)
 
         for (value in enum.values) {
             val constantName = value.toEnumConstantName()
@@ -602,33 +593,30 @@ class ModelGenerator(private val modelPackage: String) {
     }
 
     /**
-     * Recursively collects all TypeRef.Inline instances from a TypeRef tree.
-     * The [visited] set guards against infinite recursion in circular schemas.
+     * Iteratively collects all [TypeRef.Inline] instances from a [TypeRef] tree.
+     * Uses a worklist to avoid stack overflow on deeply nested schemas.
      */
-    private fun collectInlineTypeRefs(
-        typeRef: TypeRef,
-        result: MutableList<TypeRef.Inline>,
-        visited: MutableSet<TypeRef.Inline> = mutableSetOf(),
-    ) {
-        when (typeRef) {
-            is TypeRef.Inline -> {
-                if (!visited.add(typeRef)) return
-                result.add(typeRef)
-                // Recursively collect from properties
-                typeRef.properties.forEach { prop ->
-                    collectInlineTypeRefs(prop.type, result, visited)
-                }
-            }
+    private tailrec fun collectInlineTypeRefs(
+        visited: Set<TypeRef.Inline> = emptySet(),
+        acc: List<TypeRef.Inline> = emptyList(),
+        todo: List<TypeRef>,
+    ): List<TypeRef.Inline> = if (todo.isEmpty()) {
+        acc
+    } else {
+        when (val current = todo.firstOrNull()) {
+            is TypeRef.Inline if current in visited -> collectInlineTypeRefs(visited, acc, todo.tail())
 
-            is TypeRef.Array -> {
-                collectInlineTypeRefs(typeRef.items, result, visited)
-            }
+            is TypeRef.Inline -> collectInlineTypeRefs(
+                visited + current,
+                acc + current,
+                current.properties.map { it.type } + todo.tail(),
+            )
 
-            is TypeRef.Map -> {
-                collectInlineTypeRefs(typeRef.valueType, result, visited)
-            }
+            is TypeRef.Array -> collectInlineTypeRefs(visited, acc, todo.tail() + current.items)
 
-            is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.Unknown -> {}
+            is TypeRef.Map -> collectInlineTypeRefs(visited, acc, todo.tail() + current.valueType)
+
+            else -> collectInlineTypeRefs(visited, acc, todo.tail())
         }
     }
 

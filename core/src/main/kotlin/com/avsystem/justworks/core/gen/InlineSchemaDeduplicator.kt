@@ -9,7 +9,7 @@ import com.avsystem.justworks.core.model.TypeRef
  * Two inline schemas are considered equal if they have the same properties
  * (name, type, required status) regardless of property order.
  */
-data class InlineSchemaKey(val properties: List<PropertyKey>, val requiredProperties: Set<String>,) {
+data class InlineSchemaKey(val properties: List<PropertyKey>, val requiredProperties: Set<String>) {
     data class PropertyKey(
         val name: String,
         val type: TypeRef,
@@ -67,14 +67,12 @@ class InlineSchemaDeduplicator {
     ): String {
         val key = InlineSchemaKey.from(properties, requiredProps)
 
-        // Check if we've already generated a name for this structure
         namesByKey[key]?.let { return it }
 
         // Generate new name, handling collisions
-        var finalName = contextName
-        if (finalName in componentSchemaNames || finalName in namesByKey.values) {
-            finalName = "${contextName}Inline"
-        }
+        val finalName = contextName
+            .takeUnless { it in componentSchemaNames || it in namesByKey.values }
+            ?: "${contextName}Inline"
 
         namesByKey[key] = finalName
         return finalName

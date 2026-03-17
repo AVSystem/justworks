@@ -35,18 +35,6 @@ object ApiResponseGenerator {
         .initializer("body")
         .build()
 
-    /**
-     * Generates files and writes them to [outputDir].
-     * Returns the number of files written.
-     */
-    fun generateTo(outputDir: File): Int {
-        val files = listOf(generateHttpError(), generateHttpSuccess())
-        for (fileSpec in files) {
-            fileSpec.writeTo(outputDir)
-        }
-        return files.size
-    }
-
     fun generateHttpError(): FileSpec {
         val enumType =
             TypeSpec
