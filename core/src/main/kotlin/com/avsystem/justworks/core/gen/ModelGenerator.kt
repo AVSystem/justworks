@@ -18,7 +18,9 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeAliasSpec
+import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
+import kotlinx.datetime.LocalDate
 import kotlin.time.Instant
 
 /**
@@ -148,7 +150,7 @@ class ModelGenerator(private val modelPackage: String) {
                         listOf(generateAllOfDataClass(schema, schemasById))
                     }
 
-                    isPrimitiveOnly(schema) -> {
+                    schema.isPrimitiveOnly -> {
                         // For primitive-only schemas, generate type alias
                         // TODO: Extend SchemaModel to include primitiveType field for primitive-only schemas
                         // For now, defaulting to String as the most common case
@@ -408,25 +410,27 @@ class ModelGenerator(private val modelPackage: String) {
             val kotlinName = prop.name.toCamelCase()
 
             // Determine final type and default value
-            val (type, defaultValue) = when {
-                // Nullable with default -> honor nullable, ignore OpenAPI default
+            val type: TypeName
+            val defaultValue: CodeBlock?
+            when {
                 prop.nullable && prop.defaultValue != null -> {
-                    baseType.copy(nullable = true) to "null"
+                    type = baseType.copy(nullable = true)
+                    defaultValue = CodeBlock.of("null")
                 }
 
-                // Non-nullable with default -> use OpenAPI default
                 !prop.nullable && prop.defaultValue != null -> {
-                    baseType to formatDefaultValue(prop)
+                    type = baseType
+                    defaultValue = formatDefaultValue(prop)
                 }
 
-                // Nullable without default -> nullable with null default
                 prop.nullable && prop.defaultValue == null -> {
-                    baseType.copy(nullable = true) to "null"
+                    type = baseType.copy(nullable = true)
+                    defaultValue = CodeBlock.of("null")
                 }
 
-                // Required without default -> no default value
                 else -> {
-                    baseType to null
+                    type = baseType
+                    defaultValue = null
                 }
             }
 
@@ -434,42 +438,29 @@ class ModelGenerator(private val modelPackage: String) {
             if (defaultValue != null) {
                 paramBuilder.defaultValue(defaultValue)
             }
+
             constructorBuilder.addParameter(paramBuilder.build())
 
-            val propSpec =
-                PropertySpec
-                    .builder(kotlinName, type)
-                    .initializer(kotlinName)
-                    .addAnnotation(
-                        AnnotationSpec
-                            .builder(SERIAL_NAME)
-                            .addMember("%S", prop.name)
-                            .build(),
-                    )
+            val propSpec = PropertySpec
+                .builder(kotlinName, type)
+                .initializer(kotlinName)
+                .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
             propertySpecs.add(propSpec.build())
         }
 
-        val typeSpec =
-            TypeSpec
-                .classBuilder(className)
-                .addModifiers(KModifier.DATA)
-                .primaryConstructor(constructorBuilder.build())
-                .addProperties(propertySpecs)
-                .addAnnotation(SERIALIZABLE)
+        val typeSpec = TypeSpec
+            .classBuilder(className)
+            .addModifiers(KModifier.DATA)
+            .primaryConstructor(constructorBuilder.build())
+            .addProperties(propertySpecs)
+            .addAnnotation(SERIALIZABLE)
 
         // Add superinterfaces
-        for (si in effectiveSuperinterfaces) {
-            typeSpec.addSuperinterface(si)
-        }
+        typeSpec.addSuperinterfaces(effectiveSuperinterfaces)
 
         // Add @SerialName for variants
         if (effectiveSerialName != null) {
-            typeSpec.addAnnotation(
-                AnnotationSpec
-                    .builder(SERIAL_NAME)
-                    .addMember("%S", effectiveSerialName)
-                    .build(),
-            )
+            typeSpec.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", effectiveSerialName).build())
         }
 
         if (schema.description != null) {
@@ -487,28 +478,22 @@ class ModelGenerator(private val modelPackage: String) {
      * Handles primitives (string, number, boolean) and date/time types.
      * Validates date/time defaults at generation time.
      */
-    private fun formatDefaultValue(prop: PropertyModel): String = when (prop.type) {
+    private fun formatDefaultValue(prop: PropertyModel): CodeBlock = when (prop.type) {
         is TypeRef.Primitive -> {
             when (prop.type.type) {
-                PrimitiveType.STRING -> {
-                    // Return the string with quotes for KotlinPoet
-                    "\"${prop.defaultValue}\""
-                }
+                PrimitiveType.STRING -> CodeBlock.of("%S", prop.defaultValue)
 
                 PrimitiveType.INT,
                 PrimitiveType.LONG,
                 PrimitiveType.DOUBLE,
                 PrimitiveType.FLOAT,
                 PrimitiveType.BOOLEAN,
-                -> {
-                    prop.defaultValue.toString()
-                }
+                -> CodeBlock.of("%L", prop.defaultValue)
 
                 PrimitiveType.DATE_TIME -> {
-                    // Validate at generation time
                     try {
                         Instant.parse(prop.defaultValue as String)
-                        "kotlin.time.Instant.parse(\"${prop.defaultValue}\")"
+                        CodeBlock.of("%T.parse(%S)", INSTANT, prop.defaultValue)
                     } catch (e: Exception) {
                         throw IllegalArgumentException(
                             "Invalid ISO-8601 date-time default '${prop.defaultValue}' " +
@@ -519,8 +504,8 @@ class ModelGenerator(private val modelPackage: String) {
 
                 PrimitiveType.DATE -> {
                     try {
-                        kotlinx.datetime.LocalDate.parse(prop.defaultValue as String)
-                        "kotlinx.datetime.LocalDate.parse(\"${prop.defaultValue}\")"
+                        LocalDate.parse(prop.defaultValue as String)
+                        CodeBlock.of("%T.parse(%S)", LOCAL_DATE, prop.defaultValue)
                     } catch (e: Exception) {
                         throw IllegalArgumentException(
                             "Invalid ISO-8601 date default '${prop.defaultValue}' " +
@@ -529,25 +514,20 @@ class ModelGenerator(private val modelPackage: String) {
                     }
                 }
 
-                else -> {
-                    throw IllegalArgumentException(
-                        "Unsupported default value type: ${prop.type}",
-                    )
-                }
+                else -> throw IllegalArgumentException(
+                    "Unsupported default value type: ${prop.type}",
+                )
             }
         }
 
         is TypeRef.Reference -> {
-            // Enum default: use constant name conversion
             val constantName = prop.defaultValue.toString().toEnumConstantName()
-            "${prop.type.schemaName}.$constantName"
+            CodeBlock.of("%T.%L", ClassName(modelPackage, prop.type.schemaName), constantName)
         }
 
-        else -> {
-            throw IllegalArgumentException(
-                "Unsupported default value type: ${prop.type}",
-            )
-        }
+        else -> throw IllegalArgumentException(
+            "Unsupported default value type: ${prop.type}",
+        )
     }
 
     /**
@@ -638,8 +618,8 @@ class ModelGenerator(private val modelPackage: String) {
      * Checks if a schema is primitive-only (has no properties and no composite types).
      * Primitive-only schemas should be generated as type aliases instead of data classes.
      */
-    private fun isPrimitiveOnly(schema: SchemaModel): Boolean = schema.properties.isEmpty() &&
-        schema.allOf == null && schema.oneOf == null && schema.anyOf == null
+    private val SchemaModel.isPrimitiveOnly: Boolean
+        get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
 
     /**
      * Generates a type alias FileSpec for primitive-only schemas.
