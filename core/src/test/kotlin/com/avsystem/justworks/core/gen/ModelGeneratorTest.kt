@@ -447,55 +447,6 @@ class ModelGeneratorTest {
         )
     }
 
-    @Test
-    fun `anyOf variants registered in sealedHierarchies map`() {
-        val paymentSchema =
-            SchemaModel(
-                name = "Payment",
-                description = null,
-                properties = emptyList(),
-                requiredProperties = emptySet(),
-                allOf = null,
-                oneOf = null,
-                anyOf = listOf(TypeRef.Reference("CreditCard"), TypeRef.Reference("BankTransfer")),
-                discriminator = null,
-            )
-        val creditCardSchema =
-            SchemaModel(
-                name = "CreditCard",
-                description = null,
-                properties = listOf(PropertyModel("cardNumber", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
-                requiredProperties = setOf("cardNumber"),
-                allOf = null,
-                oneOf = null,
-                anyOf = null,
-                discriminator = null,
-            )
-        val bankTransferSchema =
-            SchemaModel(
-                name = "BankTransfer",
-                description = null,
-                properties = listOf(
-                    PropertyModel("accountNumber", TypeRef.Primitive(PrimitiveType.STRING), null, false),
-                ),
-                requiredProperties = setOf("accountNumber"),
-                allOf = null,
-                oneOf = null,
-                anyOf = null,
-                discriminator = null,
-            )
-
-        generator.generate(spec(schemas = listOf(paymentSchema, creditCardSchema, bankTransferSchema)))
-        val hierarchies = generator.getSealedHierarchies()
-
-        assertTrue("Payment" in hierarchies, "Payment should be in sealedHierarchies map")
-        assertEquals(
-            listOf("CreditCard", "BankTransfer"),
-            hierarchies["Payment"],
-            "Payment should have CreditCard and BankTransfer as variants",
-        )
-    }
-
     // -- Default value tests (DFLT-01 through DFLT-05) --
 
     @Test

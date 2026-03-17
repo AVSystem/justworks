@@ -2,7 +2,6 @@ package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
-import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -27,7 +26,6 @@ class InlineSchemaDedupTest {
         val name1 = deduplicator.getOrGenerateName(props1, required, "FirstContext")
         val name2 = deduplicator.getOrGenerateName(props2, required, "SecondContext")
 
-        // First occurrence wins
         assertEquals("FirstContext", name1)
         assertEquals("FirstContext", name2) // Same structure returns same name
     }
@@ -54,21 +52,7 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `name collision with component schema appends Inline suffix`() {
-        val deduplicator = InlineSchemaDeduplicator()
-
-        val componentSchemas = listOf(
-            SchemaModel(
-                name = "Pet",
-                description = null,
-                properties = emptyList(),
-                requiredProperties = emptySet(),
-                allOf = null,
-                oneOf = null,
-                anyOf = null,
-                discriminator = null,
-            ),
-        )
-        deduplicator.registerComponentSchemas(componentSchemas)
+        val deduplicator = InlineSchemaDeduplicator(componentSchemaNames = setOf("Pet"))
 
         val props = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),

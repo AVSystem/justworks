@@ -116,16 +116,12 @@ class ModelGenerator(private val modelPackage: String) {
 
     context(hierarchy: HierarchyInfo)
     private fun generateSchemaFiles(schema: SchemaModel): List<FileSpec> = when {
-        !schema.anyOf.isNullOrEmpty() && !schema.oneOf.isNullOrEmpty() -> {
+        !schema.anyOf.isNullOrEmpty() || !schema.oneOf.isNullOrEmpty() -> {
             if (schema.name in hierarchy.anyOfWithoutDiscriminator) {
                 listOf(generateSealedInterface(schema), generatePolymorphicSerializer(schema))
             } else {
                 listOf(generateSealedInterface(schema))
             }
-        }
-
-        !schema.allOf.isNullOrEmpty() -> {
-            listOf(generateAllOfDataClass(schema))
         }
 
         schema.isPrimitiveOnly -> {
@@ -289,30 +285,15 @@ class ModelGenerator(private val modelPackage: String) {
     }
 
     /**
-     * Generates a data class for an allOf schema with merged properties.
+     * Generates a data class FileSpec, with superinterfaces and @SerialName resolved from hierarchy.
      */
     context(hierarchy: HierarchyInfo)
-    private fun generateAllOfDataClass(schema: SchemaModel): FileSpec {
-        val parentEntries = hierarchy.variantParents[schema.name].orEmpty()
-        val serialName = parentEntries.values.firstOrNull()
-
-        return generateDataClass(schema, parentEntries.keys, serialName)
-    }
-
-    /**
-     * Generates a data class FileSpec, optionally with superinterfaces and @SerialName.
-     */
-    context(hierarchy: HierarchyInfo)
-    private fun generateDataClass(
-        schema: SchemaModel,
-        superinterfaces: Set<ClassName> = emptySet(),
-        serialName: String? = null,
-    ): FileSpec {
+    private fun generateDataClass(schema: SchemaModel): FileSpec {
         val className = ClassName(modelPackage, schema.name)
 
         val parentEntries = hierarchy.variantParents[schema.name].orEmpty()
-        val effectiveSerialName = serialName ?: parentEntries.values.firstOrNull()
-        val effectiveSuperinterfaces = superinterfaces + parentEntries.keys
+        val serialName = parentEntries.values.firstOrNull()
+        val superinterfaces = parentEntries.keys
 
         val sortedProps = schema.properties.sortedBy { prop ->
             when {
@@ -348,10 +329,10 @@ class ModelGenerator(private val modelPackage: String) {
             .primaryConstructor(constructorBuilder.build())
             .addProperties(propertySpecs)
             .addAnnotation(SERIALIZABLE)
-            .addSuperinterfaces(effectiveSuperinterfaces)
+            .addSuperinterfaces(superinterfaces)
 
-        if (effectiveSerialName != null) {
-            typeSpec.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", effectiveSerialName).build())
+        if (serialName != null) {
+            typeSpec.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
         }
 
         if (schema.description != null) {

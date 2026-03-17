@@ -1,5 +1,7 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.model.SchemaModel
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.PropertySpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -11,10 +13,17 @@ class SerializersModuleGeneratorTest {
     private val modelPackage = "com.example.model"
     private val generator = SerializersModuleGenerator(modelPackage)
 
+    private fun hierarchyInfo(sealedHierarchies: Map<String, List<String>>) = ModelGenerator.HierarchyInfo(
+        sealedHierarchies = sealedHierarchies,
+        variantParents = emptyMap(),
+        anyOfWithoutDiscriminator = emptySet(),
+        schemas = emptyList(),
+    )
+
     @Test
     fun `generates SerializersModule with polymorphic registration`() {
         val hierarchies = mapOf("Shape" to listOf("Circle", "Square"))
-        val fileSpec = generator.generate(hierarchies)
+        val fileSpec = context(hierarchyInfo(hierarchies)) { generator.generate() }
 
         assertNotNull(fileSpec, "Should generate a FileSpec for non-empty hierarchies")
 
@@ -33,7 +42,7 @@ class SerializersModuleGeneratorTest {
                 "Shape" to listOf("Circle", "Square"),
                 "Animal" to listOf("Cat", "Dog"),
             )
-        val fileSpec = generator.generate(hierarchies)
+        val fileSpec = context(hierarchyInfo(hierarchies)) { generator.generate() }
         assertNotNull(fileSpec)
 
         val initializer =
@@ -52,7 +61,7 @@ class SerializersModuleGeneratorTest {
 
     @Test
     fun `returns null for empty hierarchies`() {
-        val result = generator.generate(emptyMap())
+        val result = context(hierarchyInfo(emptyMap())) { generator.generate() }
         assertNull(result, "Should return null for empty hierarchies")
     }
 }
