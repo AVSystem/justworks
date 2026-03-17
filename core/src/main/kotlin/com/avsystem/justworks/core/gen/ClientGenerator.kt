@@ -4,6 +4,7 @@ import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.ParameterLocation
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.ContextParameter
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
@@ -53,7 +54,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean = false,
     ): FileSpec {
-        val className = com.squareup.kotlinpoet.ClassName(apiPackage, "${tag.toPascalCase()}Api")
+        val className = ClassName(apiPackage, "${tag.toPascalCase()}Api")
 
         val clientInitializer = if (hasPolymorphicTypes) {
             val generatedSerializersModule = MemberName(modelPackage, "generatedSerializersModule")

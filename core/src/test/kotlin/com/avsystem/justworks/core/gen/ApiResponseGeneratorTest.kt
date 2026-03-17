@@ -10,19 +10,19 @@ import kotlin.test.assertTrue
 
 class ApiResponseGeneratorTest {
     private fun httpErrorClass(): TypeSpec {
-        val files = listOf(ApiResponseGenerator.generateHttpError(), ApiResponseGenerator.generateSuccess())
+        val files = listOf(ApiResponseGenerator.generateHttpError(), ApiResponseGenerator.generateHttpSuccess())
         val httpErrorFile = files.first { it.name == "HttpError" }
         return httpErrorFile.members.filterIsInstance<TypeSpec>().first { it.name == "HttpError" }
     }
 
     private fun httpErrorTypeEnum(): TypeSpec {
-        val files = listOf(ApiResponseGenerator.generateHttpError(), ApiResponseGenerator.generateSuccess())
+        val files = listOf(ApiResponseGenerator.generateHttpError(), ApiResponseGenerator.generateHttpSuccess())
         val httpErrorFile = files.first { it.name == "HttpError" }
         return httpErrorFile.members.filterIsInstance<TypeSpec>().first { it.name == "HttpErrorType" }
     }
 
     private fun successClass(): TypeSpec {
-        val files = listOf(ApiResponseGenerator.generateHttpError(), ApiResponseGenerator.generateSuccess())
+        val files = listOf(ApiResponseGenerator.generateHttpError(), ApiResponseGenerator.generateHttpSuccess())
         val successFile = files.first { it.name == "HttpSuccess" }
         return successFile.members.filterIsInstance<TypeSpec>().first()
     }
@@ -70,7 +70,7 @@ class ApiResponseGeneratorTest {
 
     @Test
     fun `generates two files`() {
-        val files = listOf(ApiResponseGenerator.generateHttpError(), ApiResponseGenerator.generateSuccess())
+        val files = listOf(ApiResponseGenerator.generateHttpError(), ApiResponseGenerator.generateHttpSuccess())
         assertEquals(2, files.size)
         val fileNames = files.map { it.name }.sorted()
         assertEquals(listOf("HttpError", "HttpSuccess"), fileNames)

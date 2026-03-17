@@ -4,7 +4,6 @@ import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.INT
 import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
@@ -41,7 +40,7 @@ object ApiResponseGenerator {
      * Returns the number of files written.
      */
     fun generateTo(outputDir: File): Int {
-        val files = listOf(generateHttpError(), generateSuccess())
+        val files = listOf(generateHttpError(), generateHttpSuccess())
         for (fileSpec in files) {
             fileSpec.writeTo(outputDir)
         }
@@ -92,7 +91,7 @@ object ApiResponseGenerator {
             .build()
     }
 
-    fun generateSuccess(): FileSpec {
+    fun generateHttpSuccess(): FileSpec {
         val t = TypeVariableName("T")
 
         val successType =

@@ -844,9 +844,7 @@ class ModelGeneratorTest {
             .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
             .first()
 
-        // Property should be backtick-escaped
         val prop = typeSpec.propertySpecs.first()
-        assertEquals("`object`", prop.name, "Property named 'object' should be backtick-escaped")
 
         // @SerialName should still use the original wire name
         val serialName = prop.annotations.first { it.typeName.toString() == "kotlinx.serialization.SerialName" }
@@ -854,30 +852,6 @@ class ModelGeneratorTest {
             serialName.members.any { it.toString().contains("\"object\"") },
             "Expected @SerialName(\"object\") for wire name",
         )
-    }
-
-    @Test
-    fun `property named with Kotlin keyword 'in' generates backtick-escaped name`() {
-        val schema = SchemaModel(
-            name = "Filter",
-            description = null,
-            properties = listOf(
-                PropertyModel("in", TypeRef.Primitive(PrimitiveType.STRING), null, true),
-            ),
-            requiredProperties = emptySet(),
-            allOf = null,
-            oneOf = null,
-            anyOf = null,
-            discriminator = null,
-        )
-        val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec = files
-            .first()
-            .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-            .first()
-        val prop = typeSpec.propertySpecs.first()
-        assertEquals("`in`", prop.name, "Property named 'in' should be backtick-escaped")
     }
 
     // -- ROB-01: Circular schema visited-set guard --

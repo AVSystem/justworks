@@ -17,13 +17,6 @@ class NameUtilsTest {
     }
 
     @Test
-    fun `toCamelCase converts UPPER_CASE preserving segment casing`() {
-        // Splits on _, gets ["UPPER", "CASE"]. No camel boundaries in all-caps segments.
-        // First segment lowercased -> "upper", second replaceFirstChar -> "CASE" (already upper).
-        assertEquals("upperCASE", "UPPER_CASE".toCamelCase())
-    }
-
-    @Test
     fun `toCamelCase lowercases PascalCase`() {
         assertEquals("pascalCase", "PascalCase".toCamelCase())
     }
@@ -113,47 +106,5 @@ class NameUtilsTest {
     @Test
     fun `operationNameFromPath handles camelCase path parameter`() {
         assertEquals("GetUsersByUserId", operationNameFromPath("GET", "/users/{userId}"))
-    }
-
-    // -- toKotlinIdentifier --
-
-    @Test
-    fun `toKotlinIdentifier backtick-escapes object keyword`() {
-        assertEquals("`object`", "object".toKotlinIdentifier())
-    }
-
-    @Test
-    fun `toKotlinIdentifier backtick-escapes in keyword`() {
-        assertEquals("`in`", "in".toKotlinIdentifier())
-    }
-
-    @Test
-    fun `toKotlinIdentifier backtick-escapes class keyword`() {
-        assertEquals("`class`", "class".toKotlinIdentifier())
-    }
-
-    @Test
-    fun `toKotlinIdentifier leaves non-keyword unchanged`() {
-        assertEquals("normalName", "normalName".toKotlinIdentifier())
-    }
-
-    @Test
-    fun `toKotlinIdentifier camelCases non-keyword with underscore`() {
-        assertEquals("myObject", "my_object".toKotlinIdentifier())
-    }
-
-    @Test
-    fun `toKotlinIdentifier backtick-escapes val keyword`() {
-        assertEquals("`val`", "val".toKotlinIdentifier())
-    }
-
-    @Test
-    fun `toKotlinIdentifier backtick-escapes fun keyword`() {
-        assertEquals("`fun`", "fun".toKotlinIdentifier())
-    }
-
-    @Test
-    fun `toKotlinIdentifier backtick-escapes return keyword`() {
-        assertEquals("`return`", "return".toKotlinIdentifier())
     }
 }

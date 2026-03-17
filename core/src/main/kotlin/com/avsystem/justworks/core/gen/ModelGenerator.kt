@@ -18,8 +18,6 @@ import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec
-import com.squareup.kotlinpoet.asTypeName
-import java.io.File
 import kotlin.time.Instant
 
 /**
@@ -85,9 +83,6 @@ class ModelGenerator(private val modelPackage: String) {
                         inlineTypeRef.contextHint,
                     )
 
-                // Check if this is a nested inline (contains dot)
-                val isNested = name.contains(".")
-
                 inlineSchemas.add(
                     SchemaModel(
                         name = name,
@@ -134,64 +129,50 @@ class ModelGenerator(private val modelPackage: String) {
         }
 
         // Second pass: generate FileSpecs for component schemas
-        val schemaFiles =
-            spec.schemas
-                .flatMap { schema ->
-                    when {
-                        !schema.oneOf.isNullOrEmpty() || !schema.anyOf.isNullOrEmpty() -> {
-                            val sealedFile = generateSealedInterface(schema)
-                            if (schema.name in anyOfWithoutDiscriminator) {
-                                // Also generate the JsonContentPolymorphicSerializer companion object
-                                val serializerFile = generatePolymorphicSerializer(schema, schemasById)
-                                listOf(sealedFile, serializerFile)
-                            } else {
-                                listOf(sealedFile)
-                            }
-                        }
-
-                        !schema.allOf.isNullOrEmpty() -> {
-                            listOf(generateAllOfDataClass(schema, schemasById))
-                        }
-
-                        isPrimitiveOnly(schema) -> {
-                            // For primitive-only schemas, generate type alias
-                            // TODO: Extend SchemaModel to include primitiveType field for primitive-only schemas
-                            // For now, defaulting to String as the most common case
-                            listOf(generateTypeAlias(schema, STRING))
-                        }
-
-                        else -> {
-                            listOf(generateDataClass(schema))
+        val schemaFiles = spec.schemas
+            .flatMap { schema ->
+                when {
+                    !schema.oneOf.isNullOrEmpty() || !schema.anyOf.isNullOrEmpty() -> {
+                        val sealedFile = generateSealedInterface(schema)
+                        if (schema.name in anyOfWithoutDiscriminator) {
+                            // Also generate the JsonContentPolymorphicSerializer companion object
+                            val serializerFile = generatePolymorphicSerializer(schema, schemasById)
+                            listOf(sealedFile, serializerFile)
+                        } else {
+                            listOf(sealedFile)
                         }
                     }
+
+                    !schema.allOf.isNullOrEmpty() -> {
+                        listOf(generateAllOfDataClass(schema, schemasById))
+                    }
+
+                    isPrimitiveOnly(schema) -> {
+                        // For primitive-only schemas, generate type alias
+                        // TODO: Extend SchemaModel to include primitiveType field for primitive-only schemas
+                        // For now, defaulting to String as the most common case
+                        listOf(generateTypeAlias(schema, STRING))
+                    }
+
+                    else -> {
+                        listOf(generateDataClass(schema))
+                    }
                 }
+            }
 
         // Generate FileSpecs for inline schemas (non-nested first, nested later)
         val nonNestedInlineSchemas = inlineSchemas.filter { !it.name.contains(".") }
         val nestedInlineSchemas = inlineSchemas.filter { it.name.contains(".") }
 
-        val inlineSchemaFiles =
-            nonNestedInlineSchemas.map { generateDataClass(it) } +
-                nestedInlineSchemas.map { generateNestedInlineClass(it) }
+        val inlineSchemaFiles = nonNestedInlineSchemas.map(::generateDataClass) +
+            nestedInlineSchemas.map(::generateNestedInlineClass)
 
-        val enumFiles = spec.enums.map { generateEnumClass(it) }
+        val enumFiles = spec.enums.map(::generateEnumClass)
 
         // Generate SerializersModule if any sealed hierarchies exist
         val serializersModuleFile = SerializersModuleGenerator(modelPackage).generate(sealedHierarchies)
 
         return schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile)
-    }
-
-    /**
-     * Generates model files from [spec] and writes them to [outputDir].
-     * Returns the number of files written.
-     */
-    fun generateTo(spec: ApiSpec, outputDir: File): Int {
-        val files = generate(spec)
-        for (fileSpec in files) {
-            fileSpec.writeTo(outputDir)
-        }
-        return files.size
     }
 
     /**
@@ -424,31 +405,30 @@ class ModelGenerator(private val modelPackage: String) {
 
         for (prop in sortedProps) {
             val baseType = TypeMapping.toTypeName(prop.type, modelPackage)
-            val kotlinName = prop.name.toKotlinIdentifier()
+            val kotlinName = prop.name.toCamelCase()
 
             // Determine final type and default value
-            val (type, defaultValue) =
-                when {
-                    // Nullable with default -> honor nullable, ignore OpenAPI default
-                    prop.nullable && prop.defaultValue != null -> {
-                        baseType.copy(nullable = true) to "null"
-                    }
-
-                    // Non-nullable with default -> use OpenAPI default
-                    !prop.nullable && prop.defaultValue != null -> {
-                        baseType to formatDefaultValue(prop)
-                    }
-
-                    // Nullable without default -> nullable with null default
-                    prop.nullable && prop.defaultValue == null -> {
-                        baseType.copy(nullable = true) to "null"
-                    }
-
-                    // Required without default -> no default value
-                    else -> {
-                        baseType to null
-                    }
+            val (type, defaultValue) = when {
+                // Nullable with default -> honor nullable, ignore OpenAPI default
+                prop.nullable && prop.defaultValue != null -> {
+                    baseType.copy(nullable = true) to "null"
                 }
+
+                // Non-nullable with default -> use OpenAPI default
+                !prop.nullable && prop.defaultValue != null -> {
+                    baseType to formatDefaultValue(prop)
+                }
+
+                // Nullable without default -> nullable with null default
+                prop.nullable && prop.defaultValue == null -> {
+                    baseType.copy(nullable = true) to "null"
+                }
+
+                // Required without default -> no default value
+                else -> {
+                    baseType to null
+                }
+            }
 
             val paramBuilder = ParameterSpec.builder(kotlinName, type)
             if (defaultValue != null) {
