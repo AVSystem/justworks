@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.ModelGenerator.HierarchyInfo
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -20,12 +21,14 @@ class SerializersModuleGenerator(private val modelPackage: String) {
      *
      * @param sealedHierarchies map of sealed parent name to list of variant schema names
      */
-    fun generate(sealedHierarchies: Map<String, List<String>>): FileSpec? {
-        if (sealedHierarchies.isEmpty()) return null
+
+    context(hierarchy: HierarchyInfo)
+    fun generate(): FileSpec? {
+        if (hierarchy.sealedHierarchies.isEmpty()) return null
 
         val code = CodeBlock.builder().beginControlFlow("%T", SERIALIZERS_MODULE)
 
-        for ((parent, variants) in sealedHierarchies) {
+        for ((parent, variants) in hierarchy.sealedHierarchies) {
             val parentClass = ClassName(modelPackage, parent)
             code.beginControlFlow("%M(%T::class)", POLYMORPHIC_FUN, parentClass)
             for (variant in variants) {

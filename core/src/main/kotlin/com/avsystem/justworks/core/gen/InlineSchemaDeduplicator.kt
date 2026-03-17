@@ -35,19 +35,12 @@ data class InlineSchemaKey(val properties: List<PropertyKey>, val requiredProper
  * Ensures that structurally identical inline schemas generate only one class,
  * and handles name collisions with component schemas.
  */
-class InlineSchemaDeduplicator {
+class InlineSchemaDeduplicator(
+    // Names of all component schemas (from components/schemas in OpenAPI spec)
+    val componentSchemaNames: Set<String>,
+) {
     // Maps structural key to the first generated name for that structure
     private val namesByKey = mutableMapOf<InlineSchemaKey, String>()
-
-    // Names of all component schemas (from components/schemas in OpenAPI spec)
-    private val componentSchemaNames = mutableSetOf<String>()
-
-    /**
-     * Registers component schema names to detect collisions.
-     */
-    fun registerComponentSchemas(schemas: List<SchemaModel>) {
-        componentSchemaNames.addAll(schemas.map { it.name })
-    }
 
     /**
      * Gets or generates a name for an inline schema.
@@ -67,14 +60,13 @@ class InlineSchemaDeduplicator {
     ): String {
         val key = InlineSchemaKey.from(properties, requiredProps)
 
-        namesByKey[key]?.let { return it }
+        return namesByKey[key] ?: run {
+            // Generate new name, handling collisions
+            val finalName = contextName
+                .takeUnless { it in componentSchemaNames || it in namesByKey.values }
+                ?: "${contextName}Inline"
 
-        // Generate new name, handling collisions
-        val finalName = contextName
-            .takeUnless { it in componentSchemaNames || it in namesByKey.values }
-            ?: "${contextName}Inline"
-
-        namesByKey[key] = finalName
-        return finalName
+            finalName.also { namesByKey[key] = it }
+        }
     }
 }
