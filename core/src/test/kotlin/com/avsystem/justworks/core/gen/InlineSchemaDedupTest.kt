@@ -10,7 +10,7 @@ import kotlin.test.assertNotEquals
 class InlineSchemaDedupTest {
     @Test
     fun `identical schemas return same name`() {
-        val deduplicator = InlineSchemaDeduplicator()
+        val deduplicator = InlineSchemaDeduplicator(emptySet())
 
         val props1 = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
@@ -32,7 +32,7 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `different schemas return different names`() {
-        val deduplicator = InlineSchemaDeduplicator()
+        val deduplicator = InlineSchemaDeduplicator(emptySet())
 
         val props1 = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
@@ -65,7 +65,7 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `property order does not affect equality`() {
-        val deduplicator = InlineSchemaDeduplicator()
+        val deduplicator = InlineSchemaDeduplicator(emptySet())
 
         val props1 = listOf(
             PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
@@ -89,7 +89,7 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `different required sets produce different keys`() {
-        val deduplicator = InlineSchemaDeduplicator()
+        val deduplicator = InlineSchemaDeduplicator(emptySet())
 
         val props = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
@@ -107,7 +107,7 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `collision with existing inline schema name appends Inline suffix`() {
-        val deduplicator = InlineSchemaDeduplicator()
+        val deduplicator = InlineSchemaDeduplicator(emptySet())
 
         val props1 = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),

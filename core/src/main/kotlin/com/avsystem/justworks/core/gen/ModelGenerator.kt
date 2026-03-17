@@ -169,10 +169,7 @@ class ModelGenerator(private val modelPackage: String) {
             typeSpec.addKdoc("%L", schema.description)
         }
 
-        val fileBuilder =
-            FileSpec
-                .builder(className)
-                .addType(typeSpec.build())
+        val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
 
         if (schema.discriminator != null) {
             fileBuilder.addAnnotation(
