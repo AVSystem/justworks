@@ -42,7 +42,6 @@ class ModelGeneratorPolymorphicTest {
         description = null,
         properties = properties,
         requiredProperties = requiredProperties,
-        isEnum = false,
         allOf = allOf,
         oneOf = oneOf,
         anyOf = anyOf,
@@ -181,7 +180,10 @@ class ModelGeneratorPolymorphicTest {
                 discriminator =
                     Discriminator(
                         propertyName = "shapeType",
-                        mapping = mapOf("circle" to "#/components/schemas/Circle", "square" to "#/components/schemas/Square"),
+                        mapping = mapOf(
+                            "circle" to "#/components/schemas/Circle",
+                            "square" to "#/components/schemas/Square",
+                        ),
                     ),
             )
         val circleSchema = schema(name = "Circle")
@@ -378,7 +380,9 @@ class ModelGeneratorPolymorphicTest {
                     ),
             )
 
-        val files = generator.generate(spec(schemas = listOf(networkMeshSchema, extenderPropsSchema, ethernetPropsSchema)))
+        val files = generator.generate(
+            spec(schemas = listOf(networkMeshSchema, extenderPropsSchema, ethernetPropsSchema)),
+        )
         val networkMeshType = findType(files, "NetworkMeshDevice")
 
         // Verify sealed interface with discriminator
@@ -607,7 +611,11 @@ class ModelGeneratorPolymorphicTest {
         // ShapeSerializer should NOT be generated
         val serializerTypes = files.flatMap { it.members.filterIsInstance<TypeSpec>() }
         val shapeSerializerType = serializerTypes.find { it.name == "ShapeSerializer" }
-        assertEquals(null, shapeSerializerType, "Discriminated anyOf should NOT generate a JsonContentPolymorphicSerializer")
+        assertEquals(
+            null,
+            shapeSerializerType,
+            "Discriminated anyOf should NOT generate a JsonContentPolymorphicSerializer",
+        )
     }
 
     // -- POLY-06: allOf with sealed parent --

@@ -94,7 +94,6 @@ class ModelGenerator(private val modelPackage: String) {
                         description = null,
                         properties = inlineTypeRef.properties,
                         requiredProperties = inlineTypeRef.requiredProperties,
-                        isEnum = false,
                         allOf = null,
                         oneOf = null,
                         anyOf = null,
@@ -106,7 +105,6 @@ class ModelGenerator(private val modelPackage: String) {
 
         // First pass: scan all schemas to build variantParents map and detect anyOf-without-discriminator
         for (schema in spec.schemas) {
-            if (schema.isEnum) continue
             val variants = schema.oneOf ?: schema.anyOf
             if (!variants.isNullOrEmpty()) {
                 val parentClassName = ClassName(modelPackage, schema.name)
@@ -138,7 +136,6 @@ class ModelGenerator(private val modelPackage: String) {
         // Second pass: generate FileSpecs for component schemas
         val schemaFiles =
             spec.schemas
-                .filter { !it.isEnum }
                 .flatMap { schema ->
                     when {
                         !schema.oneOf.isNullOrEmpty() || !schema.anyOf.isNullOrEmpty() -> {
@@ -686,7 +683,7 @@ class ModelGenerator(private val modelPackage: String) {
      * Primitive-only schemas should be generated as type aliases instead of data classes.
      */
     private fun isPrimitiveOnly(schema: SchemaModel): Boolean = schema.properties.isEmpty() &&
-        !schema.isEnum && schema.allOf == null && schema.oneOf == null && schema.anyOf == null
+        schema.allOf == null && schema.oneOf == null && schema.anyOf == null
 
     /**
      * Generates a type alias FileSpec for primitive-only schemas.

@@ -29,7 +29,7 @@ class InlineSchemaDedupTest {
 
         // First occurrence wins
         assertEquals("FirstContext", name1)
-        assertEquals("FirstContext", name2)  // Same structure returns same name
+        assertEquals("FirstContext", name2) // Same structure returns same name
     }
 
     @Test
@@ -62,7 +62,6 @@ class InlineSchemaDedupTest {
                 description = null,
                 properties = emptyList(),
                 requiredProperties = emptySet(),
-                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -77,7 +76,7 @@ class InlineSchemaDedupTest {
 
         val name = deduplicator.getOrGenerateName(props, setOf("id"), "Pet")
 
-        assertEquals("PetInline", name)  // Collision with component schema
+        assertEquals("PetInline", name) // Collision with component schema
     }
 
     @Test
