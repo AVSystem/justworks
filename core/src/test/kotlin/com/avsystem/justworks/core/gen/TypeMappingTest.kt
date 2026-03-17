@@ -1,7 +1,7 @@
 package com.avsystem.justworks.core.gen
 
-import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.PrimitiveType
+import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.TypeRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
