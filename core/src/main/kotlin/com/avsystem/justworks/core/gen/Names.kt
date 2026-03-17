@@ -69,3 +69,14 @@ val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
 
 val CLOSEABLE = ClassName("java.io", "Closeable")
 val OPT_IN = ClassName("kotlin", "OptIn")
+
+// ============================================================================
+// Shared client base (generated)
+// ============================================================================
+
+val API_CLIENT_BASE = ClassName("com.avsystem.justworks", "ApiClientBase")
+val HTTP_RESPONSE = ClassName("io.ktor.client.statement", "HttpResponse")
+val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuilder")
+val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
+val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
+val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")

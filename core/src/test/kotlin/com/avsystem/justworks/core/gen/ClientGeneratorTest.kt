@@ -111,11 +111,9 @@ class ClientGeneratorTest {
             }
         val cls = clientClass(endpoints)
         val funBodies =
-            cls.funSpecs.filter { it.name != "close" }.associate {
+            cls.funSpecs.associate {
                 it.name to it.body.toString()
             }
-        // MemberName body.toString() renders fully-qualified names (e.g., io.ktor.client.request.`get`)
-        // Check that each body references the correct Ktor request method path
         assertTrue(
             funBodies["getPet"]!!.contains("request.get(") || funBodies["getPet"]!!.contains("request.`get`("),
             "GET method expected",
@@ -316,20 +314,22 @@ class ClientGeneratorTest {
         assertEquals("kotlin.Unit", returnType.typeArguments.first().toString())
     }
 
-    // -- Client class implements Closeable --
+    // -- Client class extends ApiClientBase --
 
     @Test
-    fun `client class implements Closeable`() {
+    fun `client class extends ApiClientBase`() {
         val cls = clientClass(listOf(endpoint()))
-        val superinterfaces = cls.superinterfaces.keys.map { it.toString() }
-        assertTrue("java.io.Closeable" in superinterfaces, "Expected Closeable superinterface")
+        assertEquals("com.avsystem.justworks.ApiClientBase", cls.superclass.toString())
     }
 
     // -- SER-01: Polymorphic spec wires SerializersModule --
 
     @Test
-    fun `polymorphic spec wires serializersModule in json block`() {
-        val files = ClientGenerator(apiPackage, modelPackage).generate(spec(listOf(endpoint())), hasPolymorphicTypes = true)
+    fun `polymorphic spec wires serializersModule in createHttpClient call`() {
+        val files = ClientGenerator(
+            apiPackage,
+            modelPackage,
+        ).generate(spec(listOf(endpoint())), hasPolymorphicTypes = true)
         val clientProperty = files
             .first()
             .members
@@ -338,13 +338,19 @@ class ClientGeneratorTest {
             .propertySpecs
             .first { it.name == "client" }
         val clientInitializer = clientProperty.initializer.toString()
-        assertTrue(clientInitializer.contains("serializersModule"), "Expected serializersModule in client initializer")
-        assertTrue(clientInitializer.contains("generatedSerializersModule"), "Expected generatedSerializersModule reference")
+        assertTrue(
+            clientInitializer.contains("generatedSerializersModule"),
+            "Expected generatedSerializersModule reference",
+        )
+        assertTrue(clientInitializer.contains("createHttpClient"), "Expected createHttpClient call")
     }
 
     @Test
-    fun `non-polymorphic spec has plain json() with no serializersModule`() {
-        val files = ClientGenerator(apiPackage, modelPackage).generate(spec(listOf(endpoint())), hasPolymorphicTypes = false)
+    fun `non-polymorphic spec has createHttpClient without serializersModule`() {
+        val files = ClientGenerator(
+            apiPackage,
+            modelPackage,
+        ).generate(spec(listOf(endpoint())), hasPolymorphicTypes = false)
         val clientProperty = files
             .first()
             .members
@@ -353,56 +359,47 @@ class ClientGeneratorTest {
             .propertySpecs
             .first { it.name == "client" }
         val clientInitializer = clientProperty.initializer.toString()
-        assertTrue(!clientInitializer.contains("serializersModule"), "Expected no serializersModule for non-polymorphic spec")
+        assertTrue(clientInitializer.contains("createHttpClient()"), "Expected plain createHttpClient()")
+        assertTrue(!clientInitializer.contains("serializersModule"), "Expected no serializersModule")
     }
 
-    // -- AUTH-02, AUTH-03: Generated code contains bearer auth header --
+    // -- Generated code uses shared helpers --
 
     @Test
-    fun `generated code contains bearer auth header`() {
+    fun `generated code calls applyAuth`() {
         val cls = clientClass(listOf(endpoint()))
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val body = funSpec.body.toString()
-        assertTrue(body.contains("Authorization"), "Expected Authorization header")
-        assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
-        assertTrue(body.contains("tokenProvider"), "Expected tokenProvider call")
+        assertTrue(body.contains("applyAuth()"), "Expected applyAuth() call")
     }
 
-    // -- ERRH-05: Generated code contains try-catch with raise --
-
     @Test
-    fun `generated code contains try-catch with raise NetworkError`() {
+    fun `generated code calls safeCall`() {
         val cls = clientClass(listOf(endpoint()))
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val body = funSpec.body.toString()
-        assertTrue(body.contains("catch"), "Expected catch block")
-        assertTrue(body.contains("HttpError("), "Expected HttpError constructor call in catch")
-        assertTrue(
-            body.contains("HttpErrorType.Network") || body.contains(".Network"),
-            "Expected HttpErrorType.Network in catch",
-        )
-        assertTrue(body.contains("raise"), "Expected raise call")
+        assertTrue(body.contains("safeCall"), "Expected safeCall call")
     }
 
-    // -- ERRH-02, ERRH-03, ERRH-04: Generated code branches on status code with raise --
-
     @Test
-    fun `generated code branches on status code with raise`() {
+    fun `generated code calls toResult for typed response`() {
         val cls = clientClass(listOf(endpoint()))
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val body = funSpec.body.toString()
-        assertTrue(body.contains("200..299"), "Expected 2xx range check")
-        assertTrue(body.contains("400..499"), "Expected 4xx range check")
-        assertTrue(body.contains("Success"), "Expected Success for 2xx")
-        assertTrue(body.contains("HttpError("), "Expected HttpError constructor call")
-        assertTrue(
-            body.contains("HttpErrorType.Client") || body.contains(".Client"),
-            "Expected HttpErrorType.Client for 4xx",
-        )
-        assertTrue(
-            body.contains("HttpErrorType.Server") || body.contains(".Server"),
-            "Expected HttpErrorType.Server for 5xx",
-        )
-        assertTrue(body.contains("raise"), "Expected raise call")
+        assertTrue(body.contains("toResult"), "Expected toResult call")
+    }
+
+    @Test
+    fun `generated code calls toEmptyResult for void response`() {
+        val ep =
+            endpoint(
+                method = HttpMethod.DELETE,
+                operationId = "deletePet",
+                responses = mapOf("204" to Response("204", "No content", null)),
+            )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "deletePet" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("toEmptyResult"), "Expected toEmptyResult call")
     }
 }
