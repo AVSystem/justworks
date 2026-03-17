@@ -20,12 +20,19 @@ import com.squareup.kotlinpoet.TypeName
  * Maps [TypeRef] sealed variants to KotlinPoet [TypeName] instances.
  */
 object TypeMapping {
-    fun toTypeName(
-        typeRef: TypeRef,
-        modelPackage: String,
-    ): TypeName = when (typeRef) {
+    fun toTypeName(typeRef: TypeRef, modelPackage: String): TypeName = when (typeRef) {
         is TypeRef.Primitive -> {
-            primitiveTypeName(typeRef.type)
+            when (typeRef.type) {
+                PrimitiveType.STRING -> STRING
+                PrimitiveType.INT -> INT
+                PrimitiveType.LONG -> LONG
+                PrimitiveType.DOUBLE -> DOUBLE
+                PrimitiveType.FLOAT -> FLOAT
+                PrimitiveType.BOOLEAN -> BOOLEAN
+                PrimitiveType.BYTE_ARRAY -> BYTE_ARRAY
+                PrimitiveType.DATE_TIME -> INSTANT
+                PrimitiveType.DATE -> LOCAL_DATE
+            }
         }
 
         is TypeRef.Array -> {
@@ -46,18 +53,8 @@ object TypeMapping {
             ClassName(modelPackage, sanitizedName)
         }
 
-        is TypeRef.Unknown -> ANY
-    }
-
-    private fun primitiveTypeName(type: PrimitiveType): TypeName = when (type) {
-        PrimitiveType.STRING -> STRING
-        PrimitiveType.INT -> INT
-        PrimitiveType.LONG -> LONG
-        PrimitiveType.DOUBLE -> DOUBLE
-        PrimitiveType.FLOAT -> FLOAT
-        PrimitiveType.BOOLEAN -> BOOLEAN
-        PrimitiveType.BYTE_ARRAY -> BYTE_ARRAY
-        PrimitiveType.DATE_TIME -> INSTANT
-        PrimitiveType.DATE -> LOCAL_DATE
+        is TypeRef.Unknown -> {
+            ANY
+        }
     }
 }
