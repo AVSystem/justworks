@@ -16,7 +16,6 @@ import com.squareup.kotlinpoet.TypeVariableName
  * - `HttpSuccess<T>` data class wrapping successful responses
  */
 object ApiResponseGenerator {
-    private const val BODY = "body"
     private const val CODE = "code"
     private const val MESSAGE = "message"
     private const val TYPE = "type"

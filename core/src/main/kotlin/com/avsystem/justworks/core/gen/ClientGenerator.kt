@@ -22,10 +22,6 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
 
-private const val BASE_URL = "baseUrl"
-private const val TOKEN = "token"
-private const val CLIENT = "client"
-private const val BODY = "body"
 private const val DEFAULT_TAG = "Default"
 private const val API_SUFFIX = "Api"
 
@@ -49,29 +45,30 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
 
         val clientInitializer = if (hasPolymorphicTypes) {
             val generatedSerializersModule = MemberName(modelPackage, "generatedSerializersModule")
-            CodeBlock.of("createHttpClient(%M)", generatedSerializersModule)
+            CodeBlock.of("$CREATE_HTTP_CLIENT(%M)", generatedSerializersModule)
         } else {
-            CodeBlock.of("createHttpClient()")
+            CodeBlock.of("$CREATE_HTTP_CLIENT()")
         }
 
+        val primaryConstructor = FunSpec
+            .constructorBuilder()
+            .addParameter(BASE_URL, STRING)
+            .addParameter(TOKEN, STRING)
+            .build()
+        
+        val httpClientProperty = PropertySpec
+            .builder(CLIENT, HTTP_CLIENT)
+            .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
+            .initializer(clientInitializer)
+            .build()
+        
         val classBuilder = TypeSpec
             .classBuilder(className)
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
             .addSuperclassConstructorParameter(TOKEN)
-            .primaryConstructor(
-                FunSpec
-                    .constructorBuilder()
-                    .addParameter(BASE_URL, STRING)
-                    .addParameter(TOKEN, STRING)
-                    .build(),
-            ).addProperty(
-                PropertySpec
-                    .builder(CLIENT, HTTP_CLIENT)
-                    .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
-                    .initializer(clientInitializer)
-                    .build(),
-            )
+            .primaryConstructor(primaryConstructor)
+            .addProperty(httpClientProperty)
 
         classBuilder.addFunctions(endpoints.map(::generateEndpointFunction))
 
@@ -86,12 +83,11 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         val returnBodyType = resolveReturnType(endpoint)
         val returnType = HTTP_SUCCESS.parameterizedBy(returnBodyType)
 
-        val funBuilder =
-            FunSpec
-                .builder(functionName)
-                .addModifiers(KModifier.SUSPEND)
-                .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
-                .returns(returnType)
+        val funBuilder = FunSpec
+            .builder(functionName)
+            .addModifiers(KModifier.SUSPEND)
+            .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
+            .returns(returnType)
 
         val params = endpoint.parameters.groupBy { it.location }
 
@@ -137,18 +133,17 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
     ): CodeBlock {
-        val httpMethodFun =
-            when (endpoint.method) {
-                HttpMethod.GET -> GET_FUN
-                HttpMethod.POST -> POST_FUN
-                HttpMethod.PUT -> PUT_FUN
-                HttpMethod.DELETE -> DELETE_FUN
-                HttpMethod.PATCH -> PATCH_FUN
-            }
+        val httpMethodFun = when (endpoint.method) {
+            HttpMethod.GET -> GET_FUN
+            HttpMethod.POST -> POST_FUN
+            HttpMethod.PUT -> PUT_FUN
+            HttpMethod.DELETE -> DELETE_FUN
+            HttpMethod.PATCH -> PATCH_FUN
+        }
 
         val (format, args) = params[ParameterLocation.PATH]
             .orEmpty()
-            .fold($$"${'$'}{baseUrl}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
+            .fold($$"${'$'}{$$BASE_URL}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
                 format.replace("{${param.name}}", $$"${%M(%L)}") to args + ENCODE_PARAM_FUN + param.name.toCamelCase()
             }
 
@@ -157,10 +152,10 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
 
         val code = CodeBlock.builder()
 
-        code.beginControlFlow("return safeCall")
+        code.beginControlFlow("return $SAFE_CALL")
 
-        code.beginControlFlow("client.%M(%L)", httpMethodFun, urlString)
-        code.addStatement("applyAuth()")
+        code.beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
+        code.addStatement("$APPLY_AUTH()")
 
         val headerParams = params[ParameterLocation.HEADER]
         if (!headerParams.isNullOrEmpty()) {
@@ -174,9 +169,10 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             code.endControlFlow()
         }
 
-        if (!params[ParameterLocation.QUERY].isNullOrEmpty()) {
+        val queryParams = params[ParameterLocation.QUERY]
+        if (!queryParams.isNullOrEmpty()) {
             code.beginControlFlow("url")
-            for (param in params[ParameterLocation.QUERY]!!) {
+            for (param in queryParams) {
                 val paramName = param.name.toCamelCase()
                 code.optionalGuard(param.required, paramName) {
                     addStatement("this.parameters.append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
@@ -199,18 +195,12 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         return code.build()
     }
 
-    private fun resolveReturnType(endpoint: Endpoint): TypeName {
-        val successResponse =
-            endpoint.responses.entries
-                .filter { it.key.startsWith("2") }
-                .firstNotNullOfOrNull { it.value.schema }
-
-        return if (successResponse != null) {
-            TypeMapping.toTypeName(successResponse, modelPackage)
-        } else {
-            UNIT
-        }
-    }
+    private fun resolveReturnType(endpoint: Endpoint): TypeName = endpoint.responses.entries
+        .asSequence()
+        .filter { it.key.startsWith("2") }
+        .firstNotNullOfOrNull { it.value.schema }
+        ?.let { successResponse -> TypeMapping.toTypeName(successResponse, modelPackage) }
+        ?: UNIT
 
     /**
      * If [required], emits [block] directly. Otherwise wraps it in `if (name != null) { ... }`.

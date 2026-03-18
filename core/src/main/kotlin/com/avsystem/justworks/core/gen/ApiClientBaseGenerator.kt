@@ -25,22 +25,10 @@ import com.squareup.kotlinpoet.UNIT
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
 object ApiClientBaseGenerator {
-    private const val BASE_URL = "baseUrl"
-    private const val TOKEN = "token"
-    private const val CLIENT = "client"
     private const val BLOCK = "block"
-    private const val ENCODE_PARAM = "encodeParam"
-    private const val VALUE = "value"
     private const val MAP_TO_RESULT = "mapToResult"
     private const val SUCCESS_BODY = "successBody"
-    private const val TO_RESULT = "toResult"
-    private const val TO_EMPTY_RESULT = "toEmptyResult"
-    private const val APPLY_AUTH = "applyAuth"
-    private const val SAFE_CALL = "safeCall"
-    private const val CLOSE = "close"
-    private const val CREATE_HTTP_CLIENT = "createHttpClient"
     private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
-    private const val NETWORK_ERROR = "Network error"
 
     fun generate(): FileSpec {
         val t = TypeVariableName("T").copy(reified = true)
@@ -56,10 +44,10 @@ object ApiClientBaseGenerator {
     }
 
     private fun buildEncodeParam(t: TypeVariableName): FunSpec = FunSpec
-        .builder(ENCODE_PARAM)
+        .builder("encodeParam")
         .addModifiers(KModifier.INLINE)
         .addTypeVariable(t)
-        .addParameter(VALUE, TypeVariableName("T"))
+        .addParameter("value", TypeVariableName("T"))
         .returns(STRING)
         .addStatement("return %T.%M(value).trim('\"')", JSON_CLASS, ENCODE_TO_STRING_FUN)
         .build()
@@ -90,7 +78,7 @@ object ApiClientBaseGenerator {
         .build()
 
     private fun buildToResult(t: TypeVariableName): FunSpec = FunSpec
-        .builder(TO_RESULT)
+        .builder("toResult")
         .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
@@ -100,7 +88,7 @@ object ApiClientBaseGenerator {
         .build()
 
     private fun buildToEmptyResult(): FunSpec = FunSpec
-        .builder(TO_EMPTY_RESULT)
+        .builder("toEmptyResult")
         .addModifiers(KModifier.SUSPEND)
         .receiver(HTTP_RESPONSE)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
@@ -133,9 +121,9 @@ object ApiClientBaseGenerator {
             .build()
 
         val closeFun = FunSpec
-            .builder(CLOSE)
+            .builder("close")
             .addModifiers(KModifier.OVERRIDE)
-            .addStatement("client.close()")
+            .addStatement("$CLIENT.close()")
             .build()
 
         return TypeSpec
@@ -161,7 +149,7 @@ object ApiClientBaseGenerator {
         .addStatement(
             "append(%T.Authorization, %P)",
             HTTP_HEADERS,
-            CodeBlock.of($$"Bearer ${'$'}{$token}"),
+            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN}"),
         ).endControlFlow()
         .build()
 
@@ -176,7 +164,7 @@ object ApiClientBaseGenerator {
             "%M(%T(0, it.message ?: %S, %T.Network))",
             RAISE_FUN,
             HTTP_ERROR,
-            NETWORK_ERROR,
+            "Network error",
             HTTP_ERROR_TYPE,
         ).endControlFlow()
         .build()

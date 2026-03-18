@@ -80,3 +80,15 @@ val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuild
 val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
 val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
 val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")
+
+// ============================================================================
+// Shared property / parameter names (used by multiple generators)
+// ============================================================================
+
+const val BASE_URL = "baseUrl"
+const val TOKEN = "token"
+const val CLIENT = "client"
+const val BODY = "body"
+const val APPLY_AUTH = "applyAuth"
+const val SAFE_CALL = "safeCall"
+const val CREATE_HTTP_CLIENT = "createHttpClient"
