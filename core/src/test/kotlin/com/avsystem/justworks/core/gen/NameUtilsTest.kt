@@ -37,13 +37,58 @@ class NameUtilsTest {
     }
 
     @Test
+    fun `toCamelCase handles consecutive underscores`() {
+        assertEquals("fooBar", "foo__bar".toCamelCase())
+    }
+
+    @Test
+    fun `toCamelCase handles consecutive hyphens`() {
+        assertEquals("fooBar", "foo--bar".toCamelCase())
+    }
+
+    @Test
+    fun `toCamelCase handles mixed consecutive delimiters`() {
+        assertEquals("fooBar", "foo-_bar".toCamelCase())
+    }
+
+    @Test
     fun `toCamelCase treats all-uppercase as single word`() {
         assertEquals("url", "URL".toCamelCase())
     }
 
     @Test
+    fun `toCamelCase splits acronym followed by word`() {
+        assertEquals("urlMapping", "URLMapping".toCamelCase())
+    }
+
+    @Test
+    fun `toCamelCase splits multiple acronyms`() {
+        assertEquals("httpsConfig", "HTTPSConfig".toCamelCase())
+    }
+
+    @Test
+    fun `toCamelCase handles acronym in middle`() {
+        assertEquals("getUrlMapping", "getURLMapping".toCamelCase())
+    }
+
+    @Test
     fun `toPascalCase treats all-uppercase as single word`() {
         assertEquals("Url", "URL".toPascalCase())
+    }
+
+    @Test
+    fun `toPascalCase splits acronym followed by word`() {
+        assertEquals("UrlMapping", "URLMapping".toPascalCase())
+    }
+
+    @Test
+    fun `toPascalCase splits multiple acronyms`() {
+        assertEquals("HttpsConfig", "HTTPSConfig".toPascalCase())
+    }
+
+    @Test
+    fun `toPascalCase handles acronym in middle`() {
+        assertEquals("GetUrlMapping", "getURLMapping".toPascalCase())
     }
 
     // -- toEnumConstantName --
@@ -81,6 +126,26 @@ class NameUtilsTest {
     @Test
     fun `toEnumConstantName returns original for empty string`() {
         assertEquals("", "".toEnumConstantName())
+    }
+
+    @Test
+    fun `toEnumConstantName handles consecutive underscores`() {
+        assertEquals("FOO_BAR", "foo__bar".toEnumConstantName())
+    }
+
+    @Test
+    fun `toEnumConstantName handles consecutive hyphens`() {
+        assertEquals("FOO_BAR", "foo--bar".toEnumConstantName())
+    }
+
+    @Test
+    fun `toEnumConstantName splits acronym followed by word`() {
+        assertEquals("URL_MAPPING", "URLMapping".toEnumConstantName())
+    }
+
+    @Test
+    fun `toEnumConstantName handles multiple acronyms`() {
+        assertEquals("HTTPS_CONFIG", "HTTPSConfig".toEnumConstantName())
     }
 
     // -- operationNameFromPath --
