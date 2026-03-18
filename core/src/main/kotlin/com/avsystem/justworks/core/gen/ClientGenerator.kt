@@ -44,7 +44,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         val className = ClassName(apiPackage, "${tag.toPascalCase()}$API_SUFFIX")
 
         val clientInitializer = if (hasPolymorphicTypes) {
-            val generatedSerializersModule = MemberName(modelPackage, "generatedSerializersModule")
+            val generatedSerializersModule = MemberName(modelPackage, GENERATED_SERIALIZERS_MODULE)
             CodeBlock.of("$CREATE_HTTP_CLIENT(%M)", generatedSerializersModule)
         } else {
             CodeBlock.of("$CREATE_HTTP_CLIENT()")

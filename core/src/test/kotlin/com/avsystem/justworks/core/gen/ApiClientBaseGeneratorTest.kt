@@ -74,7 +74,7 @@ class ApiClientBaseGeneratorTest {
         assertTrue(KModifier.SUSPEND in safeCall.modifiers)
         assertTrue(safeCall.contextParameters.isNotEmpty(), "Expected context parameter")
         val body = safeCall.body.toString()
-        assertTrue(body.contains("catch"), "Expected arrow catch call")
+        assertTrue(body.contains("IOException"), "Expected IOException catch")
         assertTrue(body.contains("Network error"), "Expected Network error message")
     }
 

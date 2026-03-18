@@ -159,12 +159,14 @@ object ApiClientBaseGenerator {
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
         .addParameter(BLOCK, LambdaTypeName.get(returnType = HTTP_RESPONSE).copy(suspending = true))
         .returns(HTTP_RESPONSE)
-        .beginControlFlow("return %M({ %L() })", CATCH_FUN, BLOCK)
+        .beginControlFlow("return try")
+        .addStatement("%L()", BLOCK)
+        .nextControlFlow("catch (e: %T)", IO_EXCEPTION)
         .addStatement(
-            "%M(%T(0, it.message ?: %S, %T.Network))",
+            "%M(%T(0, e.message ?: %S, %T.Network))",
             RAISE_FUN,
             HTTP_ERROR,
-            "Network error",
+            NETWORK_ERROR,
             HTTP_ERROR_TYPE,
         ).endControlFlow()
         .build()

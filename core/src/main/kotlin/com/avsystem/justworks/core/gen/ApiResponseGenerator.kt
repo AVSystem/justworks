@@ -20,11 +20,6 @@ object ApiResponseGenerator {
     private const val MESSAGE = "message"
     private const val TYPE = "type"
 
-    private val codeProperty = PropertySpec
-        .builder(CODE, INT)
-        .initializer(CODE)
-        .build()
-
     fun generateHttpError(): FileSpec {
         val enumType = TypeSpec
             .enumBuilder(HTTP_ERROR_TYPE)
@@ -44,9 +39,9 @@ object ApiResponseGenerator {
             .classBuilder(HTTP_ERROR)
             .addModifiers(KModifier.DATA)
             .primaryConstructor(primaryConstructor)
+            .addProperty(PropertySpec.builder(CODE, INT).initializer(CODE).build())
             .addProperty(PropertySpec.builder(MESSAGE, STRING).initializer(MESSAGE).build())
             .addProperty(PropertySpec.builder(TYPE, HTTP_ERROR_TYPE).initializer(TYPE).build())
-            .addProperty(codeProperty)
             .build()
 
         return FileSpec
@@ -70,8 +65,8 @@ object ApiResponseGenerator {
             .addModifiers(KModifier.DATA)
             .addTypeVariable(t)
             .primaryConstructor(primaryConstructor)
+            .addProperty(PropertySpec.builder(CODE, INT).initializer(CODE).build())
             .addProperty(PropertySpec.builder(BODY, t).initializer(BODY).build())
-            .addProperty(codeProperty)
             .build()
 
         return FileSpec

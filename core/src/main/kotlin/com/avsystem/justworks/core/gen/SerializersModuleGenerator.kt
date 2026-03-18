@@ -43,7 +43,7 @@ class SerializersModuleGenerator(private val modelPackage: String) {
 
         val prop =
             PropertySpec
-                .builder("generatedSerializersModule", SERIALIZERS_MODULE)
+                .builder(GENERATED_SERIALIZERS_MODULE, SERIALIZERS_MODULE)
                 .initializer(code.build())
                 .build()
 
