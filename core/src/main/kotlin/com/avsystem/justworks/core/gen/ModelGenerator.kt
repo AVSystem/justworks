@@ -217,7 +217,10 @@ class ModelGenerator(private val modelPackage: String) {
         val selectDeserializerBody = buildSelectDeserializerBody(schema.name, uniqueFieldsPerVariant)
 
         val deserializationStrategy = ClassName("kotlinx.serialization", "DeserializationStrategy")
-            .parameterizedBy(com.squareup.kotlinpoet.WildcardTypeName.producerOf(sealedClassName))
+            .parameterizedBy(
+                com.squareup.kotlinpoet.WildcardTypeName
+                    .producerOf(sealedClassName),
+            )
 
         val selectFun = FunSpec
             .builder("selectDeserializer")
@@ -430,30 +433,28 @@ class ModelGenerator(private val modelPackage: String) {
     /**
      * Iteratively collects all [TypeRef.Inline] instances from a [TypeRef] tree.
      */
-    private tailrec fun collectInlineTypeRefs(
-        todo: List<TypeRef?>,
-        visited: Set<TypeRef.Inline> = emptySet(),
-        acc: List<TypeRef.Inline> = emptyList(),
-    ): List<TypeRef.Inline> = when (val current = todo.firstOrNull()) {
-        null -> acc
+    private fun collectInlineTypeRefs(initialTodo: List<TypeRef?>): List<TypeRef.Inline> {
+        val todo = ArrayDeque(initialTodo.filterNotNull())
+        val visited = linkedSetOf<TypeRef.Inline>()
 
-        is TypeRef.Inline if current in visited -> collectInlineTypeRefs(todo.tail(), visited, acc)
+        while (todo.isNotEmpty()) {
+            when (val current = todo.removeFirst()) {
+                is TypeRef.Inline if visited.add(current) -> {
+                    todo.addAll(current.properties.map { it.type })
+                }
 
-        is TypeRef.Inline -> collectInlineTypeRefs(
-            todo = current.properties.map { it.type } + todo.tail(),
-            visited = visited + current,
-            acc = acc + current,
-        )
+                is TypeRef.Array -> {
+                    todo.addFirst(current.items)
+                }
 
-        is TypeRef.Array -> collectInlineTypeRefs(todo.tail() + current.items, visited, acc)
+                is TypeRef.Map -> {
+                    todo.addFirst(current.valueType)
+                }
 
-        is TypeRef.Map -> collectInlineTypeRefs(todo.tail() + current.valueType, visited, acc)
-
-        is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.Unknown -> collectInlineTypeRefs(
-            todo = todo.tail(),
-            visited = visited,
-            acc = acc,
-        )
+                else -> {}
+            }
+        }
+        return visited.toList()
     }
 
     context(hierarchy: HierarchyInfo)
