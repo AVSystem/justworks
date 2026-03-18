@@ -1,6 +1,7 @@
 package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.PrimitiveType
+import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.TypeRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -98,5 +99,26 @@ class TypeMappingTest {
         val ref = TypeRef.Array(TypeRef.Reference("Pet"))
         val result = TypeMapping.toTypeName(ref, pkg)
         assertEquals("kotlin.collections.List<com.example.model.Pet>", result.toString())
+    }
+
+    // -- Inline --
+
+    @Test
+    fun `maps Inline to ClassName using contextHint`() {
+        val ref = TypeRef.Inline(
+            properties = listOf(PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
+            requiredProperties = setOf("name"),
+            contextHint = "Pet.Address",
+        )
+        val result = TypeMapping.toTypeName(ref, pkg)
+        assertEquals("com.example.model.Pet_Address", result.toString())
+    }
+
+    // -- Unknown --
+
+    @Test
+    fun `maps Unknown to kotlin Any`() {
+        val result = TypeMapping.toTypeName(TypeRef.Unknown, pkg)
+        assertEquals("kotlin.Any", result.toString())
     }
 }

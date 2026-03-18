@@ -1,7 +1,7 @@
 package com.avsystem.justworks.core.gen
 
 private val DELIMITERS = Regex("[_\\-.]+")
-private val CAMEL_BOUNDARY = Regex("(?<=[a-z0-9])(?=[A-Z])")
+private val CAMEL_BOUNDARY = Regex("(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 /**
  * Converts a string to camelCase.
@@ -23,7 +23,6 @@ fun String.toPascalCase(): String = split(DELIMITERS)
  * Converts any string to UPPER_SNAKE_CASE for use as an enum constant name.
  * Inserts `_` before uppercase letters in camelCase, replaces non-alphanumeric
  * with `_`, uppercases, deduplicates `_`, trims leading/trailing `_`.
- * Prefixes with `VALUE_` if the first character is a digit.
  */
 fun String.toEnumConstantName(): String {
     val converted = replace(CAMEL_BOUNDARY, "_")
@@ -33,7 +32,6 @@ fun String.toEnumConstantName(): String {
 
     return when {
         converted.isEmpty() -> this
-        converted[0].isDigit() -> "VALUE_$converted"
         else -> converted
     }
 }
