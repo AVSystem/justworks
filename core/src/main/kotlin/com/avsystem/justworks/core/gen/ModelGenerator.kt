@@ -252,7 +252,7 @@ class ModelGenerator(private val modelPackage: String) {
         val builder = CodeBlock.builder()
         builder.beginControlFlow("return when")
 
-        for ((variantName, uniqueField) in uniqueFieldsPerVariant) {
+        val notUnique = uniqueFieldsPerVariant.mapNotNull { (variantName, uniqueField) ->
             if (uniqueField != null) {
                 builder.addStatement(
                     "%S·in·element.%M -> %T.serializer()",
@@ -260,18 +260,19 @@ class ModelGenerator(private val modelPackage: String) {
                     JSON_OBJECT_EXT,
                     ClassName(modelPackage, variantName),
                 )
+                null
             } else {
-                builder.addStatement(
-                    "// No unique discriminating fields found for variant '$variantName'",
-                )
-                builder.addStatement(
-                    "else -> TODO(%S)",
-                    "No unique discriminating fields found for variant '$variantName' of anyOf '$parentName' - manual selectDeserializer required",
-                )
+                builder.addStatement("// No unique discriminating fields found for variant '$variantName'")
+                variantName
             }
         }
 
-        if (uniqueFieldsPerVariant.all { it.value != null }) {
+        if (notUnique.isNotEmpty()) {
+            builder.addStatement(
+                "else -> TODO(%S)",
+                "Cannot discriminate variants [${notUnique.joinToString()}] of anyOf '$parentName' - manual selectDeserializer required",
+            )
+        } else {
             builder.addStatement(
                 "else -> throw %T(%S + element)",
                 SERIALIZATION_EXCEPTION,
