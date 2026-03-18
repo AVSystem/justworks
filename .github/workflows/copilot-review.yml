@@ -3,6 +3,8 @@ name: Copilot Code Review
 on:
   pull_request:
     types: [opened, synchronize, reopened]
+  pull_request_review_comment:
+    types: [created]
 
 permissions:
   contents: read
@@ -10,7 +12,10 @@ permissions:
 
 jobs:
   copilot-review:
-    if: github.event.pull_request.draft == false
+    # Skip draft PRs; skip when Copilot itself triggers the event to prevent infinite loops
+    if: |
+      github.event.pull_request.draft == false &&
+      !contains(fromJSON('["github-copilot[bot]","copilot-pull-request-reviewer[bot]"]'), github.actor)
     runs-on: ubuntu-latest
     steps:
       - name: Dismiss previous Copilot review comments
@@ -18,7 +23,7 @@ jobs:
         with:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           script: |
-            const pullNumber = context.payload.pull_request.number;
+            const pullNumber = context.payload.pull_request?.number ?? context.issue.number;
 
             const comments = await github.paginate(
               github.rest.pulls.listReviewComments,
@@ -49,6 +54,9 @@ jobs:
             core.info(`Dismissed ${copilotComments.length} previous Copilot review comment(s).`);
 
       - name: Request Copilot review
+        # Only re-request a review on PR push/open events; Copilot re-reviews automatically
+        # when a user replies to one of its review comments.
+        if: github.event_name == 'pull_request'
         continue-on-error: true
         uses: actions/github-script@v7
         with:
