@@ -6,9 +6,9 @@ import com.squareup.kotlinpoet.INT
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
-import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeVariableName
+
 /**
  * Generates [FileSpec]s containing:
  * - `HttpErrorType` enum class with Client, Server, Network values
@@ -16,59 +16,39 @@ import com.squareup.kotlinpoet.TypeVariableName
  * - `HttpSuccess<T>` data class wrapping successful responses
  */
 object ApiResponseGenerator {
-    fun primaryConstructor(bodyType: TypeName = STRING) = FunSpec
-        .constructorBuilder()
-        .addParameter("statusCode", INT)
-        .addParameter("body", bodyType)
-        .build()
+    private const val BODY = "body"
+    private const val CODE = "code"
+    private const val MESSAGE = "message"
+    private const val TYPE = "type"
 
-    val statusCodeProperty =
-        PropertySpec
-            .builder("statusCode", INT)
-            .initializer("statusCode")
-            .build()
-
-    fun bodyProperty(bodyType: TypeName = STRING) = PropertySpec
-        .builder("body", bodyType)
-        .initializer("body")
+    private val codeProperty = PropertySpec
+        .builder(CODE, INT)
+        .initializer(CODE)
         .build()
 
     fun generateHttpError(): FileSpec {
-        val enumType =
-            TypeSpec
-                .enumBuilder(HTTP_ERROR_TYPE)
-                .addEnumConstant("Client")
-                .addEnumConstant("Server")
-                .addEnumConstant("Network")
-                .build()
+        val enumType = TypeSpec
+            .enumBuilder(HTTP_ERROR_TYPE)
+            .addEnumConstant("Client")
+            .addEnumConstant("Server")
+            .addEnumConstant("Network")
+            .build()
 
-        val dataClassType =
-            TypeSpec
-                .classBuilder(HTTP_ERROR)
-                .addModifiers(KModifier.DATA)
-                .primaryConstructor(
-                    FunSpec
-                        .constructorBuilder()
-                        .addParameter("code", INT)
-                        .addParameter("message", STRING)
-                        .addParameter("type", HTTP_ERROR_TYPE)
-                        .build(),
-                ).addProperty(
-                    PropertySpec
-                        .builder("code", INT)
-                        .initializer("code")
-                        .build(),
-                ).addProperty(
-                    PropertySpec
-                        .builder("message", STRING)
-                        .initializer("message")
-                        .build(),
-                ).addProperty(
-                    PropertySpec
-                        .builder("type", HTTP_ERROR_TYPE)
-                        .initializer("type")
-                        .build(),
-                ).build()
+        val primaryConstructor = FunSpec
+            .constructorBuilder()
+            .addParameter(CODE, INT)
+            .addParameter(MESSAGE, STRING)
+            .addParameter(TYPE, HTTP_ERROR_TYPE)
+            .build()
+
+        val dataClassType = TypeSpec
+            .classBuilder(HTTP_ERROR)
+            .addModifiers(KModifier.DATA)
+            .primaryConstructor(primaryConstructor)
+            .addProperty(PropertySpec.builder(MESSAGE, STRING).initializer(MESSAGE).build())
+            .addProperty(PropertySpec.builder(TYPE, HTTP_ERROR_TYPE).initializer(TYPE).build())
+            .addProperty(codeProperty)
+            .build()
 
         return FileSpec
             .builder(HTTP_ERROR)
@@ -80,15 +60,20 @@ object ApiResponseGenerator {
     fun generateHttpSuccess(): FileSpec {
         val t = TypeVariableName("T")
 
-        val successType =
-            TypeSpec
-                .classBuilder(HTTP_SUCCESS)
-                .addModifiers(KModifier.DATA)
-                .addTypeVariable(t)
-                .primaryConstructor(primaryConstructor(t))
-                .addProperty(bodyProperty(t))
-                .addProperty(statusCodeProperty)
-                .build()
+        val primaryConstructor = FunSpec
+            .constructorBuilder()
+            .addParameter(CODE, INT)
+            .addParameter(BODY, t)
+            .build()
+
+        val successType = TypeSpec
+            .classBuilder(HTTP_SUCCESS)
+            .addModifiers(KModifier.DATA)
+            .addTypeVariable(t)
+            .primaryConstructor(primaryConstructor)
+            .addProperty(PropertySpec.builder(BODY, t).initializer(BODY).build())
+            .addProperty(codeProperty)
+            .build()
 
         return FileSpec
             .builder(HTTP_SUCCESS)

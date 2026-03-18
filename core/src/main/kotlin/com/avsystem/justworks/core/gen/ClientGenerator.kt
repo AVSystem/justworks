@@ -187,7 +187,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
 
         if (endpoint.requestBody != null) {
             code.optionalGuard(endpoint.requestBody.required, BODY) {
-                addStatement("%M(%M.Application.Json)", CONTENT_TYPE_FUN, CONTENT_TYPE_APP_JSON)
+                addStatement("%M(%T.Json)", CONTENT_TYPE_FUN, CONTENT_TYPE_APPLICATION)
                 addStatement("%M(%L)", SET_BODY_FUN, BODY)
             }
         }
