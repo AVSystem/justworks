@@ -55,13 +55,13 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             .addParameter(BASE_URL, STRING)
             .addParameter(TOKEN, STRING)
             .build()
-        
+
         val httpClientProperty = PropertySpec
             .builder(CLIENT, HTTP_CLIENT)
             .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
             .initializer(clientInitializer)
             .build()
-        
+
         val classBuilder = TypeSpec
             .classBuilder(className)
             .superclass(API_CLIENT_BASE)
