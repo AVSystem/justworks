@@ -35,6 +35,16 @@ class InlineSchemaDeduplicator(private val componentSchemaNames: Set<String>) {
         requiredProps: Set<String>,
         contextName: String,
     ): String = namesByKey.getOrPut(InlineSchemaKey.from(properties, requiredProps)) {
-        contextName.takeUnless { it in componentSchemaNames || it in namesByKey.values } ?: "${contextName}Inline"
+        val usedNames = componentSchemaNames + namesByKey.values
+
+        val candidates = sequence {
+            yield(contextName)
+            yield("${contextName}Inline")
+            generateSequence(2) { it + 1 }.forEach {
+                yield("${contextName}${it}Inline")
+            }
+        }
+
+        candidates.first { it !in usedNames }
     }
 }
