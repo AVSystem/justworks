@@ -48,9 +48,7 @@ object TypeMapping {
         }
 
         is TypeRef.Inline -> {
-            // For nested inline classes (e.g., "Pet.Address"), sanitize to "PetAddress"
-            val sanitizedName = typeRef.contextHint.replace(".", "")
-            ClassName(modelPackage, sanitizedName)
+            ClassName(modelPackage, typeRef.contextHint.toInlinedName())
         }
 
         is TypeRef.Unknown -> {

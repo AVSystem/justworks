@@ -39,6 +39,12 @@ fun String.toEnumConstantName(): String {
 }
 
 /**
+ * Sanitizes a nested inline schema name by removing dot separators.
+ * E.g. "Pet.Address" becomes "Pet_Address".
+ */
+fun String.toInlinedName(): String = replace(".", "_")
+
+/**
  * Generates a PascalCase operation name from HTTP method and path.
  * Path parameters like {id} become "ById", {userId} becomes "ByUserId".
  * Handles hyphens, underscores, and dots in path segments.

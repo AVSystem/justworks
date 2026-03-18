@@ -1,7 +1,6 @@
 package com.avsystem.justworks.core.gen
 
 import arrow.core.raise.catch
-import arrow.core.tail
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.PrimitiveType
@@ -457,11 +456,9 @@ class ModelGenerator(private val modelPackage: String) {
         return visited.toList()
     }
 
-    context(hierarchy: HierarchyInfo)
-    private fun generateNestedInlineClass(schema: SchemaModel): FileSpec {
-        val sanitizedName = schema.name.replace(".", "")
-        return generateDataClass(schema.copy(name = sanitizedName))
-    }
+    context(_: HierarchyInfo)
+    private fun generateNestedInlineClass(schema: SchemaModel): FileSpec =
+        generateDataClass(schema.copy(name = schema.name.toInlinedName()))
 
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
