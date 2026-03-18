@@ -20,6 +20,7 @@ import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.WildcardTypeName
 import kotlinx.datetime.LocalDate
 import kotlin.time.Instant
 
@@ -98,6 +99,8 @@ class ModelGenerator(private val modelPackage: String) {
         val schemaPropertyRefs = spec.schemas.flatMap { schema -> schema.properties.map { it.type } }
 
         return collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
+            .asSequence()
+            .sortedBy { it.contextHint }
             .distinctBy { InlineSchemaKey.from(it.properties, it.requiredProperties) }
             .map { ref ->
                 SchemaModel(
@@ -110,7 +113,7 @@ class ModelGenerator(private val modelPackage: String) {
                     anyOf = null,
                     discriminator = null,
                 )
-            }
+            }.toList()
     }
 
     context(hierarchy: HierarchyInfo)
@@ -201,25 +204,21 @@ class ModelGenerator(private val modelPackage: String) {
                 ref.schemaName to propNames
             }
 
-        val allFieldSets = variantProperties.values
+        val allFields = variantProperties.values
+            .asSequence()
+            .flatten()
+            .groupingBy { it }
+            .eachCount()
+
         val uniqueFieldsPerVariant = variantProperties
             .mapValues { (_, fields) ->
-                val otherFields = allFieldSets
-                    .minusElement(fields)
-                    .asSequence()
-                    .flatten()
-                    .toSet()
-
-                fields.firstOrNull { it !in otherFields }
+                fields.firstOrNull { allFields[it] == 1 }
             }
 
         val selectDeserializerBody = buildSelectDeserializerBody(schema.name, uniqueFieldsPerVariant)
 
         val deserializationStrategy = ClassName("kotlinx.serialization", "DeserializationStrategy")
-            .parameterizedBy(
-                com.squareup.kotlinpoet.WildcardTypeName
-                    .producerOf(sealedClassName),
-            )
+            .parameterizedBy(WildcardTypeName.producerOf(sealedClassName))
 
         val selectFun = FunSpec
             .builder("selectDeserializer")

@@ -20,11 +20,14 @@ class SerializersModuleGenerator(private val modelPackage: String) {
 
     context(hierarchy: HierarchyInfo)
     fun generate(): FileSpec? {
-        if (hierarchy.sealedHierarchies.isEmpty()) return null
+        val discriminatorHierarchies =
+            hierarchy.sealedHierarchies.filterKeys { it !in hierarchy.anyOfWithoutDiscriminator }
+
+        if (discriminatorHierarchies.isEmpty()) return null
 
         val code = CodeBlock.builder().beginControlFlow("%T", SERIALIZERS_MODULE)
 
-        for ((parent, variants) in hierarchy.sealedHierarchies) {
+        for ((parent, variants) in discriminatorHierarchies) {
             val parentClass = ClassName(modelPackage, parent)
             code.beginControlFlow("%M(%T::class)", POLYMORPHIC_FUN, parentClass)
             for (variant in variants) {
