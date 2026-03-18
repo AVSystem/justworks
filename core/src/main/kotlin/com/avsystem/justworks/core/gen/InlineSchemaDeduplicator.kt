@@ -35,8 +35,6 @@ class InlineSchemaDeduplicator(private val componentSchemaNames: Set<String>) {
         requiredProps: Set<String>,
         contextName: String,
     ): String = namesByKey.getOrPut(InlineSchemaKey.from(properties, requiredProps)) {
-        val usedNames = componentSchemaNames + namesByKey.values
-
         val candidates = sequence {
             yield(contextName)
             yield("${contextName}Inline")
@@ -45,6 +43,6 @@ class InlineSchemaDeduplicator(private val componentSchemaNames: Set<String>) {
             }
         }
 
-        candidates.first { it !in usedNames }
+        candidates.first { it !in componentSchemaNames && it !in namesByKey.values }
     }
 }
