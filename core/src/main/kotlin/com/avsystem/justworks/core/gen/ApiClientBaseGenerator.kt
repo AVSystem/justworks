@@ -18,6 +18,7 @@ import com.squareup.kotlinpoet.UNIT
 /**
  * Generates the shared `ApiClientBase.kt` file containing:
  * - `encodeParam<T>()` top-level utility function
+ * - `HttpResponse.mapToResult<T>()` private extension with response mapping logic
  * - `HttpResponse.toResult<T>()` extension for typed response mapping
  * - `HttpResponse.toEmptyResult()` extension for Unit response mapping
  * - `ApiClientBase` abstract class with common client infrastructure
@@ -30,6 +31,8 @@ object ApiClientBaseGenerator {
     private const val BLOCK = "block"
     private const val ENCODE_PARAM = "encodeParam"
     private const val VALUE = "value"
+    private const val MAP_TO_RESULT = "mapToResult"
+    private const val SUCCESS_BODY = "successBody"
     private const val TO_RESULT = "toResult"
     private const val TO_EMPTY_RESULT = "toEmptyResult"
     private const val APPLY_AUTH = "applyAuth"
@@ -45,6 +48,7 @@ object ApiClientBaseGenerator {
         return FileSpec
             .builder(API_CLIENT_BASE)
             .addFunction(buildEncodeParam(t))
+            .addFunction(buildMapToResult(t))
             .addFunction(buildToResult(t))
             .addFunction(buildToEmptyResult())
             .addType(buildApiClientBaseClass())
@@ -60,15 +64,16 @@ object ApiClientBaseGenerator {
         .addStatement("return %T.%M(value).trim('\"')", JSON_CLASS, ENCODE_TO_STRING_FUN)
         .build()
 
-    private fun buildToResult(t: TypeVariableName): FunSpec = FunSpec
-        .builder(TO_RESULT)
-        .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
+    private fun buildMapToResult(t: TypeVariableName): FunSpec = FunSpec
+        .builder(MAP_TO_RESULT)
+        .addModifiers(KModifier.PRIVATE, KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
+        .addParameter(SUCCESS_BODY, LambdaTypeName.get(returnType = TypeVariableName("T")))
         .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
         .beginControlFlow("return when (status.value)")
-        .addStatement("in 200..299 -> %T(status.value, %M())", HTTP_SUCCESS, BODY_FUN)
+        .addStatement("in 200..299 -> %T(status.value, %L())", HTTP_SUCCESS, SUCCESS_BODY)
         .addStatement(
             "in 400..499 -> %M(%T(status.value, %M(), %T.Client))",
             RAISE_FUN,
@@ -84,27 +89,23 @@ object ApiClientBaseGenerator {
         ).endControlFlow()
         .build()
 
+    private fun buildToResult(t: TypeVariableName): FunSpec = FunSpec
+        .builder(TO_RESULT)
+        .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
+        .addTypeVariable(t)
+        .receiver(HTTP_RESPONSE)
+        .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
+        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
+        .addStatement("return %L { %M() }", MAP_TO_RESULT, BODY_FUN)
+        .build()
+
     private fun buildToEmptyResult(): FunSpec = FunSpec
         .builder(TO_EMPTY_RESULT)
         .addModifiers(KModifier.SUSPEND)
         .receiver(HTTP_RESPONSE)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
         .returns(HTTP_SUCCESS.parameterizedBy(UNIT))
-        .beginControlFlow("return when (status.value)")
-        .addStatement("in 200..299 -> %T(status.value, Unit)", HTTP_SUCCESS)
-        .addStatement(
-            "in 400..499 -> %M(%T(status.value, %M(), %T.Client))",
-            RAISE_FUN,
-            HTTP_ERROR,
-            BODY_AS_TEXT_FUN,
-            HTTP_ERROR_TYPE,
-        ).addStatement(
-            "else -> %M(%T(status.value, %M(), %T.Server))",
-            RAISE_FUN,
-            HTTP_ERROR,
-            BODY_AS_TEXT_FUN,
-            HTTP_ERROR_TYPE,
-        ).endControlFlow()
+        .addStatement("return %L { Unit }", MAP_TO_RESULT)
         .build()
 
     private fun buildApiClientBaseClass(): TypeSpec {
