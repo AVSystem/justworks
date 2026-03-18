@@ -96,6 +96,7 @@ class ModelGeneratorTest {
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val tagParam = constructor.parameters.first { it.name == "tag" }
         assertTrue(tagParam.type.isNullable, "Optional property 'tag' should be nullable")
+        assertNotNull(tagParam.defaultValue, "Optional property 'tag' should have a default value")
         assertEquals("null", tagParam.defaultValue.toString())
     }
 
@@ -664,6 +665,7 @@ class ModelGeneratorTest {
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "name" }
         assertTrue(param.type.isNullable, "Property should be nullable")
+        assertNotNull(param.defaultValue, "Nullable property should have a default value")
         assertEquals("null", param.defaultValue.toString(), "Nullable property should use null default")
     }
 
@@ -871,6 +873,7 @@ class ModelGeneratorTest {
 
         val nicknameParam = constructor.parameters.first { it.name == "nickname" }
         assertTrue(nicknameParam.type.isNullable, "Non-required property should be nullable")
+        assertNotNull(nicknameParam.defaultValue, "Non-required property should have a default value")
         assertEquals("null", nicknameParam.defaultValue.toString(), "Non-required property should have = null default")
 
         val nameParam = constructor.parameters.first { it.name == "name" }
@@ -912,6 +915,7 @@ class ModelGeneratorTest {
 
         val optionalParam = constructor.parameters.first { it.name == "optionalField" }
         assertTrue(optionalParam.type.isNullable, "Non-required allOf property should be nullable")
+        assertNotNull(optionalParam.defaultValue, "Non-required allOf property should have a default value")
         assertEquals(
             "null",
             optionalParam.defaultValue.toString(),

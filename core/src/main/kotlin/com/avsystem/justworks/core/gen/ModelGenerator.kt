@@ -307,8 +307,9 @@ class ModelGenerator(private val modelPackage: String) {
 
             val paramBuilder = ParameterSpec.builder(kotlinName, type)
 
-            if (prop.defaultValue != null) {
-                paramBuilder.defaultValue(if (prop.nullable) CodeBlock.of("null") else formatDefaultValue(prop))
+            when {
+                prop.nullable -> paramBuilder.defaultValue(CodeBlock.of("null"))
+                prop.defaultValue != null -> paramBuilder.defaultValue(formatDefaultValue(prop))
             }
 
             constructorBuilder.addParameter(paramBuilder.build())
