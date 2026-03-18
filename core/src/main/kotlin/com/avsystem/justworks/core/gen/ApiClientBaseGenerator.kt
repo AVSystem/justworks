@@ -108,39 +108,34 @@ object ApiClientBaseGenerator {
         .build()
 
     private fun buildApiClientBaseClass(): TypeSpec {
-        val constructor =
-            FunSpec
-                .constructorBuilder()
-                .addParameter(BASE_URL, STRING)
-                .addParameter(TOKEN, STRING)
-                .build()
+        val constructor = FunSpec
+            .constructorBuilder()
+            .addParameter(BASE_URL, STRING)
+            .addParameter(TOKEN, STRING)
+            .build()
 
-        val baseUrlProp =
-            PropertySpec
-                .builder(BASE_URL, STRING)
-                .initializer(BASE_URL)
-                .addModifiers(KModifier.PROTECTED)
-                .build()
+        val baseUrlProp = PropertySpec
+            .builder(BASE_URL, STRING)
+            .initializer(BASE_URL)
+            .addModifiers(KModifier.PROTECTED)
+            .build()
 
-        val tokenProp =
-            PropertySpec
-                .builder(TOKEN, STRING)
-                .initializer(TOKEN)
-                .addModifiers(KModifier.PRIVATE)
-                .build()
+        val tokenProp = PropertySpec
+            .builder(TOKEN, STRING)
+            .initializer(TOKEN)
+            .addModifiers(KModifier.PRIVATE)
+            .build()
 
-        val clientProp =
-            PropertySpec
-                .builder(CLIENT, HTTP_CLIENT)
-                .addModifiers(KModifier.PROTECTED, KModifier.ABSTRACT)
-                .build()
+        val clientProp = PropertySpec
+            .builder(CLIENT, HTTP_CLIENT)
+            .addModifiers(KModifier.PROTECTED, KModifier.ABSTRACT)
+            .build()
 
-        val closeFun =
-            FunSpec
-                .builder(CLOSE)
-                .addModifiers(KModifier.OVERRIDE)
-                .addStatement("client.close()")
-                .build()
+        val closeFun = FunSpec
+            .builder(CLOSE)
+            .addModifiers(KModifier.OVERRIDE)
+            .addStatement("client.close()")
+            .build()
 
         return TypeSpec
             .classBuilder(API_CLIENT_BASE)
@@ -169,25 +164,21 @@ object ApiClientBaseGenerator {
         ).endControlFlow()
         .build()
 
-    private fun buildSafeCall(): FunSpec {
-        val lambdaType = LambdaTypeName.get(returnType = HTTP_RESPONSE).copy(suspending = true)
-
-        return FunSpec
-            .builder(SAFE_CALL)
-            .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND)
-            .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
-            .addParameter(BLOCK, lambdaType)
-            .returns(HTTP_RESPONSE)
-            .beginControlFlow("return %M({ %L() })", CATCH_FUN, BLOCK)
-            .addStatement(
-                "%M(%T(0, it.message ?: %S, %T.Network))",
-                RAISE_FUN,
-                HTTP_ERROR,
-                NETWORK_ERROR,
-                HTTP_ERROR_TYPE,
-            ).endControlFlow()
-            .build()
-    }
+    private fun buildSafeCall(): FunSpec = FunSpec
+        .builder(SAFE_CALL)
+        .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND)
+        .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
+        .addParameter(BLOCK, LambdaTypeName.get(returnType = HTTP_RESPONSE).copy(suspending = true))
+        .returns(HTTP_RESPONSE)
+        .beginControlFlow("return %M({ %L() })", CATCH_FUN, BLOCK)
+        .addStatement(
+            "%M(%T(0, it.message ?: %S, %T.Network))",
+            RAISE_FUN,
+            HTTP_ERROR,
+            NETWORK_ERROR,
+            HTTP_ERROR_TYPE,
+        ).endControlFlow()
+        .build()
 
     private fun buildCreateHttpClient(): FunSpec = FunSpec
         .builder(CREATE_HTTP_CLIENT)
