@@ -286,9 +286,9 @@ class ModelGeneratorTest {
                 .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
                 .first()
         val constants = typeSpec.enumConstants.entries.toList()
-        assertEquals("VALUE_1", constants[0].key)
-        assertEquals("VALUE_2", constants[1].key)
-        assertEquals("VALUE_3", constants[2].key)
+        assertEquals("1", constants[0].key)
+        assertEquals("2", constants[1].key)
+        assertEquals("3", constants[2].key)
         // Check @SerialName values
         for ((i, entry) in constants.withIndex()) {
             val serialName =
