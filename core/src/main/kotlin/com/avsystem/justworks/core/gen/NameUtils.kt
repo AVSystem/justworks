@@ -37,7 +37,7 @@ fun String.toEnumConstantName(): String {
 }
 
 /**
- * Sanitizes a nested inline schema name by removing dot separators.
+ * Sanitizes a nested inline schema name by replacing dot separators with underscores.
  * E.g. "Pet.Address" becomes "Pet_Address".
  */
 fun String.toInlinedName(): String = replace(".", "_")
