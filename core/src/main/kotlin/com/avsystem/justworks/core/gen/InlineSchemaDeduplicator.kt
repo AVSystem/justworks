@@ -35,6 +35,7 @@ class InlineSchemaDeduplicator(private val componentSchemaNames: Set<String>) {
         requiredProps: Set<String>,
         contextName: String,
     ): String = namesByKey.getOrPut(InlineSchemaKey.from(properties, requiredProps)) {
+        val contextName = contextName.toInlinedName()
         val candidates = sequence {
             yield(contextName)
             yield("${contextName}Inline")
