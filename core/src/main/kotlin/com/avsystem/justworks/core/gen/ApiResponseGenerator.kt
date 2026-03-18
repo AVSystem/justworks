@@ -9,8 +9,6 @@ import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeVariableName
-import java.io.File
-
 /**
  * Generates [FileSpec]s containing:
  * - `HttpErrorType` enum class with Client, Server, Network values

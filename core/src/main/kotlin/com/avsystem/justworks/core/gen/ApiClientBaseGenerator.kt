@@ -108,7 +108,7 @@ object ApiClientBaseGenerator {
             FunSpec
                 .constructorBuilder()
                 .addParameter("baseUrl", STRING)
-                .addParameter("tokenProvider", STRING)
+                .addParameter("token", STRING)
                 .build()
 
         val baseUrlProp =
@@ -118,10 +118,10 @@ object ApiClientBaseGenerator {
                 .addModifiers(KModifier.PROTECTED)
                 .build()
 
-        val tokenProviderProp =
+        val tokenProp =
             PropertySpec
-                .builder("tokenProvider", STRING)
-                .initializer("tokenProvider")
+                .builder("token", STRING)
+                .initializer("token")
                 .addModifiers(KModifier.PRIVATE)
                 .build()
 
@@ -144,7 +144,7 @@ object ApiClientBaseGenerator {
             .addSuperinterface(CLOSEABLE)
             .primaryConstructor(constructor)
             .addProperty(baseUrlProp)
-            .addProperty(tokenProviderProp)
+            .addProperty(tokenProp)
             .addProperty(clientProp)
             .addFunction(closeFun)
             .addFunction(buildApplyAuth())
@@ -161,7 +161,7 @@ object ApiClientBaseGenerator {
         .addStatement(
             "append(%T.Authorization, %P)",
             HTTP_HEADERS,
-            CodeBlock.of($$"Bearer ${'$'}{$tokenProvider}"),
+            CodeBlock.of($$"Bearer ${'$'}{$token}"),
         ).endControlFlow()
         .build()
 
@@ -174,17 +174,21 @@ object ApiClientBaseGenerator {
             .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
             .addParameter("block", lambdaType)
             .returns(HTTP_RESPONSE)
-            .beginControlFlow("return try")
-            .addStatement("block()")
-            .nextControlFlow("catch (e: %T)", Exception::class)
-            .addStatement(
-                "%M(%T(0, e.message ?: %S, %T.Network))",
-                RAISE_FUN,
-                HTTP_ERROR,
-                "Network error",
-                HTTP_ERROR_TYPE,
-            ).endControlFlow()
-            .build()
+            .addCode(
+                CodeBlock
+                    .builder()
+                    .add("return %M({ block() }) { e ->\n", CATCH_FUN)
+                    .indent()
+                    .addStatement(
+                        "%M(%T(0, e.message ?: %S, %T.Network))",
+                        RAISE_FUN,
+                        HTTP_ERROR,
+                        "Network error",
+                        HTTP_ERROR_TYPE,
+                    ).unindent()
+                    .add("}\n")
+                    .build(),
+            ).build()
     }
 
     private fun buildCreateHttpClient(): FunSpec {

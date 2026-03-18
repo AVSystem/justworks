@@ -261,6 +261,29 @@ class ClientGeneratorTest {
         assertEquals("kotlin.String", param.type.toString())
     }
 
+    @Test
+    fun `header parameters are emitted inside headers block`() {
+        val ep =
+            endpoint(
+                operationId = "listPets",
+                parameters =
+                    listOf(
+                        Parameter(
+                            "X-Request-Id",
+                            ParameterLocation.HEADER,
+                            true,
+                            TypeRef.Primitive(PrimitiveType.STRING),
+                            null,
+                        ),
+                    ),
+            )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("headers"), "Expected headers block in generated body")
+        assertTrue(body.contains("append(\"X-Request-Id\""), "Expected header append inside headers block")
+    }
+
     // -- CLNT-10: Client constructor has baseUrl parameter --
 
     @Test
@@ -271,14 +294,14 @@ class ClientGeneratorTest {
         assertEquals("kotlin.String", baseUrl.type.toString())
     }
 
-    // -- AUTH-01: Client constructor has tokenProvider parameter --
+    // -- AUTH-01: Client constructor has token parameter --
 
     @Test
-    fun `client constructor has tokenProvider parameter`() {
+    fun `client constructor has token parameter`() {
         val cls = clientClass(listOf(endpoint()))
         val constructor = assertNotNull(cls.primaryConstructor)
-        val tokenProvider = constructor.parameters.first { it.name == "tokenProvider" }
-        assertTrue(tokenProvider.type.toString().contains("String"), "tokenProvider should return String")
+        val token = constructor.parameters.first { it.name == "token" }
+        assertTrue(token.type.toString().contains("String"), "token should return String")
     }
 
     // -- Pitfall 3: Untagged endpoints go to DefaultClient --

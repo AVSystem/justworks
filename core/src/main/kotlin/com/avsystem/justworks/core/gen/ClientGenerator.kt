@@ -23,7 +23,7 @@ import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
 
 private const val BASE_URL = "baseUrl"
-private const val TOKEN_PROVIDER = "tokenProvider"
+private const val TOKEN = "token"
 private const val CLIENT = "client"
 private const val BODY = "body"
 private const val DEFAULT_TAG = "Default"
@@ -58,12 +58,12 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             .classBuilder(className)
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
-            .addSuperclassConstructorParameter(TOKEN_PROVIDER)
+            .addSuperclassConstructorParameter(TOKEN)
             .primaryConstructor(
                 FunSpec
                     .constructorBuilder()
                     .addParameter(BASE_URL, STRING)
-                    .addParameter(TOKEN_PROVIDER, STRING)
+                    .addParameter(TOKEN, STRING)
                     .build(),
             ).addProperty(
                 PropertySpec
@@ -162,11 +162,16 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         code.beginControlFlow("client.%M(%L)", httpMethodFun, urlString)
         code.addStatement("applyAuth()")
 
-        for (param in params[ParameterLocation.HEADER].orEmpty()) {
-            val paramName = param.name.toCamelCase()
-            code.optionalGuard(param.required, paramName) {
-                addStatement("append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
+        val headerParams = params[ParameterLocation.HEADER]
+        if (!headerParams.isNullOrEmpty()) {
+            code.beginControlFlow("%M", HEADERS_FUN)
+            for (param in headerParams) {
+                val paramName = param.name.toCamelCase()
+                code.optionalGuard(param.required, paramName) {
+                    addStatement("append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
+                }
             }
+            code.endControlFlow()
         }
 
         if (!params[ParameterLocation.QUERY].isNullOrEmpty()) {

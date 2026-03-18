@@ -34,11 +34,11 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has constructor with baseUrl and tokenProvider`() {
+    fun `ApiClientBase has constructor with baseUrl and token`() {
         val constructor = assertNotNull(classSpec.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         assertTrue("baseUrl" in paramNames)
-        assertTrue("tokenProvider" in paramNames)
+        assertTrue("token" in paramNames)
     }
 
     @Test
@@ -64,7 +64,7 @@ class ApiClientBaseGeneratorTest {
         val body = applyAuth.body.toString()
         assertTrue(body.contains("Authorization"), "Expected Authorization header")
         assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
-        assertTrue(body.contains("tokenProvider"), "Expected tokenProvider reference")
+        assertTrue(body.contains("token"), "Expected token reference")
     }
 
     @Test
@@ -74,7 +74,7 @@ class ApiClientBaseGeneratorTest {
         assertTrue(KModifier.SUSPEND in safeCall.modifiers)
         assertTrue(safeCall.contextParameters.isNotEmpty(), "Expected context parameter")
         val body = safeCall.body.toString()
-        assertTrue(body.contains("catch"), "Expected catch block")
+        assertTrue(body.contains("catch"), "Expected arrow catch call")
         assertTrue(body.contains("Network error"), "Expected Network error message")
     }
 

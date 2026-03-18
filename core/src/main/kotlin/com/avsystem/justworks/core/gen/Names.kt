@@ -58,6 +58,7 @@ val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
 
 val RAISE = ClassName("arrow.core.raise", "Raise")
 val RAISE_FUN = MemberName("arrow.core.raise.context", "raise")
+val CATCH_FUN = MemberName("arrow.core.raise", "catch")
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
 val HTTP_ERROR_TYPE = ClassName("com.avsystem.justworks", "HttpErrorType")
 val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
