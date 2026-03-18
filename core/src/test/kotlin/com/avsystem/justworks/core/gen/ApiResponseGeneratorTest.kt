@@ -63,7 +63,7 @@ class ApiResponseGeneratorTest {
         val constructor = assertNotNull(success.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         assertTrue("body" in paramNames, "Expected 'body' parameter")
-        assertTrue("statusCode" in paramNames, "Expected 'statusCode' parameter")
+        assertTrue("code" in paramNames, "Expected 'code' parameter")
         val bodyParam = constructor.parameters.first { it.name == "body" }
         assertTrue(bodyParam.type is TypeVariableName, "body should be type variable T")
     }
