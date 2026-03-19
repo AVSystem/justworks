@@ -44,6 +44,7 @@ class InlineSchemaDeduplicator(private val componentSchemaNames: Set<String>) {
             }
         }
 
-        candidates.first { it !in componentSchemaNames && it !in namesByKey.values }
+        val existingNames = (componentSchemaNames + namesByKey.values).toSet()
+        candidates.first { it !in existingNames }
     }
 }
