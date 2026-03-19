@@ -20,6 +20,9 @@ abstract class JustworksSharedTypesTask : DefaultTask() {
     @TaskAction
     fun generate() {
         val outDir = outputDir.get().asFile
+        if (outDir.exists()) {
+            outDir.deleteRecursively()
+        }
         outDir.mkdirs()
 
         val count = CodeGenerator.generateSharedTypes(outDir)

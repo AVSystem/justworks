@@ -19,7 +19,7 @@ object CodeGenerator {
         val modelFiles = ModelGenerator(modelPackage).generate(spec)
         modelFiles.forEach { it.writeTo(outputDir) }
 
-        val hasPolymorphicTypes = modelFiles.any { it.name == "SerializersModule" }
+        val hasPolymorphicTypes = modelFiles.any { it.name == SerializersModuleGenerator.FILE_NAME }
 
         val clientFiles = ClientGenerator(apiPackage, modelPackage).generate(spec, hasPolymorphicTypes)
         clientFiles.forEach { it.writeTo(outputDir) }
