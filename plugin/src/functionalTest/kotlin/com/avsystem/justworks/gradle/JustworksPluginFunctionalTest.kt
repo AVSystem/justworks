@@ -172,6 +172,7 @@ class JustworksPluginFunctionalTest {
         val sharedFiles = sharedDir.listFiles()?.filter { it.extension == "kt" } ?: emptyList()
         assertTrue(sharedFiles.any { it.name == "HttpError.kt" }, "Should contain HttpError.kt")
         assertTrue(sharedFiles.any { it.name == "HttpSuccess.kt" }, "Should contain HttpSuccess.kt")
+        assertTrue(sharedFiles.any { it.name == "ApiClientBase.kt" }, "Should contain ApiClientBase.kt")
     }
 
     @Test
@@ -282,44 +283,7 @@ class JustworksPluginFunctionalTest {
             """.trimIndent(),
         )
 
-        // Need kotlinx-serialization-json for @JsonClassDiscriminator
-        writeFile(
-            "build.gradle.kts",
-            """
-            plugins {
-                kotlin("jvm") version "2.3.0"
-                kotlin("plugin.serialization") version "2.3.0"
-                id("com.avsystem.justworks")
-            }
-
-            repositories {
-                mavenCentral()
-            }
-
-            dependencies {
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-                implementation("io.ktor:ktor-client-core:3.1.1")
-                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
-                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
-                implementation("io.arrow-kt:arrow-core:2.1.2")
-            }
-
-            kotlin {
-                compilerOptions {
-                    freeCompilerArgs.add("-Xcontext-parameters")
-                }
-            }
-
-            justworks {
-                specs {
-                    register("main") {
-                        specFile = file("api/petstore.yaml")
-                        packageName = "com.example"
-                    }
-                }
-            }
-            """.trimIndent(),
-        )
+        writeBuildFile()
 
         val result = runner("compileKotlin").build()
 
@@ -378,9 +342,7 @@ class JustworksPluginFunctionalTest {
 
     // Multi-spec tests
 
-    @Test
-    fun `multiple specs generate independently`() {
-        // Write two minimal OpenAPI specs (petstore and payments)
+    private fun writeMultiSpecProject() {
         writeFile(
             "api/petstore.yaml",
             """
@@ -446,6 +408,11 @@ class JustworksPluginFunctionalTest {
             }
             """.trimIndent(),
         )
+    }
+
+    @Test
+    fun `multiple specs generate independently`() {
+        writeMultiSpecProject()
 
         val result = runner("justworksGenerateAll").build()
 
@@ -465,71 +432,7 @@ class JustworksPluginFunctionalTest {
 
     @Test
     fun `single spec task generates only that spec`() {
-        writeFile(
-            "api/petstore.yaml",
-            """
-            openapi: 3.0.0
-            info:
-              title: Petstore
-              version: 1.0.0
-            paths: {}
-            components:
-              schemas:
-                Pet:
-                  type: object
-                  properties:
-                    name:
-                      type: string
-            """.trimIndent(),
-        )
-
-        writeFile(
-            "api/payments.yaml",
-            """
-            openapi: 3.0.0
-            info:
-              title: Payments
-              version: 1.0.0
-            paths: {}
-            components:
-              schemas:
-                Payment:
-                  type: object
-                  properties:
-                    amount:
-                      type: number
-            """.trimIndent(),
-        )
-
-        writeFile(
-            "build.gradle.kts",
-            """
-            plugins {
-                kotlin("jvm") version "2.3.0"
-                kotlin("plugin.serialization") version "2.3.0"
-                id("com.avsystem.justworks")
-            }
-            repositories { mavenCentral() }
-            dependencies {
-                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
-                implementation("io.ktor:ktor-client-core:3.1.1")
-                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
-                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
-            }
-            justworks {
-                specs {
-                    register("petstore") {
-                        specFile = file("api/petstore.yaml")
-                        packageName = "com.example.petstore"
-                    }
-                    register("payments") {
-                        specFile = file("api/payments.yaml")
-                        packageName = "com.example.payments"
-                    }
-                }
-            }
-            """.trimIndent(),
-        )
+        writeMultiSpecProject()
 
         val result = runner("justworksGeneratePetstore").build()
 
