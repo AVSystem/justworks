@@ -91,9 +91,9 @@ class ModelGenerator(private val modelPackage: String) {
     context(deduplicator: InlineSchemaDeduplicator)
     private fun collectAllInlineSchemas(spec: ApiSpec): List<SchemaModel> {
         val endpointRefs = spec.endpoints.flatMap { endpoint ->
-            val requestRefs = endpoint.requestBody?.schema
+            val requestRef = endpoint.requestBody?.schema
             val responseRefs = endpoint.responses.values.map { it.schema }
-            responseRefs + requestRefs
+            responseRefs + requestRef
         }
 
         val schemaPropertyRefs = spec.schemas.flatMap { schema -> schema.properties.map { it.type } }
