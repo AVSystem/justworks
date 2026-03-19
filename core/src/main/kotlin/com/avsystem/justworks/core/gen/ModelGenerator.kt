@@ -22,7 +22,6 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
 import kotlinx.datetime.LocalDate
-import java.io.File
 import kotlin.time.Instant
 
 /**
@@ -32,15 +31,6 @@ import kotlin.time.Instant
  * and one file per [EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 class ModelGenerator(private val modelPackage: String) {
-    data class GenerateResult(val fileCount: Int, val hasPolymorphicTypes: Boolean)
-
-    fun generateTo(spec: ApiSpec, outputDir: File): GenerateResult {
-        val files = generate(spec)
-        files.forEach { it.writeTo(outputDir) }
-        val hasPolymorphic = files.any { it.name == "SerializersModule" }
-        return GenerateResult(files.size, hasPolymorphic)
-    }
-
     fun generate(spec: ApiSpec): List<FileSpec> = context(
         buildHierarchyInfo(spec.schemas),
         InlineSchemaDeduplicator(spec.schemas.map { it.name }.toSet()),

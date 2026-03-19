@@ -1,7 +1,6 @@
 package com.avsystem.justworks.gradle
 
-import com.avsystem.justworks.core.gen.ClientGenerator
-import com.avsystem.justworks.core.gen.ModelGenerator
+import com.avsystem.justworks.core.gen.CodeGenerator
 import com.avsystem.justworks.core.parser.ParseResult
 import com.avsystem.justworks.core.parser.SpecParser
 import org.gradle.api.DefaultTask
@@ -20,7 +19,7 @@ import org.gradle.api.tasks.TaskAction
 /**
  * Gradle task that generates Kotlin source files from an OpenAPI spec.
  *
- * Parses the OpenAPI spec via [SpecParser], feeds the result to [ModelGenerator],
+ * Parses the OpenAPI spec via [SpecParser], feeds the result to [CodeGenerator],
  * and writes the generated Kotlin source files to the output directory.
  */
 @CacheableTask
@@ -65,14 +64,15 @@ abstract class JustworksGenerateTask : DefaultTask() {
             }
 
             is ParseResult.Success -> {
-                val modelGen = ModelGenerator(modelPackage.get())
-                val (fileCount, hasPolymorphicTypes) = modelGen.generateTo(result.apiSpec, outDir)
-
-                val clientGen = ClientGenerator(apiPackage.get(), modelPackage.get())
-                val clientCount = clientGen.generateTo(result.apiSpec, outDir, hasPolymorphicTypes)
+                val (modelCount, clientCount) = CodeGenerator.generate(
+                    spec = result.apiSpec,
+                    modelPackage = modelPackage.get(),
+                    apiPackage = apiPackage.get(),
+                    outputDir = outDir,
+                )
 
                 logger.lifecycle(
-                    "Generated $fileCount model files, $clientCount client files from ${spec.name}",
+                    "Generated $modelCount model files, $clientCount client files from ${spec.name}",
                 )
             }
         }

@@ -20,11 +20,7 @@ object ApiResponseGenerator {
     private const val MESSAGE = "message"
     private const val TYPE = "type"
 
-    fun generateTo(outputDir: java.io.File): Int {
-        val files = listOf(generateHttpError(), generateHttpSuccess())
-        files.forEach { it.writeTo(outputDir) }
-        return files.size
-    }
+    fun generate(): List<FileSpec> = listOf(generateHttpError(), generateHttpSuccess())
 
     fun generateHttpError(): FileSpec {
         val enumType = TypeSpec
