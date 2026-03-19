@@ -46,10 +46,10 @@ val POLYMORPHIC_FUN = MemberName("kotlinx.serialization.modules", "polymorphic")
 val SUBCLASS_FUN = MemberName("kotlinx.serialization.modules", "subclass")
 
 // ============================================================================
-// Date/Time (kotlinx.datetime)
+// Date/Time (kotlin.time / kotlinx.datetime)
 // ============================================================================
 
-val INSTANT = ClassName("kotlinx.datetime", "Instant")
+val INSTANT = ClassName("kotlin.time", "Instant")
 val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
 
 // ============================================================================

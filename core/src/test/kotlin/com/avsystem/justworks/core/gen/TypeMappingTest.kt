@@ -54,9 +54,9 @@ class TypeMappingTest {
     }
 
     @Test
-    fun `maps DATE_TIME to kotlinx datetime Instant`() {
+    fun `maps DATE_TIME to kotlin time Instant`() {
         val result = TypeMapping.toTypeName(TypeRef.Primitive(PrimitiveType.DATE_TIME), pkg)
-        assertEquals("kotlinx.datetime.Instant", result.toString())
+        assertEquals("kotlin.time.Instant", result.toString())
     }
 
     @Test
