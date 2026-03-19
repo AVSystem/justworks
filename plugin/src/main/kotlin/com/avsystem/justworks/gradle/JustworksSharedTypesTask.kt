@@ -22,8 +22,12 @@ abstract class JustworksSharedTypesTask : DefaultTask() {
         val outDir = outputDir.get().asFile
         outDir.mkdirs()
 
-        val count = ApiResponseGenerator.generateTo(outDir)
+        val files = listOf(
+            ApiResponseGenerator.generateHttpError(),
+            ApiResponseGenerator.generateHttpSuccess(),
+        )
+        files.forEach { it.writeTo(outDir) }
 
-        logger.lifecycle("Generated $count shared type files")
+        logger.lifecycle("Generated ${files.size} shared type files")
     }
 }
