@@ -1,4 +1,3 @@
-import com.vanniktech.maven.publish.SonatypeHost.Companion.CENTRAL_PORTAL
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
@@ -29,38 +28,12 @@ tasks.test {
 }
 
 mavenPublishing {
-    publishToMavenCentral(CENTRAL_PORTAL)
-    signAllPublications()
-
     pom {
         name = "justworks-core"
         description = "Kotlin OpenAPI 3.0 client code generator with Ktor and kotlinx.serialization"
-        url = "https://github.com/AVSystem/justworks"
-
-        licenses {
-            license {
-                name = "The Apache License, Version 2.0"
-                url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
-            }
-        }
-
-        developers {
-            developer {
-                id = "halotukozak"
-                name = "Bartłomiej Kozak"
-                email = "b.kozak@avsystem.com"
-                organization = "AVSystem"
-                organizationUrl = "https://www.avsystem.com"
-            }
-        }
-
-        scm {
-            connection = "scm:git:git://github.com/AVSystem/justworks.git"
-            developerConnection = "scm:git:ssh://github.com/AVSystem/justworks.git"
-            url = "https://github.com/AVSystem/justworks"
-        }
     }
 }
+
 tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
         freeCompilerArgs.add("-Xcontext-parameters")
