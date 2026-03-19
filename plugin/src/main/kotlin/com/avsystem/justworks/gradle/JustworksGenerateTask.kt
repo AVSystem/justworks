@@ -44,7 +44,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val outDir = outputDir.get().asFile.cleanAndCreate()
+        val outDir = outputDir.get().asFile.recreateDirectory()
 
         val spec = specFile.get().asFile
         when (val result = SpecParser.parse(spec)) {
@@ -70,7 +70,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
     }
 }
 
-internal fun File.cleanAndCreate(): File {
+internal fun File.recreateDirectory(): File {
     if (exists()) deleteRecursively()
     mkdirs()
     return this

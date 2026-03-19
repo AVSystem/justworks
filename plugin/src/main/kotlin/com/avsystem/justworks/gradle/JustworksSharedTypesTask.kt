@@ -19,7 +19,7 @@ abstract class JustworksSharedTypesTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val outDir = outputDir.get().asFile.cleanAndCreate()
+        val outDir = outputDir.get().asFile.recreateDirectory()
 
         val count = CodeGenerator.generateSharedTypes(outDir)
 
