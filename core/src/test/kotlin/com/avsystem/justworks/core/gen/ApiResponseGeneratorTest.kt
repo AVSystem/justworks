@@ -48,11 +48,11 @@ class ApiResponseGeneratorTest {
     }
 
     @Test
-    fun `generates HttpErrorType enum with three values`() {
+    fun `generates HttpErrorType enum with four values`() {
         val typeSpec = httpErrorTypeEnum()
         assertEquals("HttpErrorType", typeSpec.name)
         val constantNames = typeSpec.enumConstants.keys.sorted()
-        assertEquals(listOf("Client", "Network", "Server"), constantNames)
+        assertEquals(listOf("Client", "Network", "Redirect", "Server"), constantNames)
     }
 
     @Test

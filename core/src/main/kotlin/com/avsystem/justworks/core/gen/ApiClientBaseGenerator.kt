@@ -63,7 +63,7 @@ object ApiClientBaseGenerator {
         .beginControlFlow("return when (status.value)")
         .addStatement("in 200..299 -> %T(status.value, %L())", HTTP_SUCCESS, SUCCESS_BODY)
         .addStatement(
-            "in 300..399 -> %M(%T(status.value, %M(), %T.Server))",
+            "in 300..399 -> %M(%T(status.value, %M(), %T.Redirect))",
             RAISE_FUN,
             HTTP_ERROR,
             BODY_AS_TEXT_FUN,

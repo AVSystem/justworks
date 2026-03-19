@@ -25,6 +25,7 @@ object ApiResponseGenerator {
             .enumBuilder(HTTP_ERROR_TYPE)
             .addEnumConstant("Client")
             .addEnumConstant("Server")
+            .addEnumConstant("Redirect")
             .addEnumConstant("Network")
             .build()
 
