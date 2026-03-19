@@ -20,6 +20,8 @@ class SerializersModuleGenerator(private val modelPackage: String) {
 
     context(hierarchy: HierarchyInfo)
     fun generate(): FileSpec? {
+        // anyOf hierarchies without a discriminator use JsonContentPolymorphicSerializer
+        // with custom deserialization logic, so they don't need SerializersModule registration.
         val discriminatorHierarchies =
             hierarchy.sealedHierarchies.filterKeys { it !in hierarchy.anyOfWithoutDiscriminator }
 
