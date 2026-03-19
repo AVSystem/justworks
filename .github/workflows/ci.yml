@@ -27,12 +27,12 @@ jobs:
         run: ./gradlew ktlintCheck
 
       - name: Run tests with coverage
-        run: ./gradlew core:koverXmlReport
+        run: ./gradlew core:koverXmlReport plugin:koverXmlReport
 
       - name: Upload coverage to Codecov
         if: github.event_name == 'pull_request'
         uses: codecov/codecov-action@v5
         with:
-          files: core/build/reports/kover/report.xml
+          files: core/build/reports/kover/report.xml,plugin/build/reports/kover/report.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
