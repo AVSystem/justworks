@@ -1,5 +1,6 @@
 package com.avsystem.justworks.gradle
 
+import com.avsystem.justworks.core.gen.ApiClientBaseGenerator
 import com.avsystem.justworks.core.gen.ClientGenerator
 import com.avsystem.justworks.core.gen.ModelGenerator
 import com.avsystem.justworks.core.parser.ParseResult
@@ -21,7 +22,8 @@ import org.gradle.api.tasks.TaskAction
  * Gradle task that generates Kotlin source files from an OpenAPI spec.
  *
  * Parses the OpenAPI spec via [SpecParser], feeds the result to [ModelGenerator],
- * and writes the generated Kotlin source files to the output directory.
+ * [ClientGenerator], and [ApiClientBaseGenerator], then writes the generated
+ * Kotlin source files to the output directory.
  */
 @CacheableTask
 abstract class JustworksGenerateTask : DefaultTask() {
@@ -56,25 +58,38 @@ abstract class JustworksGenerateTask : DefaultTask() {
         }
         outDir.mkdirs()
 
-        val spec = specFile.get().asFile
-        val result = SpecParser().parse(spec)
+        val specFile = specFile.get().asFile
+        val result = SpecParser.parse(specFile)
 
         when (result) {
             is ParseResult.Failure -> {
                 throw GradleException(
-                    "Failed to parse spec (task: $name): ${spec.name}:\n${result.errors.joinToString("\n")}",
+                    "Failed to parse spec (task: $name): ${specFile.name}:\n${result.errors.joinToString("\n")}",
                 )
             }
 
             is ParseResult.Success -> {
-                val modelGen = ModelGenerator(modelPackage.get())
-                val modelCount = modelGen.generateTo(result.spec, outDir)
+                val apiSpec = result.apiSpec
 
-                val hasPolymorphicTypes = modelGen.getSealedHierarchies().isNotEmpty()
-                val clientGen = ClientGenerator(apiPackage.get(), modelPackage.get())
-                val clientCount = clientGen.generateTo(result.spec, outDir, hasPolymorphicTypes)
+                val modelFiles = ModelGenerator(modelPackage.get()).generate(apiSpec)
+                modelFiles.forEach { it.writeTo(outDir) }
 
-                logger.lifecycle("Generated $modelCount model files, $clientCount client files from ${spec.name}")
+                val hasPolymorphicTypes = apiSpec.schemas.any {
+                    !it.oneOf.isNullOrEmpty() || !it.anyOf.isNullOrEmpty()
+                }
+
+                val clientFiles = ClientGenerator(apiPackage.get(), modelPackage.get())
+                    .generate(apiSpec, hasPolymorphicTypes)
+                clientFiles.forEach { it.writeTo(outDir) }
+
+                // Generate ApiClientBase when spec has endpoints
+                if (apiSpec.endpoints.isNotEmpty()) {
+                    ApiClientBaseGenerator.generate().writeTo(outDir)
+                }
+
+                logger.lifecycle(
+                    "Generated ${modelFiles.size} model files, ${clientFiles.size} client files from ${specFile.name}",
+                )
             }
         }
     }
