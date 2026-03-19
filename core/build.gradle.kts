@@ -48,7 +48,7 @@ mavenPublishing {
             developer {
                 id = "halotukozak"
                 name = "Bartłomiej Kozak"
-                email = "bartlomiejkozak@proton.me"
+                email = "b.kozak@avsystem.com"
                 organization = "AVSystem"
                 organizationUrl = "https://www.avsystem.com"
             }
