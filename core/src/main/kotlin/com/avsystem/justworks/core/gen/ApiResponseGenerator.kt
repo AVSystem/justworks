@@ -20,6 +20,8 @@ object ApiResponseGenerator {
     private const val MESSAGE = "message"
     private const val TYPE = "type"
 
+    fun generate(): List<FileSpec> = listOf(generateHttpError(), generateHttpSuccess())
+
     fun generateHttpError(): FileSpec {
         val enumType = TypeSpec
             .enumBuilder(HTTP_ERROR_TYPE)
