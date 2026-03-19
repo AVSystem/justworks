@@ -2,6 +2,7 @@ package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
+import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -10,7 +11,7 @@ import kotlin.test.assertNotEquals
 class InlineSchemaDedupTest {
     @Test
     fun `identical schemas return same name`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
+        val deduplicator = InlineSchemaDeduplicator()
 
         val props1 = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
@@ -26,13 +27,14 @@ class InlineSchemaDedupTest {
         val name1 = deduplicator.getOrGenerateName(props1, required, "FirstContext")
         val name2 = deduplicator.getOrGenerateName(props2, required, "SecondContext")
 
+        // First occurrence wins
         assertEquals("FirstContext", name1)
         assertEquals("FirstContext", name2) // Same structure returns same name
     }
 
     @Test
     fun `different schemas return different names`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
+        val deduplicator = InlineSchemaDeduplicator()
 
         val props1 = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
@@ -52,7 +54,22 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `name collision with component schema appends Inline suffix`() {
-        val deduplicator = InlineSchemaDeduplicator(componentSchemaNames = setOf("Pet"))
+        val deduplicator = InlineSchemaDeduplicator()
+
+        val componentSchemas = listOf(
+            SchemaModel(
+                name = "Pet",
+                description = null,
+                properties = emptyList(),
+                requiredProperties = emptySet(),
+                isEnum = false,
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            ),
+        )
+        deduplicator.registerComponentSchemas(componentSchemas)
 
         val props = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
@@ -65,7 +82,7 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `property order does not affect equality`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
+        val deduplicator = InlineSchemaDeduplicator()
 
         val props1 = listOf(
             PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
@@ -89,7 +106,7 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `different required sets produce different keys`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
+        val deduplicator = InlineSchemaDeduplicator()
 
         val props = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
@@ -107,7 +124,7 @@ class InlineSchemaDedupTest {
 
     @Test
     fun `collision with existing inline schema name appends Inline suffix`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
+        val deduplicator = InlineSchemaDeduplicator()
 
         val props1 = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),

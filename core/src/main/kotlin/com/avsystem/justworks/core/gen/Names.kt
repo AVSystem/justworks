@@ -3,6 +3,10 @@ package com.avsystem.justworks.core.gen
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.MemberName
 
+// Centralized repository of KotlinPoet ClassName and MemberName constants used across all code generators.
+// Avoids scattered magic strings and makes library dependency updates a single-file change.
+// Organized by domain (HTTP client, serialization, dates, error handling).
+
 // ============================================================================
 // Ktor HTTP Client
 // ============================================================================
@@ -16,7 +20,7 @@ val BODY_FUN = MemberName("io.ktor.client.call", "body")
 val BODY_AS_TEXT_FUN = MemberName("io.ktor.client.statement", "bodyAsText")
 val SET_BODY_FUN = MemberName("io.ktor.client.request", "setBody")
 val CONTENT_TYPE_FUN = MemberName("io.ktor.http", "contentType")
-val CONTENT_TYPE_APPLICATION = ClassName("io.ktor.http", "ContentType", "Application")
+val CONTENT_TYPE_APP_JSON = MemberName("io.ktor.http", "ContentType")
 val HEADERS_FUN = MemberName("io.ktor.client.request", "headers")
 
 val GET_FUN = MemberName("io.ktor.client.request", "get")
@@ -46,7 +50,7 @@ val POLYMORPHIC_FUN = MemberName("kotlinx.serialization.modules", "polymorphic")
 val SUBCLASS_FUN = MemberName("kotlinx.serialization.modules", "subclass")
 
 // ============================================================================
-// Date/Time (kotlin.time / kotlinx.datetime)
+// Date/Time
 // ============================================================================
 
 val INSTANT = ClassName("kotlin.time", "Instant")
@@ -57,7 +61,12 @@ val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
 // ============================================================================
 
 val RAISE = ClassName("arrow.core.raise", "Raise")
-val RAISE_FUN = MemberName("arrow.core.raise.context", "raise")
+
+// `raise` is a member of Raise<T> and is called directly via context parameter —
+// no MemberName import needed; use literal "raise" in code blocks to avoid
+// emitting `import arrow.core.raise.context.raise` which fails when
+// `-Xcontext-parameters` is active because `context` becomes a keyword.
+const val RAISE_FUN = "raise"
 
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
 val HTTP_ERROR_TYPE = ClassName("com.avsystem.justworks", "HttpErrorType")
@@ -71,6 +80,7 @@ val CLOSEABLE = ClassName("java.io", "Closeable")
 val IO_EXCEPTION = ClassName("java.io", "IOException")
 val HTTP_REQUEST_TIMEOUT_EXCEPTION = ClassName("io.ktor.client.plugins", "HttpRequestTimeoutException")
 val OPT_IN = ClassName("kotlin", "OptIn")
+<<<<<<< HEAD
 
 // ============================================================================
 // Shared client base (generated)
@@ -96,3 +106,5 @@ const val SAFE_CALL = "safeCall"
 const val CREATE_HTTP_CLIENT = "createHttpClient"
 const val GENERATED_SERIALIZERS_MODULE = "generatedSerializersModule"
 const val NETWORK_ERROR = "Network error"
+=======
+>>>>>>> 3168d68 (feat: enhance parser with anyOf, inline schemas, defaults, and type improvements)

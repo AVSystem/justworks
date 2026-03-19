@@ -1,12 +1,5 @@
 package com.avsystem.justworks.core.model
 
-/**
- * Intermediate model representing a fully parsed OpenAPI specification.
- *
- * Produced by [com.avsystem.justworks.core.parser.SpecParser] and consumed by the
- * code generators. Bridges the raw Swagger Parser OAS model and the generated
- * Kotlin client/model source files.
- */
 data class ApiSpec(
     val title: String,
     val version: String,
@@ -26,17 +19,7 @@ data class Endpoint(
     val responses: Map<String, Response>,
 )
 
-enum class HttpMethod {
-    GET,
-    POST,
-    PUT,
-    DELETE,
-    PATCH;
-
-    companion object {
-        fun parse(name: String): HttpMethod? = entries.find { it.name.equals(name, true) }
-    }
-}
+enum class HttpMethod { GET, POST, PUT, DELETE, PATCH }
 
 data class Parameter(
     val name: String,
@@ -46,27 +29,18 @@ data class Parameter(
     val description: String?,
 )
 
-// todo: add cookie
-enum class ParameterLocation {
-    PATH,
-    QUERY,
-    HEADER;
-
-    companion object {
-        fun parse(name: String): ParameterLocation? = entries.find { it.name.equals(name, true) }
-    }
-}
+enum class ParameterLocation { PATH, QUERY, HEADER }
 
 data class RequestBody(
     val required: Boolean,
     val contentType: String,
-    val schema: TypeRef,
+    val schema: TypeRef
 )
 
 data class Response(
     val statusCode: String,
     val description: String?,
-    val schema: TypeRef?,
+    val schema: TypeRef?
 )
 
 data class SchemaModel(
@@ -74,13 +48,12 @@ data class SchemaModel(
     val description: String?,
     val properties: List<PropertyModel>,
     val requiredProperties: Set<String>,
+    val isEnum: Boolean,
     val allOf: List<TypeRef>?,
     val oneOf: List<TypeRef>?,
     val anyOf: List<TypeRef>?,
     val discriminator: Discriminator?,
-) {
-    val isNested get() = name.contains(".")
-}
+)
 
 data class PropertyModel(
     val name: String,
@@ -94,16 +67,9 @@ data class EnumModel(
     val name: String,
     val description: String?,
     val type: EnumBackingType,
-    val values: List<String>,
+    val values: List<String>
 )
 
-enum class EnumBackingType {
-    STRING,
-    INTEGER;
-
-    companion object {
-        fun parse(name: String): EnumBackingType? = entries.find { it.name.equals(name, true) }
-    }
-}
+enum class EnumBackingType { STRING, INTEGER }
 
 data class Discriminator(val propertyName: String, val mapping: Map<String, String>)

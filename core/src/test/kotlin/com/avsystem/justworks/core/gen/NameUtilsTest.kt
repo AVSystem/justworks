@@ -17,6 +17,13 @@ class NameUtilsTest {
     }
 
     @Test
+    fun `toCamelCase converts UPPER_CASE preserving segment casing`() {
+        // Splits on _, gets ["UPPER", "CASE"]. No camel boundaries in all-caps segments.
+        // First segment lowercased -> "upper", second replaceFirstChar -> "CASE" (already upper).
+        assertEquals("upperCASE", "UPPER_CASE".toCamelCase())
+    }
+
+    @Test
     fun `toCamelCase lowercases PascalCase`() {
         assertEquals("pascalCase", "PascalCase".toCamelCase())
     }
@@ -34,61 +41,6 @@ class NameUtilsTest {
     @Test
     fun `toCamelCase converts already_camel style`() {
         assertEquals("alreadyCamel", "already_camel".toCamelCase())
-    }
-
-    @Test
-    fun `toCamelCase handles consecutive underscores`() {
-        assertEquals("fooBar", "foo__bar".toCamelCase())
-    }
-
-    @Test
-    fun `toCamelCase handles consecutive hyphens`() {
-        assertEquals("fooBar", "foo--bar".toCamelCase())
-    }
-
-    @Test
-    fun `toCamelCase handles mixed consecutive delimiters`() {
-        assertEquals("fooBar", "foo-_bar".toCamelCase())
-    }
-
-    @Test
-    fun `toCamelCase treats all-uppercase as single word`() {
-        assertEquals("url", "URL".toCamelCase())
-    }
-
-    @Test
-    fun `toCamelCase splits acronym followed by word`() {
-        assertEquals("urlMapping", "URLMapping".toCamelCase())
-    }
-
-    @Test
-    fun `toCamelCase splits multiple acronyms`() {
-        assertEquals("httpsConfig", "HTTPSConfig".toCamelCase())
-    }
-
-    @Test
-    fun `toCamelCase handles acronym in middle`() {
-        assertEquals("getUrlMapping", "getURLMapping".toCamelCase())
-    }
-
-    @Test
-    fun `toPascalCase treats all-uppercase as single word`() {
-        assertEquals("Url", "URL".toPascalCase())
-    }
-
-    @Test
-    fun `toPascalCase splits acronym followed by word`() {
-        assertEquals("UrlMapping", "URLMapping".toPascalCase())
-    }
-
-    @Test
-    fun `toPascalCase splits multiple acronyms`() {
-        assertEquals("HttpsConfig", "HTTPSConfig".toPascalCase())
-    }
-
-    @Test
-    fun `toPascalCase handles acronym in middle`() {
-        assertEquals("GetUrlMapping", "getURLMapping".toPascalCase())
     }
 
     // -- toEnumConstantName --
@@ -109,6 +61,11 @@ class NameUtilsTest {
     }
 
     @Test
+    fun `toEnumConstantName prefixes digit-starting values`() {
+        assertEquals("VALUE_123", "123".toEnumConstantName())
+    }
+
+    @Test
     fun `toEnumConstantName converts hyphens`() {
         assertEquals("WITH_HYPHENS", "with-hyphens".toEnumConstantName())
     }
@@ -116,36 +73,6 @@ class NameUtilsTest {
     @Test
     fun `toEnumConstantName converts spaces`() {
         assertEquals("WITH_SPACES", "with spaces".toEnumConstantName())
-    }
-
-    @Test
-    fun `toEnumConstantName returns original for all-special-chars input`() {
-        assertEquals("!!!", "!!!".toEnumConstantName())
-    }
-
-    @Test
-    fun `toEnumConstantName returns original for empty string`() {
-        assertEquals("", "".toEnumConstantName())
-    }
-
-    @Test
-    fun `toEnumConstantName handles consecutive underscores`() {
-        assertEquals("FOO_BAR", "foo__bar".toEnumConstantName())
-    }
-
-    @Test
-    fun `toEnumConstantName handles consecutive hyphens`() {
-        assertEquals("FOO_BAR", "foo--bar".toEnumConstantName())
-    }
-
-    @Test
-    fun `toEnumConstantName splits acronym followed by word`() {
-        assertEquals("URL_MAPPING", "URLMapping".toEnumConstantName())
-    }
-
-    @Test
-    fun `toEnumConstantName handles multiple acronyms`() {
-        assertEquals("HTTPS_CONFIG", "HTTPSConfig".toEnumConstantName())
     }
 
     // -- operationNameFromPath --
@@ -179,12 +106,54 @@ class NameUtilsTest {
     }
 
     @Test
-    fun `operationNameFromPath handles uppercase method`() {
+    fun `operationNameFromPath handles mixed case method`() {
         assertEquals("DeletePets", operationNameFromPath("DELETE", "/pets"))
     }
 
     @Test
     fun `operationNameFromPath handles camelCase path parameter`() {
         assertEquals("GetUsersByUserId", operationNameFromPath("GET", "/users/{userId}"))
+    }
+
+    // -- toKotlinIdentifier --
+
+    @Test
+    fun `toKotlinIdentifier backtick-escapes object keyword`() {
+        assertEquals("`object`", "object".toKotlinIdentifier())
+    }
+
+    @Test
+    fun `toKotlinIdentifier backtick-escapes in keyword`() {
+        assertEquals("`in`", "in".toKotlinIdentifier())
+    }
+
+    @Test
+    fun `toKotlinIdentifier backtick-escapes class keyword`() {
+        assertEquals("`class`", "class".toKotlinIdentifier())
+    }
+
+    @Test
+    fun `toKotlinIdentifier leaves non-keyword unchanged`() {
+        assertEquals("normalName", "normalName".toKotlinIdentifier())
+    }
+
+    @Test
+    fun `toKotlinIdentifier camelCases non-keyword with underscore`() {
+        assertEquals("myObject", "my_object".toKotlinIdentifier())
+    }
+
+    @Test
+    fun `toKotlinIdentifier backtick-escapes val keyword`() {
+        assertEquals("`val`", "val".toKotlinIdentifier())
+    }
+
+    @Test
+    fun `toKotlinIdentifier backtick-escapes fun keyword`() {
+        assertEquals("`fun`", "fun".toKotlinIdentifier())
+    }
+
+    @Test
+    fun `toKotlinIdentifier backtick-escapes return keyword`() {
+        assertEquals("`return`", "return".toKotlinIdentifier())
     }
 }

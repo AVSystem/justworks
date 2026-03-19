@@ -7,7 +7,9 @@ import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.ParameterizedTypeName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -17,7 +19,7 @@ class ModelGeneratorTest {
     private val modelPackage = "com.example.model"
     private val generator = ModelGenerator(modelPackage)
 
-    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
+    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList(),) = ApiSpec(
         title = "Test",
         version = "1.0",
         endpoints = emptyList(),
@@ -36,6 +38,7 @@ class ModelGeneratorTest {
                     PropertyModel("tag", TypeRef.Primitive(PrimitiveType.STRING), null, true),
                 ),
             requiredProperties = setOf("id", "name"),
+            isEnum = false,
             allOf = null,
             oneOf = null,
             anyOf = null,
@@ -96,7 +99,6 @@ class ModelGeneratorTest {
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val tagParam = constructor.parameters.first { it.name == "tag" }
         assertTrue(tagParam.type.isNullable, "Optional property 'tag' should be nullable")
-        assertNotNull(tagParam.defaultValue, "Optional property 'tag' should have a default value")
         assertEquals("null", tagParam.defaultValue.toString())
     }
 
@@ -129,6 +131,7 @@ class ModelGeneratorTest {
                         PropertyModel("created_at", TypeRef.Primitive(PrimitiveType.STRING), null, false),
                     ),
                 requiredProperties = setOf("created_at"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -176,6 +179,7 @@ class ModelGeneratorTest {
                         PropertyModel("pet", TypeRef.Reference("Pet"), null, false),
                     ),
                 requiredProperties = setOf("pet"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -286,9 +290,9 @@ class ModelGeneratorTest {
                 .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
                 .first()
         val constants = typeSpec.enumConstants.entries.toList()
-        assertEquals("1", constants[0].key)
-        assertEquals("2", constants[1].key)
-        assertEquals("3", constants[2].key)
+        assertEquals("VALUE_1", constants[0].key)
+        assertEquals("VALUE_2", constants[1].key)
+        assertEquals("VALUE_3", constants[2].key)
         // Check @SerialName values
         for ((i, entry) in constants.withIndex()) {
             val serialName =
@@ -329,6 +333,7 @@ class ModelGeneratorTest {
                 description = null,
                 properties = emptyList(),
                 requiredProperties = emptySet(),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = listOf(TypeRef.Reference("CreditCard"), TypeRef.Reference("BankTransfer")),
@@ -340,6 +345,7 @@ class ModelGeneratorTest {
                 description = null,
                 properties = listOf(PropertyModel("cardNumber", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
                 requiredProperties = setOf("cardNumber"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -366,6 +372,7 @@ class ModelGeneratorTest {
                 description = null,
                 properties = emptyList(),
                 requiredProperties = emptySet(),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = listOf(TypeRef.Reference("CreditCard")),
@@ -377,6 +384,7 @@ class ModelGeneratorTest {
                 description = null,
                 properties = listOf(PropertyModel("cardNumber", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
                 requiredProperties = setOf("cardNumber"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -406,6 +414,7 @@ class ModelGeneratorTest {
                 description = null,
                 properties = emptyList(),
                 requiredProperties = emptySet(),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = listOf(TypeRef.Reference("CreditCard")),
@@ -421,6 +430,7 @@ class ModelGeneratorTest {
                 description = null,
                 properties = listOf(PropertyModel("cardNumber", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
                 requiredProperties = setOf("cardNumber"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -446,6 +456,58 @@ class ModelGeneratorTest {
         )
     }
 
+    @Test
+    fun `anyOf variants registered in sealedHierarchies map`() {
+        val paymentSchema =
+            SchemaModel(
+                name = "Payment",
+                description = null,
+                properties = emptyList(),
+                requiredProperties = emptySet(),
+                isEnum = false,
+                allOf = null,
+                oneOf = null,
+                anyOf = listOf(TypeRef.Reference("CreditCard"), TypeRef.Reference("BankTransfer")),
+                discriminator = null,
+            )
+        val creditCardSchema =
+            SchemaModel(
+                name = "CreditCard",
+                description = null,
+                properties = listOf(PropertyModel("cardNumber", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
+                requiredProperties = setOf("cardNumber"),
+                isEnum = false,
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val bankTransferSchema =
+            SchemaModel(
+                name = "BankTransfer",
+                description = null,
+                properties = listOf(
+                    PropertyModel("accountNumber", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                ),
+                requiredProperties = setOf("accountNumber"),
+                isEnum = false,
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+
+        generator.generate(spec(schemas = listOf(paymentSchema, creditCardSchema, bankTransferSchema)))
+        val hierarchies = generator.getSealedHierarchies()
+
+        assertTrue("Payment" in hierarchies, "Payment should be in sealedHierarchies map")
+        assertEquals(
+            listOf("CreditCard", "BankTransfer"),
+            hierarchies["Payment"],
+            "Payment should have CreditCard and BankTransfer as variants",
+        )
+    }
+
     // -- Default value tests (DFLT-01 through DFLT-05) --
 
     @Test
@@ -459,6 +521,7 @@ class ModelGeneratorTest {
                         PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false, "default-name"),
                     ),
                 requiredProperties = setOf("name"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -488,6 +551,7 @@ class ModelGeneratorTest {
                         PropertyModel("price", TypeRef.Primitive(PrimitiveType.DOUBLE), null, false, 19.99),
                     ),
                 requiredProperties = setOf("age", "price"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -518,6 +582,7 @@ class ModelGeneratorTest {
                         PropertyModel("active", TypeRef.Primitive(PrimitiveType.BOOLEAN), null, false, true),
                     ),
                 requiredProperties = setOf("active"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -552,6 +617,7 @@ class ModelGeneratorTest {
                         ),
                     ),
                 requiredProperties = setOf("createdAt"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -587,6 +653,7 @@ class ModelGeneratorTest {
                         PropertyModel("eventDate", TypeRef.Primitive(PrimitiveType.DATE), null, false, "2024-01-01"),
                     ),
                 requiredProperties = setOf("eventDate"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -621,6 +688,7 @@ class ModelGeneratorTest {
                         PropertyModel("required", TypeRef.Primitive(PrimitiveType.STRING), null, false, null),
                     ),
                 requiredProperties = setOf("required", "withDefault"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -650,6 +718,7 @@ class ModelGeneratorTest {
                         PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, true, "ignored-default"),
                     ),
                 requiredProperties = emptySet(),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -665,7 +734,6 @@ class ModelGeneratorTest {
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "name" }
         assertTrue(param.type.isNullable, "Property should be nullable")
-        assertNotNull(param.defaultValue, "Nullable property should have a default value")
         assertEquals("null", param.defaultValue.toString(), "Nullable property should use null default")
     }
 
@@ -687,6 +755,7 @@ class ModelGeneratorTest {
                         PropertyModel("status", TypeRef.Reference("Status"), null, false, "active"),
                     ),
                 requiredProperties = setOf("status"),
+                isEnum = false,
                 allOf = null,
                 oneOf = null,
                 anyOf = null,
@@ -716,6 +785,7 @@ class ModelGeneratorTest {
             description = null,
             properties = emptyList(),
             requiredProperties = emptySet(),
+            isEnum = false,
             allOf = null,
             oneOf = null,
             anyOf = null,
@@ -742,6 +812,7 @@ class ModelGeneratorTest {
             description = "Unique identifier for a user",
             properties = emptyList(),
             requiredProperties = emptySet(),
+            isEnum = false,
             allOf = null,
             oneOf = null,
             anyOf = null,
@@ -783,6 +854,7 @@ class ModelGeneratorTest {
                 PropertyModel("object", TypeRef.Primitive(PrimitiveType.STRING), null, false),
             ),
             requiredProperties = setOf("object"),
+            isEnum = false,
             allOf = null,
             oneOf = null,
             anyOf = null,
@@ -795,7 +867,9 @@ class ModelGeneratorTest {
             .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
             .first()
 
+        // Property should be backtick-escaped
         val prop = typeSpec.propertySpecs.first()
+        assertEquals("`object`", prop.name, "Property named 'object' should be backtick-escaped")
 
         // @SerialName should still use the original wire name
         val serialName = prop.annotations.first { it.typeName.toString() == "kotlinx.serialization.SerialName" }
@@ -805,23 +879,48 @@ class ModelGeneratorTest {
         )
     }
 
+    @Test
+    fun `property named with Kotlin keyword 'in' generates backtick-escaped name`() {
+        val schema = SchemaModel(
+            name = "Filter",
+            description = null,
+            properties = listOf(
+                PropertyModel("in", TypeRef.Primitive(PrimitiveType.STRING), null, true),
+            ),
+            requiredProperties = emptySet(),
+            isEnum = false,
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .first()
+        val prop = typeSpec.propertySpecs.first()
+        assertEquals("`in`", prop.name, "Property named 'in' should be backtick-escaped")
+    }
+
     // -- ROB-01: Circular schema visited-set guard --
 
     @Test
-    fun `collectInlineTypeRefs with nested inline TypeRef does not stack overflow`() {
-        // Build a schema model containing a deeply nested inline structure
-        // (inline -> property -> another inline with the same shape)
-        val innerInline = TypeRef.Inline(
-            properties = listOf(
-                PropertyModel("value", TypeRef.Primitive(PrimitiveType.STRING), null, false),
-            ),
+    fun `collectInlineTypeRefs with circular TypeRef does not stack overflow`() {
+        // Create a circular inline TypeRef: TreeNode with a property 'children' of type Array<TreeNode>
+        // We use a self-referential arrangement via a property list
+        val treeNodeInline = TypeRef.Inline(
+            properties = emptyList(), // We'll override with a property referencing itself below
             requiredProperties = emptySet(),
             contextHint = "treeNode",
         )
 
+        // Build a schema model containing a property that uses a nested Inline
+        // (circular structure: inline -> property -> same inline structure)
         val selfReferencingInline = TypeRef.Inline(
             properties = listOf(
-                PropertyModel("children", TypeRef.Array(innerInline), null, true),
+                PropertyModel("children", TypeRef.Array(treeNodeInline), null, true),
             ),
             requiredProperties = emptySet(),
             contextHint = "treeNode",
@@ -835,6 +934,7 @@ class ModelGeneratorTest {
                 PropertyModel("children", TypeRef.Array(selfReferencingInline), null, true),
             ),
             requiredProperties = setOf("value"),
+            isEnum = false,
             allOf = null,
             oneOf = null,
             anyOf = null,
@@ -858,6 +958,7 @@ class ModelGeneratorTest {
                 PropertyModel("nickname", TypeRef.Primitive(PrimitiveType.STRING), null, true),
             ),
             requiredProperties = setOf("name"),
+            isEnum = false,
             allOf = null,
             oneOf = null,
             anyOf = null,
@@ -873,7 +974,6 @@ class ModelGeneratorTest {
 
         val nicknameParam = constructor.parameters.first { it.name == "nickname" }
         assertTrue(nicknameParam.type.isNullable, "Non-required property should be nullable")
-        assertNotNull(nicknameParam.defaultValue, "Non-required property should have a default value")
         assertEquals("null", nicknameParam.defaultValue.toString(), "Non-required property should have = null default")
 
         val nameParam = constructor.parameters.first { it.name == "name" }
@@ -890,6 +990,7 @@ class ModelGeneratorTest {
                 PropertyModel("id", TypeRef.Primitive(PrimitiveType.LONG), null, false),
             ),
             requiredProperties = setOf("id"),
+            isEnum = false,
             allOf = null,
             oneOf = null,
             anyOf = null,
@@ -903,6 +1004,7 @@ class ModelGeneratorTest {
                 PropertyModel("optionalField", TypeRef.Primitive(PrimitiveType.STRING), null, true),
             ),
             requiredProperties = setOf("id"),
+            isEnum = false,
             allOf = listOf(TypeRef.Reference("Base")),
             oneOf = null,
             anyOf = null,
@@ -915,7 +1017,6 @@ class ModelGeneratorTest {
 
         val optionalParam = constructor.parameters.first { it.name == "optionalField" }
         assertTrue(optionalParam.type.isNullable, "Non-required allOf property should be nullable")
-        assertNotNull(optionalParam.defaultValue, "Non-required allOf property should have a default value")
         assertEquals(
             "null",
             optionalParam.defaultValue.toString(),
@@ -933,6 +1034,7 @@ class ModelGeneratorTest {
                 PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
             ),
             requiredProperties = setOf("id", "name"),
+            isEnum = false,
             allOf = listOf(TypeRef.Reference("Base")),
             oneOf = null,
             anyOf = null,

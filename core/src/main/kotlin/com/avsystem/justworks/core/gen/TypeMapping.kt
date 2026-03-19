@@ -2,7 +2,6 @@ package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.TypeRef
-import com.squareup.kotlinpoet.ANY
 import com.squareup.kotlinpoet.BOOLEAN
 import com.squareup.kotlinpoet.BYTE_ARRAY
 import com.squareup.kotlinpoet.ClassName
@@ -20,19 +19,9 @@ import com.squareup.kotlinpoet.TypeName
  * Maps [TypeRef] sealed variants to KotlinPoet [TypeName] instances.
  */
 object TypeMapping {
-    fun toTypeName(typeRef: TypeRef, modelPackage: String): TypeName = when (typeRef) {
+    fun toTypeName(typeRef: TypeRef, modelPackage: String,): TypeName = when (typeRef) {
         is TypeRef.Primitive -> {
-            when (typeRef.type) {
-                PrimitiveType.STRING -> STRING
-                PrimitiveType.INT -> INT
-                PrimitiveType.LONG -> LONG
-                PrimitiveType.DOUBLE -> DOUBLE
-                PrimitiveType.FLOAT -> FLOAT
-                PrimitiveType.BOOLEAN -> BOOLEAN
-                PrimitiveType.BYTE_ARRAY -> BYTE_ARRAY
-                PrimitiveType.DATE_TIME -> INSTANT
-                PrimitiveType.DATE -> LOCAL_DATE
-            }
+            primitiveTypeName(typeRef.type)
         }
 
         is TypeRef.Array -> {
@@ -48,11 +37,21 @@ object TypeMapping {
         }
 
         is TypeRef.Inline -> {
-            ClassName(modelPackage, typeRef.contextHint.toInlinedName())
+            // For nested inline classes (e.g., "Pet.Address"), sanitize to "PetAddress"
+            val sanitizedName = typeRef.contextHint.replace(".", "")
+            ClassName(modelPackage, sanitizedName)
         }
+    }
 
-        is TypeRef.Unknown -> {
-            ANY
-        }
+    private fun primitiveTypeName(type: PrimitiveType): TypeName = when (type) {
+        PrimitiveType.STRING -> STRING
+        PrimitiveType.INT -> INT
+        PrimitiveType.LONG -> LONG
+        PrimitiveType.DOUBLE -> DOUBLE
+        PrimitiveType.FLOAT -> FLOAT
+        PrimitiveType.BOOLEAN -> BOOLEAN
+        PrimitiveType.BYTE_ARRAY -> BYTE_ARRAY
+        PrimitiveType.DATE_TIME -> INSTANT
+        PrimitiveType.DATE -> LOCAL_DATE
     }
 }

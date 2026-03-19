@@ -1,10 +1,11 @@
 package com.avsystem.justworks.core.gen
 
-import com.avsystem.justworks.core.gen.ModelGenerator.HierarchyInfo
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
+import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.PropertySpec
+import java.io.File
 
 /**
  * Generates a `SerializersModule` registration file for all polymorphic sealed hierarchies.
@@ -12,24 +13,22 @@ import com.squareup.kotlinpoet.PropertySpec
  * Produces a top-level `val generatedSerializersModule: SerializersModule` property
  * that registers each sealed interface with its subclass variants.
  */
-class SerializersModuleGenerator(private val modelPackage: String) {
+class SerializersModuleGenerator(private val modelPackage: String,) {
     /**
      * Generates a [FileSpec] containing the SerializersModule registration.
-     * Returns null if the hierarchy has no sealed types to register.
+     * Returns null if [sealedHierarchies] is empty (no polymorphic types to register).
+     *
+     * @param sealedHierarchies map of sealed parent name to list of variant schema names
      */
+    fun generate(sealedHierarchies: Map<String, List<String>>): FileSpec? {
+        if (sealedHierarchies.isEmpty()) return null
 
-    context(hierarchy: HierarchyInfo)
-    fun generate(): FileSpec? {
-        // anyOf hierarchies without a discriminator use JsonContentPolymorphicSerializer
-        // with custom deserialization logic, so they don't need SerializersModule registration.
-        val discriminatorHierarchies =
-            hierarchy.sealedHierarchies.filterKeys { it !in hierarchy.anyOfWithoutDiscriminator }
+        val code =
+            CodeBlock
+                .builder()
+                .beginControlFlow("%T", SERIALIZERS_MODULE)
 
-        if (discriminatorHierarchies.isEmpty()) return null
-
-        val code = CodeBlock.builder().beginControlFlow("%T", SERIALIZERS_MODULE)
-
-        for ((parent, variants) in discriminatorHierarchies) {
+        for ((parent, variants) in sealedHierarchies) {
             val parentClass = ClassName(modelPackage, parent)
             code.beginControlFlow("%M(%T::class)", POLYMORPHIC_FUN, parentClass)
             for (variant in variants) {
@@ -51,5 +50,15 @@ class SerializersModuleGenerator(private val modelPackage: String) {
             .builder(modelPackage, "SerializersModule")
             .addProperty(prop)
             .build()
+    }
+
+    /**
+     * Generates the SerializersModule file and writes it to [outputDir].
+     * Returns 0 if no polymorphic types exist, 1 if a file was written.
+     */
+    fun generateTo(sealedHierarchies: Map<String, List<String>>, outputDir: File,): Int {
+        val fileSpec = generate(sealedHierarchies) ?: return 0
+        fileSpec.writeTo(outputDir)
+        return 1
     }
 }

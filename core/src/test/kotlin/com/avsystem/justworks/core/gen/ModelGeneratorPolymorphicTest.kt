@@ -39,6 +39,7 @@ class ModelGeneratorPolymorphicTest {
         description = null,
         properties = properties,
         requiredProperties = requiredProperties,
+        isEnum = false,
         allOf = allOf,
         oneOf = oneOf,
         anyOf = anyOf,
