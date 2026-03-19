@@ -10,10 +10,13 @@ class SerializersModuleGeneratorTest {
     private val modelPackage = "com.example.model"
     private val generator = SerializersModuleGenerator(modelPackage)
 
-    private fun hierarchyInfo(sealedHierarchies: Map<String, List<String>>) = ModelGenerator.HierarchyInfo(
+    private fun hierarchyInfo(
+        sealedHierarchies: Map<String, List<String>>,
+        anyOfWithoutDiscriminator: Set<String> = emptySet(),
+    ) = ModelGenerator.HierarchyInfo(
         sealedHierarchies = sealedHierarchies,
         variantParents = emptyMap(),
-        anyOfWithoutDiscriminator = emptySet(),
+        anyOfWithoutDiscriminator = anyOfWithoutDiscriminator,
         schemas = emptyList(),
     )
 
@@ -60,5 +63,34 @@ class SerializersModuleGeneratorTest {
     fun `returns null for empty hierarchies`() {
         val result = context(hierarchyInfo(emptyMap())) { generator.generate() }
         assertNull(result, "Should return null for empty hierarchies")
+    }
+
+    @Test
+    fun `excludes anyOf hierarchies without discriminator`() {
+        val hierarchies = mapOf(
+            "Shape" to listOf("Circle", "Square"),
+            "Pet" to listOf("Cat", "Dog"),
+        )
+        val info = hierarchyInfo(hierarchies, anyOfWithoutDiscriminator = setOf("Pet"))
+        val fileSpec = context(info) { generator.generate() }
+
+        assertNotNull(fileSpec)
+        val initializer = fileSpec.members
+            .filterIsInstance<PropertySpec>()
+            .first { it.name == "generatedSerializersModule" }
+            .initializer
+            .toString()
+
+        assertTrue(initializer.contains("Shape"), "Should contain discriminator-based hierarchy")
+        assertTrue(!initializer.contains("Pet"), "Should exclude anyOf without discriminator")
+    }
+
+    @Test
+    fun `returns null when all hierarchies are anyOf without discriminator`() {
+        val hierarchies = mapOf("Pet" to listOf("Cat", "Dog"))
+        val info = hierarchyInfo(hierarchies, anyOfWithoutDiscriminator = setOf("Pet"))
+        val result = context(info) { generator.generate() }
+
+        assertNull(result, "Should return null when only non-discriminator anyOf hierarchies exist")
     }
 }
