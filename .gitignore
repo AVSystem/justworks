@@ -2,3 +2,7 @@ build/
 .gradle/
 .kotlin/
 .idea/
+.planning/
+
+# Test fixtures - real API specs (not committed)
+core/src/test/resources/fixtures/ump-api.json
