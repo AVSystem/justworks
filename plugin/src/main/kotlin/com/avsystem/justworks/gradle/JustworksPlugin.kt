@@ -47,7 +47,6 @@ class JustworksPlugin : Plugin<Project> {
                 project.tasks.register(taskName, JustworksGenerateTask::class.java) { task ->
                     task.dependsOn(sharedTypesTask)
                     task.specFile.set(spec.specFile)
-                    task.packageName.set(spec.packageName)
                     task.apiPackage.set(spec.apiPackage.orElse(spec.packageName.map { "$it.api" }))
                     task.modelPackage.set(spec.modelPackage.orElse(spec.packageName.map { "$it.model" }))
                     task.outputDir.set(project.layout.buildDirectory.dir("generated/justworks/${spec.name}"))

@@ -29,10 +29,6 @@ abstract class JustworksGenerateTask : DefaultTask() {
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val specFile: RegularFileProperty
 
-    /** Base package name for generated code. */
-    @get:Input
-    abstract val packageName: Property<String>
-
     /** Package for generated API client classes. */
     @get:Input
     abstract val apiPackage: Property<String>
