@@ -28,7 +28,7 @@ object CodeGenerator {
     }
 
     fun generateSharedTypes(outputDir: File): Int {
-        val files = ApiResponseGenerator.generate()
+        val files = ApiResponseGenerator.generate() + ApiClientBaseGenerator.generate()
         files.forEach { it.writeTo(outputDir) }
         return files.size
     }
