@@ -5,7 +5,6 @@ import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.ParameterizedTypeName
 import com.squareup.kotlinpoet.TypeSpec
-import com.squareup.kotlinpoet.TypeVariableName
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
@@ -34,11 +33,13 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has constructor with baseUrl and token`() {
+    fun `ApiClientBase has constructor with baseUrl and token provider`() {
         val constructor = assertNotNull(classSpec.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         assertTrue("baseUrl" in paramNames)
         assertTrue("token" in paramNames)
+        val tokenParam = constructor.parameters.first { it.name == "token" }
+        assertEquals("() -> kotlin.String", tokenParam.type.toString(), "token should be a () -> String lambda")
     }
 
     @Test
@@ -64,7 +65,7 @@ class ApiClientBaseGeneratorTest {
         val body = applyAuth.body.toString()
         assertTrue(body.contains("Authorization"), "Expected Authorization header")
         assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
-        assertTrue(body.contains("token"), "Expected token reference")
+        assertTrue(body.contains("token()"), "Expected token() invocation")
     }
 
     @Test
@@ -75,6 +76,7 @@ class ApiClientBaseGeneratorTest {
         assertTrue(safeCall.contextParameters.isNotEmpty(), "Expected context parameter")
         val body = safeCall.body.toString()
         assertTrue(body.contains("IOException"), "Expected IOException catch")
+        assertTrue(body.contains("HttpRequestTimeoutException"), "Expected HttpRequestTimeoutException catch")
         assertTrue(body.contains("Network error"), "Expected Network error message")
     }
 

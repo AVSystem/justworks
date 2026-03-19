@@ -297,11 +297,11 @@ class ClientGeneratorTest {
     // -- AUTH-01: Client constructor has token parameter --
 
     @Test
-    fun `client constructor has token parameter`() {
+    fun `client constructor has token provider parameter`() {
         val cls = clientClass(listOf(endpoint()))
         val constructor = assertNotNull(cls.primaryConstructor)
         val token = constructor.parameters.first { it.name == "token" }
-        assertTrue(token.type.toString().contains("String"), "token should return String")
+        assertEquals("() -> kotlin.String", token.type.toString(), "token should be a () -> String lambda")
     }
 
     // -- Pitfall 3: Untagged endpoints go to DefaultClient --

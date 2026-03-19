@@ -69,6 +69,7 @@ val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
 
 val CLOSEABLE = ClassName("java.io", "Closeable")
 val IO_EXCEPTION = ClassName("java.io", "IOException")
+val HTTP_REQUEST_TIMEOUT_EXCEPTION = ClassName("io.ktor.client.plugins", "HttpRequestTimeoutException")
 val OPT_IN = ClassName("kotlin", "OptIn")
 
 // ============================================================================

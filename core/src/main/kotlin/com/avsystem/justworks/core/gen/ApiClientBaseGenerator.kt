@@ -63,6 +63,12 @@ object ApiClientBaseGenerator {
         .beginControlFlow("return when (status.value)")
         .addStatement("in 200..299 -> %T(status.value, %L())", HTTP_SUCCESS, SUCCESS_BODY)
         .addStatement(
+            "in 300..399 -> %M(%T(status.value, %M(), %T.Server))",
+            RAISE_FUN,
+            HTTP_ERROR,
+            BODY_AS_TEXT_FUN,
+            HTTP_ERROR_TYPE,
+        ).addStatement(
             "in 400..499 -> %M(%T(status.value, %M(), %T.Client))",
             RAISE_FUN,
             HTTP_ERROR,
@@ -97,10 +103,12 @@ object ApiClientBaseGenerator {
         .build()
 
     private fun buildApiClientBaseClass(): TypeSpec {
+        val tokenType = LambdaTypeName.get(returnType = STRING)
+
         val constructor = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
-            .addParameter(TOKEN, STRING)
+            .addParameter(TOKEN, tokenType)
             .build()
 
         val baseUrlProp = PropertySpec
@@ -110,7 +118,7 @@ object ApiClientBaseGenerator {
             .build()
 
         val tokenProp = PropertySpec
-            .builder(TOKEN, STRING)
+            .builder(TOKEN, tokenType)
             .initializer(TOKEN)
             .addModifiers(KModifier.PRIVATE)
             .build()
@@ -149,7 +157,7 @@ object ApiClientBaseGenerator {
         .addStatement(
             "append(%T.Authorization, %P)",
             HTTP_HEADERS,
-            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN}"),
+            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN()}"),
         ).endControlFlow()
         .build()
 
@@ -162,6 +170,13 @@ object ApiClientBaseGenerator {
         .beginControlFlow("return try")
         .addStatement("%L()", BLOCK)
         .nextControlFlow("catch (e: %T)", IO_EXCEPTION)
+        .addStatement(
+            "%M(%T(0, e.message ?: %S, %T.Network))",
+            RAISE_FUN,
+            HTTP_ERROR,
+            NETWORK_ERROR,
+            HTTP_ERROR_TYPE,
+        ).nextControlFlow("catch (e: %T)", HTTP_REQUEST_TIMEOUT_EXCEPTION)
         .addStatement(
             "%M(%T(0, e.message ?: %S, %T.Network))",
             RAISE_FUN,
