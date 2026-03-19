@@ -58,6 +58,7 @@ val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
 
 val RAISE = ClassName("arrow.core.raise", "Raise")
 val RAISE_FUN = MemberName("arrow.core.raise.context", "raise")
+
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
 val HTTP_ERROR_TYPE = ClassName("com.avsystem.justworks", "HttpErrorType")
 val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
@@ -67,6 +68,8 @@ val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
 // ============================================================================
 
 val CLOSEABLE = ClassName("java.io", "Closeable")
+val IO_EXCEPTION = ClassName("java.io", "IOException")
+val HTTP_REQUEST_TIMEOUT_EXCEPTION = ClassName("io.ktor.client.plugins", "HttpRequestTimeoutException")
 val OPT_IN = ClassName("kotlin", "OptIn")
 
 // ============================================================================
@@ -79,3 +82,17 @@ val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuild
 val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
 val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
 val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")
+
+// ============================================================================
+// Shared property / parameter names (used by multiple generators)
+// ============================================================================
+
+const val BASE_URL = "baseUrl"
+const val TOKEN = "token"
+const val CLIENT = "client"
+const val BODY = "body"
+const val APPLY_AUTH = "applyAuth"
+const val SAFE_CALL = "safeCall"
+const val CREATE_HTTP_CLIENT = "createHttpClient"
+const val GENERATED_SERIALIZERS_MODULE = "generatedSerializersModule"
+const val NETWORK_ERROR = "Network error"
