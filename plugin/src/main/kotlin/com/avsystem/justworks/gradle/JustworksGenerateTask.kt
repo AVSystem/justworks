@@ -57,9 +57,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
         outDir.mkdirs()
 
         val spec = specFile.get().asFile
-        val result = SpecParser.parse(spec)
-
-        when (result) {
+        when (val result = SpecParser.parse(spec)) {
             is ParseResult.Failure -> {
                 throw GradleException(
                     "Failed to parse spec (task: $name): ${spec.name}:\n${result.errors.joinToString("\n")}",
@@ -68,13 +66,14 @@ abstract class JustworksGenerateTask : DefaultTask() {
 
             is ParseResult.Success -> {
                 val modelGen = ModelGenerator(modelPackage.get())
-                val modelCount = modelGen.generateTo(result.apiSpec, outDir)
+                val (fileCount, hasPolymorphicTypes) = modelGen.generateTo(result.apiSpec, outDir)
 
-                val hasPolymorphicTypes = modelGen.getSealedHierarchies().isNotEmpty()
                 val clientGen = ClientGenerator(apiPackage.get(), modelPackage.get())
                 val clientCount = clientGen.generateTo(result.apiSpec, outDir, hasPolymorphicTypes)
 
-                logger.lifecycle("Generated $modelCount model files, $clientCount client files from ${spec.name}")
+                logger.lifecycle(
+                    "Generated $fileCount model files, $clientCount client files from ${spec.name}",
+                )
             }
         }
     }

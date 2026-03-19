@@ -22,6 +22,7 @@ import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
+import java.io.File
 
 private const val DEFAULT_TAG = "Default"
 private const val API_SUFFIX = "Api"
@@ -32,6 +33,16 @@ private const val API_SUFFIX = "Api"
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
 class ClientGenerator(private val apiPackage: String, private val modelPackage: String) {
+    fun generateTo(
+        spec: ApiSpec,
+        outputDir: File,
+        hasPolymorphicTypes: Boolean = false,
+    ): Int {
+        val files = generate(spec, hasPolymorphicTypes)
+        files.forEach { it.writeTo(outputDir) }
+        return files.size
+    }
+
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) -> generateClientFile(tag, endpoints, hasPolymorphicTypes) }
