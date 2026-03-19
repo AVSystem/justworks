@@ -2,7 +2,6 @@ plugins {
     kotlin("jvm")
     `java-gradle-plugin`
     `maven-publish`
-    id("org.jetbrains.kotlinx.kover") version "0.9.1"
 }
 
 kotlin {
@@ -49,18 +48,6 @@ val functionalTestTask =
     }
 
 tasks.check {
-    dependsOn(functionalTestTask)
-}
-
-kover {
-    currentProject {
-        sources {
-            excludedSourceSets.add("functionalTest")
-        }
-    }
-}
-
-tasks.named("koverXmlReport") {
     dependsOn(functionalTestTask)
 }
 
