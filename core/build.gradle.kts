@@ -3,6 +3,7 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 plugins {
     kotlin("jvm")
     id("org.jetbrains.kotlinx.kover") version "0.9.1"
+    id("com.vanniktech.maven.publish")
 }
 
 kotlin {
@@ -11,7 +12,14 @@ kotlin {
 
 // todo: remove when https://github.com/JLLeitschuh/ktlint-gradle/issues/912 resolved
 ktlint {
-    version = ("1.8.0")
+    version = "1.8.0"
+}
+
+mavenPublishing {
+    pom {
+        name = "justworks-core"
+        description = "OpenAPI 3.0 parser and Kotlin Ktor client code generator"
+    }
 }
 
 dependencies {
