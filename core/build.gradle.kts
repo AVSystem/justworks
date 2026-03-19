@@ -2,7 +2,6 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm")
-    id("com.vanniktech.maven.publish")
     id("org.jetbrains.kotlinx.kover") version "0.9.1"
 }
 
@@ -27,12 +26,6 @@ tasks.test {
     useJUnitPlatform()
 }
 
-mavenPublishing {
-    pom {
-        name = "justworks-core"
-        description = "Kotlin OpenAPI 3.0 client code generator with Ktor and kotlinx.serialization"
-    }
-}
 
 tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
