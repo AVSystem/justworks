@@ -28,7 +28,7 @@ import javax.inject.Inject
  */
 abstract class JustworksSpecConfiguration
     @Inject
-    constructor(private val name: String,) : Named {
+    constructor(private val name: String) : Named {
         /** Path to the OpenAPI spec file (.yaml or .json). */
         abstract val specFile: RegularFileProperty
 

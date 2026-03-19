@@ -23,7 +23,6 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
 
-
 private const val DEFAULT_TAG = "Default"
 private const val API_SUFFIX = "Api"
 
