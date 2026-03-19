@@ -15,6 +15,7 @@ import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import java.io.File
 
 /**
  * Gradle task that generates Kotlin source files from an OpenAPI spec.
@@ -43,13 +44,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val outDir = outputDir.get().asFile
-
-        // Clean output directory before generation to prevent stale files
-        if (outDir.exists()) {
-            outDir.deleteRecursively()
-        }
-        outDir.mkdirs()
+        val outDir = outputDir.get().asFile.cleanAndCreate()
 
         val spec = specFile.get().asFile
         when (val result = SpecParser.parse(spec)) {
@@ -73,4 +68,10 @@ abstract class JustworksGenerateTask : DefaultTask() {
             }
         }
     }
+}
+
+internal fun File.cleanAndCreate(): File {
+    if (exists()) deleteRecursively()
+    mkdirs()
+    return this
 }
