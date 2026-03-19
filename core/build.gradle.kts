@@ -1,3 +1,4 @@
+import com.vanniktech.maven.publish.SonatypeHost.Companion.CENTRAL_PORTAL
 import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
@@ -12,7 +13,7 @@ kotlin {
 
 // todo: remove when https://github.com/JLLeitschuh/ktlint-gradle/issues/912 resolved
 ktlint {
-    version.set("1.8.0")
+    version = ("1.8.0")
 }
 
 dependencies {
@@ -28,34 +29,35 @@ tasks.test {
 }
 
 mavenPublishing {
-    publishToMavenCentral(com.vanniktech.maven.publish.SonatypeHost.CENTRAL_PORTAL)
+    publishToMavenCentral(CENTRAL_PORTAL)
     signAllPublications()
 
     pom {
-        name.set("justworks-core")
-        description.set("Kotlin OpenAPI 3.0 client code generator with Ktor and kotlinx.serialization")
-        url.set("https://github.com/AVSystem/justworks")
+        name = "justworks-core"
+        description = "Kotlin OpenAPI 3.0 client code generator with Ktor and kotlinx.serialization"
+        url = "https://github.com/AVSystem/justworks"
 
         licenses {
             license {
-                name.set("The Apache License, Version 2.0")
-                url.set("https://www.apache.org/licenses/LICENSE-2.0.txt")
+                name = "The Apache License, Version 2.0"
+                url = "https://www.apache.org/licenses/LICENSE-2.0.txt"
             }
         }
 
         developers {
             developer {
-                id.set("avsystem")
-                name.set("AVSystem")
-                organization.set("AVSystem")
-                organizationUrl.set("https://www.avsystem.com")
+                id = "halotukozak"
+                name = "Bartłomiej Kozak"
+                email = "bartlomiejkozak@proton.me"
+                organization = "AVSystem"
+                organizationUrl = "https://www.avsystem.com"
             }
         }
 
         scm {
-            connection.set("scm:git:git://github.com/AVSystem/justworks.git")
-            developerConnection.set("scm:git:ssh://github.com/AVSystem/justworks.git")
-            url.set("https://github.com/AVSystem/justworks")
+            connection = "scm:git:git://github.com/AVSystem/justworks.git"
+            developerConnection = "scm:git:ssh://github.com/AVSystem/justworks.git"
+            url = "https://github.com/AVSystem/justworks"
         }
     }
 }
