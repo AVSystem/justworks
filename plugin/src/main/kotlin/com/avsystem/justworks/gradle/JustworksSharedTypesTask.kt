@@ -1,6 +1,6 @@
 package com.avsystem.justworks.gradle
 
-import com.avsystem.justworks.core.gen.ApiResponseGenerator
+import com.avsystem.justworks.core.gen.CodeGenerator
 import org.gradle.api.DefaultTask
 import org.gradle.api.file.DirectoryProperty
 import org.gradle.api.tasks.CacheableTask
@@ -19,15 +19,10 @@ abstract class JustworksSharedTypesTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val outDir = outputDir.get().asFile
-        outDir.mkdirs()
+        val outDir = outputDir.get().asFile.recreateDirectory()
 
-        val files = listOf(
-            ApiResponseGenerator.generateHttpError(),
-            ApiResponseGenerator.generateHttpSuccess(),
-        )
-        files.forEach { it.writeTo(outDir) }
+        val count = CodeGenerator.generateSharedTypes(outDir)
 
-        logger.lifecycle("Generated ${files.size} shared type files")
+        logger.lifecycle("Generated $count shared type files")
     }
 }

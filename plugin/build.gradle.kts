@@ -2,20 +2,15 @@ plugins {
     kotlin("jvm")
     `java-gradle-plugin`
     `maven-publish`
+    id("org.jetbrains.kotlinx.kover") version "0.9.1"
 }
 
 kotlin {
     jvmToolchain(21)
 }
 
-// todo: remove when https://github.com/JLLeitschuh/ktlint-gradle/issues/912 resolved
-ktlint {
-    version.set("1.8.0")
-}
-
 dependencies {
     implementation(project(":core"))
-    implementation("com.squareup:kotlinpoet:2.2.0")
     testImplementation(kotlin("test"))
 }
 
@@ -54,6 +49,18 @@ val functionalTestTask =
     }
 
 tasks.check {
+    dependsOn(functionalTestTask)
+}
+
+kover {
+    currentProject {
+        sources {
+            excludedSourceSets.add("functionalTest")
+        }
+    }
+}
+
+tasks.named("koverXmlReport") {
     dependsOn(functionalTestTask)
 }
 
