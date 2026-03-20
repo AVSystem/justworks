@@ -41,6 +41,13 @@ val SERIALIZERS_MODULE = ClassName("kotlinx.serialization.modules", "Serializers
 
 val JSON_OBJECT_EXT = MemberName("kotlinx.serialization.json", "jsonObject")
 
+val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
+val SERIAL_DESCRIPTOR = ClassName("kotlinx.serialization.descriptors", "SerialDescriptor")
+val PRIMITIVE_SERIAL_DESCRIPTOR_FUN = MemberName("kotlinx.serialization.descriptors", "PrimitiveSerialDescriptor")
+val PRIMITIVE_KIND = ClassName("kotlinx.serialization.descriptors", "PrimitiveKind")
+val DECODER = ClassName("kotlinx.serialization.encoding", "Decoder")
+val ENCODER = ClassName("kotlinx.serialization.encoding", "Encoder")
+
 val ENCODE_TO_STRING_FUN = MemberName("kotlinx.serialization", "encodeToString")
 val POLYMORPHIC_FUN = MemberName("kotlinx.serialization.modules", "polymorphic")
 val SUBCLASS_FUN = MemberName("kotlinx.serialization.modules", "subclass")
