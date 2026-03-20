@@ -7,7 +7,6 @@ import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
 import arrow.core.raise.either
 import arrow.core.raise.nullable
-import com.avsystem.justworks.core.gen.sanitizeSchemaName
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.Endpoint
@@ -308,10 +307,9 @@ object SpecParser {
                         ?: propertyName
                             .takeIf { propertySchema.isInlineObject }
                             ?.let { rawName ->
-                                val sanitized = sanitizeSchemaName(rawName, parentSchemaName)
-                                componentSchemas[sanitized] = propertySchema
-                                componentSchemaIdentity[propertySchema] = sanitized
-                                sanitized
+                                componentSchemas[rawName] = propertySchema
+                                componentSchemaIdentity[propertySchema] = rawName
+                                rawName
                             },
                 )
 

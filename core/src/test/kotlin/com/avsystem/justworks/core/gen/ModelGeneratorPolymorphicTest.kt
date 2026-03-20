@@ -612,33 +612,33 @@ class ModelGeneratorPolymorphicTest {
         )
     }
 
-    // -- CEM-01: sanitized boolean discriminator names --
+    // -- CEM-01: boolean discriminator names (KotlinPoet handles escaping) --
 
     @Test
-    fun `sanitized boolean discriminator names produce valid data classes`() {
+    fun `boolean discriminator names produce valid data classes`() {
         val deviceStatusSchema = schema(
             name = "DeviceStatus",
             oneOf = listOf(
-                TypeRef.Reference("DeviceStatusTrue"),
-                TypeRef.Reference("DeviceStatusFalse"),
+                TypeRef.Reference("true"),
+                TypeRef.Reference("false"),
             ),
             discriminator = Discriminator(
                 propertyName = "online",
                 mapping = mapOf(
-                    "true" to "#/components/schemas/DeviceStatusTrue",
-                    "false" to "#/components/schemas/DeviceStatusFalse",
+                    "true" to "#/components/schemas/true",
+                    "false" to "#/components/schemas/false",
                 ),
             ),
         )
         val trueSchema = schema(
-            name = "DeviceStatusTrue",
+            name = "true",
             properties = listOf(
                 PropertyModel("connectedSince", TypeRef.Primitive(PrimitiveType.STRING), null, false),
             ),
             requiredProperties = setOf("connectedSince"),
         )
         val falseSchema = schema(
-            name = "DeviceStatusFalse",
+            name = "false",
             properties = listOf(
                 PropertyModel("lastSeen", TypeRef.Primitive(PrimitiveType.STRING), null, false),
             ),
@@ -649,41 +649,22 @@ class ModelGeneratorPolymorphicTest {
             spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
         )
 
-        val trueType = findType(files, "DeviceStatusTrue")
-        assertTrue(KModifier.DATA in trueType.modifiers, "DeviceStatusTrue should be data class")
+        val trueType = findType(files, "true")
+        assertTrue(KModifier.DATA in trueType.modifiers, "'true' should be data class")
 
-        val falseType = findType(files, "DeviceStatusFalse")
-        assertTrue(KModifier.DATA in falseType.modifiers, "DeviceStatusFalse should be data class")
-
-        // Verify @SerialName uses original discriminator values
-        val trueSerialName = trueType.annotations.find {
-            it.typeName.toString() == "kotlinx.serialization.SerialName"
-        }
-        assertNotNull(trueSerialName, "DeviceStatusTrue should have @SerialName")
-        assertTrue(
-            trueSerialName.members.any { it.toString().contains("\"true\"") },
-            "Expected @SerialName(\"true\") on DeviceStatusTrue",
-        )
-
-        val falseSerialName = falseType.annotations.find {
-            it.typeName.toString() == "kotlinx.serialization.SerialName"
-        }
-        assertNotNull(falseSerialName, "DeviceStatusFalse should have @SerialName")
-        assertTrue(
-            falseSerialName.members.any { it.toString().contains("\"false\"") },
-            "Expected @SerialName(\"false\") on DeviceStatusFalse",
-        )
+        val falseType = findType(files, "false")
+        assertTrue(KModifier.DATA in falseType.modifiers, "'false' should be data class")
 
         // Both implement DeviceStatus sealed interface
         val trueSuperinterfaces = trueType.superinterfaces.keys.map { it.toString() }
         assertTrue(
             "$modelPackage.DeviceStatus" in trueSuperinterfaces,
-            "DeviceStatusTrue should implement DeviceStatus. Superinterfaces: $trueSuperinterfaces",
+            "'true' should implement DeviceStatus. Superinterfaces: $trueSuperinterfaces",
         )
         val falseSuperinterfaces = falseType.superinterfaces.keys.map { it.toString() }
         assertTrue(
             "$modelPackage.DeviceStatus" in falseSuperinterfaces,
-            "DeviceStatusFalse should implement DeviceStatus. Superinterfaces: $falseSuperinterfaces",
+            "'false' should implement DeviceStatus. Superinterfaces: $falseSuperinterfaces",
         )
     }
 
@@ -748,30 +729,30 @@ class ModelGeneratorPolymorphicTest {
     }
 
     @Test
-    fun `SerializersModule includes sanitized variant names`() {
+    fun `SerializersModule includes boolean variant names`() {
         val deviceStatusSchema = schema(
             name = "DeviceStatus",
             oneOf = listOf(
-                TypeRef.Reference("DeviceStatusTrue"),
-                TypeRef.Reference("DeviceStatusFalse"),
+                TypeRef.Reference("true"),
+                TypeRef.Reference("false"),
             ),
             discriminator = Discriminator(
                 propertyName = "online",
                 mapping = mapOf(
-                    "true" to "#/components/schemas/DeviceStatusTrue",
-                    "false" to "#/components/schemas/DeviceStatusFalse",
+                    "true" to "#/components/schemas/true",
+                    "false" to "#/components/schemas/false",
                 ),
             ),
         )
         val trueSchema = schema(
-            name = "DeviceStatusTrue",
+            name = "true",
             properties = listOf(
                 PropertyModel("connectedSince", TypeRef.Primitive(PrimitiveType.STRING), null, false),
             ),
             requiredProperties = setOf("connectedSince"),
         )
         val falseSchema = schema(
-            name = "DeviceStatusFalse",
+            name = "false",
             properties = listOf(
                 PropertyModel("lastSeen", TypeRef.Primitive(PrimitiveType.STRING), null, false),
             ),
@@ -786,12 +767,12 @@ class ModelGeneratorPolymorphicTest {
         assertNotNull(serializersModuleFile, "SerializersModule file should be generated")
         val moduleCode = serializersModuleFile.toString()
         assertTrue(
-            "DeviceStatusTrue" in moduleCode,
-            "SerializersModule should reference DeviceStatusTrue. Code: $moduleCode",
+            "`true`" in moduleCode,
+            "SerializersModule should reference `true`. Code: $moduleCode",
         )
         assertTrue(
-            "DeviceStatusFalse" in moduleCode,
-            "SerializersModule should reference DeviceStatusFalse. Code: $moduleCode",
+            "`false`" in moduleCode,
+            "SerializersModule should reference `false`. Code: $moduleCode",
         )
     }
 

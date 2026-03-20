@@ -61,25 +61,17 @@ class SpecParserPolymorphicTest : SpecParserTestBase() {
     // -- Synthetic schemas from wrapper unwrapping --
 
     @Test
-    fun `boolean discriminator spec produces sanitized schema names`() {
+    fun `boolean discriminator spec preserves original schema names`() {
         val spec = parseSpec(loadResource("boolean-discriminator-spec.yaml"))
         val schemaNames = spec.schemas.map { it.name }.toSet()
 
         assertTrue(
-            "DeviceStatusTrue" in schemaNames,
-            "Expected sanitized schema 'DeviceStatusTrue'. Schemas: $schemaNames",
+            "true" in schemaNames,
+            "Expected schema 'true' in output — KotlinPoet handles escaping. Schemas: $schemaNames",
         )
         assertTrue(
-            "DeviceStatusFalse" in schemaNames,
-            "Expected sanitized schema 'DeviceStatusFalse'. Schemas: $schemaNames",
-        )
-        assertFalse(
-            "true" in schemaNames,
-            "Raw keyword 'true' should not appear as schema name. Schemas: $schemaNames",
-        )
-        assertFalse(
             "false" in schemaNames,
-            "Raw keyword 'false' should not appear as schema name. Schemas: $schemaNames",
+            "Expected schema 'false' in output — KotlinPoet handles escaping. Schemas: $schemaNames",
         )
     }
 
@@ -103,14 +95,14 @@ class SpecParserPolymorphicTest : SpecParserTestBase() {
             "Discriminator mapping should have 'false' as key. Keys: $mappingKeys",
         )
 
-        // Values should reference sanitized schema names
+        // Values reference original schema names
         assertTrue(
-            discriminator.mapping["true"]!!.endsWith("DeviceStatusTrue"),
-            "Mapping for 'true' should reference DeviceStatusTrue. Value: ${discriminator.mapping["true"]}",
+            discriminator.mapping["true"]!!.endsWith("true"),
+            "Mapping for 'true' should reference 'true'. Value: ${discriminator.mapping["true"]}",
         )
         assertTrue(
-            discriminator.mapping["false"]!!.endsWith("DeviceStatusFalse"),
-            "Mapping for 'false' should reference DeviceStatusFalse. Value: ${discriminator.mapping["false"]}",
+            discriminator.mapping["false"]!!.endsWith("false"),
+            "Mapping for 'false' should reference 'false'. Value: ${discriminator.mapping["false"]}",
         )
     }
 
