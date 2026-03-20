@@ -125,8 +125,20 @@ class TypeMappingTest {
     // -- Unknown --
 
     @Test
-    fun `maps Unknown to kotlin Any`() {
+    fun `maps Unknown to kotlinx serialization json JsonElement`() {
         val result = TypeMapping.toTypeName(TypeRef.Unknown, pkg)
-        assertEquals("kotlin.Any", result.toString())
+        assertEquals("kotlinx.serialization.json.JsonElement", result.toString())
+    }
+
+    @Test
+    fun `maps Array of Unknown to List of JsonElement`() {
+        val result = TypeMapping.toTypeName(TypeRef.Array(TypeRef.Unknown), pkg)
+        assertEquals("kotlin.collections.List<kotlinx.serialization.json.JsonElement>", result.toString())
+    }
+
+    @Test
+    fun `maps Map of Unknown to Map with JsonElement value`() {
+        val result = TypeMapping.toTypeName(TypeRef.Map(TypeRef.Unknown), pkg)
+        assertEquals("kotlin.collections.Map<kotlin.String, kotlinx.serialization.json.JsonElement>", result.toString())
     }
 }
