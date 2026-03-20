@@ -3,6 +3,3 @@ build/
 .kotlin/
 .idea/
 .planning/
-
-# Test fixtures - real API specs (not committed)
-core/src/test/resources/fixtures/real-world-spec.json
