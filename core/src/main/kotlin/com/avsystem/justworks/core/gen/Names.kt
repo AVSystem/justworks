@@ -53,6 +53,13 @@ val INSTANT = ClassName("kotlin.time", "Instant")
 val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
 
 // ============================================================================
+// UUID (kotlin.uuid)
+// ============================================================================
+
+val UUID_TYPE = ClassName("kotlin.uuid", "Uuid")
+val EXPERIMENTAL_UUID_API = ClassName("kotlin.uuid", "ExperimentalUuidApi")
+
+// ============================================================================
 // Error Handling (Arrow + Kotlin stdlib)
 // ============================================================================
 
