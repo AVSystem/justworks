@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  pull-requests: write
 
 jobs:
   test:
@@ -36,3 +37,13 @@ jobs:
           files: core/build/reports/kover/report.xml
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Coverage PR comment
+        if: github.event_name == 'pull_request'
+        uses: madrapps/jacoco-report@v1.7.2
+        with:
+          paths: core/build/reports/kover/report.xml
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 60
+          min-coverage-changed-files: 80
+          update-comment: true
