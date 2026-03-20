@@ -2,8 +2,100 @@ package com.avsystem.justworks.core.gen
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
+import kotlin.test.assertTrue
 
 class NameUtilsTest {
+
+    // -- isValidKotlinIdentifier --
+
+    @Test
+    fun `valid identifier returns true`() {
+        assertTrue(isValidKotlinIdentifier("Circle"))
+    }
+
+    @Test
+    fun `identifier with underscores returns true`() {
+        assertTrue(isValidKotlinIdentifier("my_schema"))
+    }
+
+    @Test
+    fun `identifier starting with underscore returns true`() {
+        assertTrue(isValidKotlinIdentifier("_internal"))
+    }
+
+    @Test
+    fun `identifier with digits returns true`() {
+        assertTrue(isValidKotlinIdentifier("Schema2"))
+    }
+
+    @Test
+    fun `keyword true returns false`() {
+        assertFalse(isValidKotlinIdentifier("true"))
+    }
+
+    @Test
+    fun `keyword false returns false`() {
+        assertFalse(isValidKotlinIdentifier("false"))
+    }
+
+    @Test
+    fun `keyword class returns false`() {
+        assertFalse(isValidKotlinIdentifier("class"))
+    }
+
+    @Test
+    fun `keyword object returns false`() {
+        assertFalse(isValidKotlinIdentifier("object"))
+    }
+
+    @Test
+    fun `keyword when returns false`() {
+        assertFalse(isValidKotlinIdentifier("when"))
+    }
+
+    @Test
+    fun `keyword null returns false`() {
+        assertFalse(isValidKotlinIdentifier("null"))
+    }
+
+    @Test
+    fun `name starting with digit returns false`() {
+        assertFalse(isValidKotlinIdentifier("123abc"))
+    }
+
+    @Test
+    fun `empty string returns false`() {
+        assertFalse(isValidKotlinIdentifier(""))
+    }
+
+    // -- sanitizeSchemaName --
+
+    @Test
+    fun `valid name is returned unchanged`() {
+        assertEquals("Circle", sanitizeSchemaName("Circle", "Shape"))
+    }
+
+    @Test
+    fun `keyword true is prefixed with parent name`() {
+        assertEquals("DeviceStatusTrue", sanitizeSchemaName("true", "DeviceStatus"))
+    }
+
+    @Test
+    fun `keyword false is prefixed with parent name`() {
+        assertEquals("DeviceStatusFalse", sanitizeSchemaName("false", "DeviceStatus"))
+    }
+
+    @Test
+    fun `name starting with digit is prefixed with parent name`() {
+        assertEquals("Status123Abc", sanitizeSchemaName("123abc", "Status"))
+    }
+
+    @Test
+    fun `keyword class is prefixed with parent name`() {
+        assertEquals("TypeClass", sanitizeSchemaName("class", "Type"))
+    }
+
     // -- toCamelCase --
 
     @Test
