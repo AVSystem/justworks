@@ -496,7 +496,10 @@ class ModelGenerator(private val modelPackage: String) {
                 .asSequence()
                 .mapNotNull { it.schema }
             val requestRef = endpoint.requestBody?.schema
-            responseRefs + listOfNotNull(requestRef)
+            val parameterRefs = endpoint.parameters
+                .asSequence()
+                .map { it.schema }
+            responseRefs + listOfNotNull(requestRef) + parameterRefs
         }
         return schemaRefs.plus(endpointRefs).any { it.containsUuid() }
     }

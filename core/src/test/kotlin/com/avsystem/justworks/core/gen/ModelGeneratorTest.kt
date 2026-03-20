@@ -1,8 +1,12 @@
 package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.EnumBackingType
 import com.avsystem.justworks.core.model.EnumModel
+import com.avsystem.justworks.core.model.HttpMethod
+import com.avsystem.justworks.core.model.Parameter
+import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
@@ -1314,6 +1318,38 @@ class ModelGeneratorTest {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
         val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
         assertEquals(null, uuidSerializerFile, "Expected no UuidSerializer file without UUID properties")
+    }
+
+    @Test
+    fun `UUID in endpoint parameter triggers UuidSerializer generation`() {
+        val endpoint = Endpoint(
+            path = "/devices/{deviceId}",
+            method = HttpMethod.GET,
+            operationId = "getDevice",
+            summary = null,
+            tags = emptyList(),
+            parameters = listOf(
+                Parameter(
+                    name = "deviceId",
+                    location = ParameterLocation.PATH,
+                    required = true,
+                    schema = TypeRef.Primitive(PrimitiveType.UUID),
+                    description = null,
+                ),
+            ),
+            requestBody = null,
+            responses = emptyMap(),
+        )
+        val apiSpec = ApiSpec(
+            title = "Test",
+            version = "1.0",
+            endpoints = listOf(endpoint),
+            schemas = emptyList(),
+            enums = emptyList(),
+        )
+        val files = generator.generate(apiSpec)
+        val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
+        assertNotNull(uuidSerializerFile, "Expected UuidSerializer when UUID is used in endpoint parameter")
     }
 
     @Test
