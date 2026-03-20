@@ -30,7 +30,7 @@ import javax.inject.Inject
  */
 abstract class JustworksExtension
     @Inject
-    constructor(objects: ObjectFactory,) {
+    constructor(objects: ObjectFactory) {
         /**
          * Container of named OpenAPI spec configurations.
          *
