@@ -224,15 +224,10 @@ object SpecParser {
         // Resolve underlying type for primitive-only / $ref-wrapper schemas.
         // Uses $ref for wrapper schemas, otherwise resolves structurally
         // from type/format to bypass componentSchemaIdentity (which would self-reference).
-        val underlyingType = if (properties.isEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty()) {
-            val ref = schema.`$ref`
-                ?.removePrefix(SCHEMA_PREFIX)
-                ?.let(TypeRef::Reference)
-                ?: schema.resolveByType()
-            ref.takeUnless { it is TypeRef.Unknown }
-        } else {
-            null
-        }
+        val underlyingType = schema
+            .takeIf { properties.isEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty() }
+            ?.let { s -> s.`$ref`?.removePrefix(SCHEMA_PREFIX)?.let(TypeRef::Reference) ?: s.resolveByType() }
+            ?.takeUnless { it is TypeRef.Unknown }
 
         return SchemaModel(
             name = name,
