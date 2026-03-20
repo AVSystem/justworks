@@ -221,6 +221,13 @@ object SpecParser {
             Discriminator(propertyName = propertyName, mapping = disc.mapping.orEmpty())
         }
 
+        // Resolve underlying type for primitive-only / $ref-wrapper schemas
+        val underlyingType = if (properties.isEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty()) {
+            schema.toTypeRef().takeUnless { it is TypeRef.Unknown }
+        } else {
+            null
+        }
+
         return SchemaModel(
             name = name,
             description = schema.description,
@@ -230,6 +237,7 @@ object SpecParser {
             oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
+            underlyingType = underlyingType,
         )
     }
 
