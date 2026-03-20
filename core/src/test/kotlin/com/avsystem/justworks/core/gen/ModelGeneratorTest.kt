@@ -12,6 +12,7 @@ import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.TypeSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -53,24 +54,14 @@ class ModelGeneratorTest {
     fun `generates data class with DATA modifier`() {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
         assertEquals(1, files.size)
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         assertTrue(KModifier.DATA in typeSpec.modifiers, "Expected DATA modifier")
     }
 
     @Test
     fun `generates class with Serializable annotation`() {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val annotations = typeSpec.annotations.map { it.typeName.toString() }
         assertTrue("kotlinx.serialization.Serializable" in annotations, "Expected @Serializable")
     }
@@ -78,12 +69,7 @@ class ModelGeneratorTest {
     @Test
     fun `required property is non-nullable in constructor`() {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor, "Expected primary constructor")
         val idParam = constructor.parameters.first { it.name == "id" }
         assertTrue(!idParam.type.isNullable, "Required property 'id' should be non-nullable")
@@ -92,12 +78,7 @@ class ModelGeneratorTest {
     @Test
     fun `optional property is nullable with default null`() {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val tagParam = constructor.parameters.first { it.name == "tag" }
         assertTrue(tagParam.type.isNullable, "Optional property 'tag' should be nullable")
@@ -108,12 +89,7 @@ class ModelGeneratorTest {
     @Test
     fun `every property has SerialName annotation with wire name`() {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         for (prop in typeSpec.propertySpecs) {
             val serialName =
                 prop.annotations.firstOrNull {
@@ -140,13 +116,8 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
-        val prop = typeSpec.propertySpecs.first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val prop = typeSpec.propertySpecs[0]
         assertEquals("createdAt", prop.name)
         val serialNameAnnotation =
             prop.annotations.first {
@@ -161,12 +132,7 @@ class ModelGeneratorTest {
     @Test
     fun `schema with description produces KDoc`() {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         assertTrue(typeSpec.kdoc.toString().contains("A pet in the store"), "Expected KDoc from description")
     }
 
@@ -187,12 +153,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val petProp = typeSpec.propertySpecs.first { it.name == "pet" }
         assertEquals("com.example.model.Pet", petProp.type.toString())
     }
@@ -207,12 +168,7 @@ class ModelGeneratorTest {
     @Test
     fun `required properties ordered before optional in constructor`() {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         // id and name are required, tag is optional -> tag should be last
@@ -232,12 +188,7 @@ class ModelGeneratorTest {
     @Test
     fun `string enum has Serializable annotation`() {
         val files = generator.generate(spec(enums = listOf(statusEnum)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val annotations = typeSpec.annotations.map { it.typeName.toString() }
         assertTrue("kotlinx.serialization.Serializable" in annotations, "Expected @Serializable on enum")
     }
@@ -245,12 +196,7 @@ class ModelGeneratorTest {
     @Test
     fun `string enum constants have SerialName with wire value`() {
         val files = generator.generate(spec(enums = listOf(statusEnum)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         assertEquals(3, typeSpec.enumConstants.size)
         for ((name, spec) in typeSpec.enumConstants) {
             val serialName =
@@ -264,12 +210,7 @@ class ModelGeneratorTest {
     @Test
     fun `enum constant names are UPPER_SNAKE_CASE`() {
         val files = generator.generate(spec(enums = listOf(statusEnum)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val names = typeSpec.enumConstants.keys.toList()
         assertEquals(listOf("AVAILABLE", "PENDING", "SOLD"), names)
     }
@@ -277,7 +218,7 @@ class ModelGeneratorTest {
     @Test
     fun `enum constants do not produce anonymous class body`() {
         val files = generator.generate(spec(enums = listOf(statusEnum)))
-        val source = files.first().toString()
+        val source = files[0].toString()
         // Assert no class body braces on enum constants
         assertFalse(
             source.contains(Regex("""[A-Z_]+\(\) \{""")),
@@ -305,12 +246,7 @@ class ModelGeneratorTest {
                 values = listOf("1", "2", "3"),
             )
         val files = generator.generate(spec(enums = listOf(intEnum)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constants = typeSpec.enumConstants.entries.toList()
         assertEquals("1", constants[0].key)
         assertEquals("2", constants[1].key)
@@ -373,15 +309,10 @@ class ModelGeneratorTest {
             )
 
         val files = generator.generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
-        val paymentType =
-            files
-                .first { it.name == "Payment" }
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val paymentType = files.first { it.name == "Payment" }.members.filterIsInstance<TypeSpec>()[0]
 
         assertTrue(KModifier.SEALED in paymentType.modifiers, "Expected SEALED modifier on Payment")
-        assertEquals(com.squareup.kotlinpoet.TypeSpec.Kind.INTERFACE, paymentType.kind, "Expected INTERFACE kind")
+        assertEquals(TypeSpec.Kind.INTERFACE, paymentType.kind, "Expected INTERFACE kind")
     }
 
     @Test
@@ -410,12 +341,7 @@ class ModelGeneratorTest {
             )
 
         val files = generator.generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
-        val creditCardType =
-            files
-                .first { it.name == "CreditCard" }
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val creditCardType = files.first { it.name == "CreditCard" }.members.filterIsInstance<TypeSpec>()[0]
 
         val serialNameAnnotation =
             creditCardType.annotations.find {
@@ -454,12 +380,7 @@ class ModelGeneratorTest {
             )
 
         val files = generator.generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
-        val paymentType =
-            files
-                .first { it.name == "Payment" }
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val paymentType = files.first { it.name == "Payment" }.members.filterIsInstance<TypeSpec>()[0]
 
         val discriminatorAnnotation =
             paymentType.annotations.find {
@@ -491,12 +412,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "name" }
         assertEquals("\"default-name\"", param.defaultValue.toString())
@@ -520,12 +436,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val ageParam = constructor.parameters.first { it.name == "age" }
         assertEquals("42", ageParam.defaultValue.toString())
@@ -550,12 +461,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "active" }
         assertEquals("true", param.defaultValue.toString())
@@ -584,12 +490,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "createdAt" }
         assertTrue(
@@ -619,12 +520,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "eventDate" }
         assertTrue(
@@ -653,12 +549,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         // Expected order: required (no default), withDefault (has default), optional (nullable)
@@ -682,12 +573,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec =
-            files
-                .first()
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "name" }
         assertTrue(param.type.isNullable, "Property should be nullable")
@@ -719,12 +605,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
         val files = generator.generate(spec(schemas = listOf(schema), enums = listOf(statusEnum)))
-        val typeSpec =
-            files
-                .first { it.name == "Task" }
-                .members
-                .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-                .first()
+        val typeSpec = files.first { it.name == "Task" }.members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "status" }
         assertTrue(
@@ -751,14 +632,14 @@ class ModelGeneratorTest {
         val files = generator.generate(spec(schemas = listOf(groupIdSchema)))
         assertEquals(1, files.size)
 
-        val file = files.first()
+        val file = files[0]
         assertEquals("GroupId", file.name)
 
         // Verify it contains a TypeAliasSpec, not a TypeSpec
         val typeAliases = file.members.filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
         assertEquals(1, typeAliases.size, "Expected one type alias")
 
-        val typeAlias = typeAliases.first()
+        val typeAlias = typeAliases[0]
         assertEquals("GroupId", typeAlias.name)
         assertEquals("kotlin.String", typeAlias.type.toString(), "Default typealias should be String")
     }
@@ -908,11 +789,7 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(userIdSchema)))
-        val typeAlias = files
-            .first()
-            .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
-            .first()
+        val typeAlias = files[0].members.filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()[0]
 
         assertTrue(
             typeAlias.kdoc.toString().contains("Unique identifier for a user"),
@@ -925,8 +802,8 @@ class ModelGeneratorTest {
         // Verify existing behavior unchanged - schemas with properties still get data classes
         val files = generator.generate(spec(schemas = listOf(petSchema)))
 
-        val typeSpecs = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-        val typeAliases = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
+        val typeSpecs = files[0].members.filterIsInstance<TypeSpec>()
+        val typeAliases = files[0].members.filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
 
         assertEquals(1, typeSpecs.size, "Schema with properties should generate TypeSpec")
         assertEquals(0, typeAliases.size, "Schema with properties should not generate TypeAliasSpec")
@@ -956,7 +833,7 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val source = files.first().toString()
+        val source = files[0].toString()
 
         // Hard keyword: KotlinPoet should backtick-escape
         assertTrue(source.contains("`class`"), "Expected backtick-escaped 'class' property in:\n${source.take(500)}")
@@ -982,7 +859,7 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val source = files.first().toString()
+        val source = files[0].toString()
 
         // Hard keyword: KotlinPoet should backtick-escape
         assertTrue(source.contains("`object`"), "Expected backtick-escaped 'object' property in:\n${source.take(500)}")
@@ -1008,7 +885,7 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val source = files.first().toString()
+        val source = files[0].toString()
 
         // Hard keyword: KotlinPoet should backtick-escape
         assertTrue(source.contains("`val`"), "Expected backtick-escaped 'val' property in:\n${source.take(500)}")
@@ -1034,8 +911,8 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
-        val prop = typeSpec.propertySpecs.first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val prop = typeSpec.propertySpecs[0]
 
         assertEquals("values", prop.name) // No escaping needed for non-keyword
         val serialName = prop.annotations.first { it.typeName.toString().contains("SerialName") }
@@ -1058,8 +935,8 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
-        val prop = typeSpec.propertySpecs.first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val prop = typeSpec.propertySpecs[0]
 
         assertEquals("size", prop.name) // No escaping needed for non-keyword
         val serialName = prop.annotations.first { it.typeName.toString().contains("SerialName") }
@@ -1082,8 +959,8 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
-        val prop = typeSpec.propertySpecs.first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val prop = typeSpec.propertySpecs[0]
 
         assertEquals("entries", prop.name) // No escaping needed for non-keyword
         val serialName = prop.annotations.first { it.typeName.toString().contains("SerialName") }
@@ -1106,8 +983,8 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
-        val prop = typeSpec.propertySpecs.first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val prop = typeSpec.propertySpecs[0]
 
         assertEquals("keys", prop.name) // No escaping needed for non-keyword
         val serialName = prop.annotations.first { it.typeName.toString().contains("SerialName") }
@@ -1173,11 +1050,7 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec = files
-            .first()
-            .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-            .first()
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
 
         val nicknameParam = constructor.parameters.first { it.name == "nickname" }
@@ -1219,7 +1092,7 @@ class ModelGeneratorTest {
         )
         val files = generator.generate(spec(schemas = listOf(baseSchema, composedSchema)))
         val childFile = files.first { it.name == "Child" }
-        val typeSpec = childFile.members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
+        val typeSpec = childFile.members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
 
         val optionalParam = constructor.parameters.first { it.name == "optionalField" }
@@ -1518,7 +1391,7 @@ class ModelGeneratorTest {
         )
         val files = generator.generate(spec(schemas = listOf(composedSchema)))
         val childFile = files.first { it.name == "Child" }
-        val typeSpec = childFile.members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
+        val typeSpec = childFile.members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
 
         val idParam = constructor.parameters.first { it.name == "id" }
