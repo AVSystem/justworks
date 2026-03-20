@@ -996,6 +996,78 @@ class ModelGeneratorTest {
     }
 
     @Test
+    fun `data class with UUID array property generates UuidSerializer and OptIn annotation`() {
+        val schema = SchemaModel(
+            name = "DeviceWithUuidList",
+            description = null,
+            properties = listOf(
+                PropertyModel(
+                    "ids",
+                    TypeRef.Array(TypeRef.Primitive(PrimitiveType.UUID)),
+                    null,
+                    false,
+                ),
+            ),
+            requiredProperties = setOf("ids"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val allContent = files.joinToString("\n") { it.toString() }
+
+        assertTrue(
+            allContent.contains("@Serializable(with = UuidSerializer::class)"),
+            "Expected @Serializable(with = UuidSerializer::class) on UUID used inside array, got:\n$allContent",
+        )
+
+        val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
+        assertNotNull(uuidSerializerFile, "Expected UuidSerializer file to be generated for UUID used inside array")
+
+        assertTrue(
+            allContent.contains("ExperimentalUuidApi"),
+            "Expected @OptIn(ExperimentalUuidApi::class) annotation when UUID is used inside array, got:\n$allContent",
+        )
+    }
+
+    @Test
+    fun `data class with UUID map property generates UuidSerializer and OptIn annotation`() {
+        val schema = SchemaModel(
+            name = "DeviceWithUuidMap",
+            description = null,
+            properties = listOf(
+                PropertyModel(
+                    "idByKey",
+                    TypeRef.Map(TypeRef.Primitive(PrimitiveType.UUID)),
+                    null,
+                    false,
+                ),
+            ),
+            requiredProperties = setOf("idByKey"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val allContent = files.joinToString("\n") { it.toString() }
+
+        assertTrue(
+            allContent.contains("@Serializable(with = UuidSerializer::class)"),
+            "Expected @Serializable(with = UuidSerializer::class) on UUID used inside map, got:\n$allContent",
+        )
+
+        val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
+        assertNotNull(uuidSerializerFile, "Expected UuidSerializer file to be generated for UUID used inside map")
+
+        assertTrue(
+            allContent.contains("ExperimentalUuidApi"),
+            "Expected @OptIn(ExperimentalUuidApi::class) annotation when UUID is used inside map, got:\n$allContent",
+        )
+    }
+
+    @Test
     fun `data class without UUID property does not generate UuidSerializer`() {
         val files = generator.generate(spec(schemas = listOf(petSchema)))
         val uuidSerializerFile = files.find { it.name == "UuidSerializer" }

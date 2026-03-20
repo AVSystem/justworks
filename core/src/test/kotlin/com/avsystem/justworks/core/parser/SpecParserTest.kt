@@ -402,6 +402,78 @@ class SpecParserTest : SpecParserTestBase() {
         assertEquals(PrimitiveType.DOUBLE, type.type)
     }
 
+    @Test
+    fun `string with format hostname produces STRING type ref`() {
+        val spec = formatSpec("string", "hostname")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.STRING, type.type)
+    }
+
+    @Test
+    fun `string with format ipv4 produces STRING type ref`() {
+        val spec = formatSpec("string", "ipv4")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.STRING, type.type)
+    }
+
+    @Test
+    fun `string with format ipv6 produces STRING type ref`() {
+        val spec = formatSpec("string", "ipv6")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.STRING, type.type)
+    }
+
+    @Test
+    fun `string with format password produces STRING type ref`() {
+        val spec = formatSpec("string", "password")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.STRING, type.type)
+    }
+
+    @Test
+    fun `string with format byte produces BYTE_ARRAY type ref`() {
+        val spec = formatSpec("string", "byte")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.BYTE_ARRAY, type.type)
+    }
+
+    @Test
+    fun `string with format date produces DATE type ref`() {
+        val spec = formatSpec("string", "date")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.DATE, type.type)
+    }
+
+    @Test
+    fun `string with format date-time produces DATE_TIME type ref`() {
+        val spec = formatSpec("string", "date-time")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.DATE_TIME, type.type)
+    }
+
+    @Test
+    fun `integer with format int64 produces LONG type ref`() {
+        val spec = formatSpec("integer", "int64")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.LONG, type.type)
+    }
+
+    @Test
+    fun `number with format float produces FLOAT type ref`() {
+        val spec = formatSpec("number", "float")
+        val prop = parseSpec(spec).schemas.first().properties.first()
+        val type = assertIs<TypeRef.Primitive>(prop.type)
+        assertEquals(PrimitiveType.FLOAT, type.type)
+    }
+
     // -- Helpers --
 
     private fun formatSpec(type: String, format: String): File =
