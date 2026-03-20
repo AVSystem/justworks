@@ -65,6 +65,12 @@ class TypeMappingTest {
         assertEquals("kotlinx.datetime.LocalDate", result.toString())
     }
 
+    @Test
+    fun `maps UUID to kotlin uuid Uuid`() {
+        val result = TypeMapping.toTypeName(TypeRef.Primitive(PrimitiveType.UUID), pkg)
+        assertEquals("kotlin.uuid.Uuid", result.toString())
+    }
+
     // -- Array --
 
     @Test
