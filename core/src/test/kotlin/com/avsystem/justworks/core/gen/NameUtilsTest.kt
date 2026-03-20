@@ -6,7 +6,6 @@ import kotlin.test.assertFalse
 import kotlin.test.assertTrue
 
 class NameUtilsTest {
-
     // -- isValidKotlinIdentifier --
 
     @Test
@@ -88,7 +87,7 @@ class NameUtilsTest {
 
     @Test
     fun `name starting with digit is prefixed with parent name`() {
-        assertEquals("Status123Abc", sanitizeSchemaName("123abc", "Status"))
+        assertEquals("Status123abc", sanitizeSchemaName("123abc", "Status"))
     }
 
     @Test

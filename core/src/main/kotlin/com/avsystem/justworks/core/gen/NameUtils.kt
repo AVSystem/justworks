@@ -53,6 +53,56 @@ fun String.toInlinedName(): String = replace(".", "_")
  * - ("PUT", "/users/{userId}/orders/{orderId}") -> "PutUsersByUserIdOrdersByOrderId"
  * - ("GET", "/api-tokens") -> "GetApiTokens"
  */
+private val KOTLIN_HARD_KEYWORDS = setOf(
+    "as",
+    "break",
+    "class",
+    "continue",
+    "do",
+    "else",
+    "false",
+    "for",
+    "fun",
+    "if",
+    "in",
+    "interface",
+    "is",
+    "null",
+    "object",
+    "package",
+    "return",
+    "super",
+    "this",
+    "throw",
+    "true",
+    "try",
+    "typealias",
+    "typeof",
+    "val",
+    "var",
+    "when",
+    "while",
+)
+
+/**
+ * Returns true if [name] is a valid Kotlin identifier (not a hard keyword,
+ * starts with letter or underscore, contains only alphanumerics and underscores).
+ */
+fun isValidKotlinIdentifier(name: String): Boolean =
+    name.matches(Regex("^[a-zA-Z_][a-zA-Z0-9_]*$")) && name !in KOTLIN_HARD_KEYWORDS
+
+/**
+ * Returns [name] unchanged if it is a valid Kotlin identifier; otherwise
+ * prefixes [parentName] and converts [name] to PascalCase.
+ *
+ * Example: sanitizeSchemaName("true", "DeviceStatus") -> "DeviceStatusTrue"
+ */
+fun sanitizeSchemaName(name: String, parentName: String): String = if (isValidKotlinIdentifier(name)) {
+    name
+} else {
+    "$parentName${name.toPascalCase()}"
+}
+
 fun operationNameFromPath(method: String, path: String): String {
     val methodPart = method.lowercase().replaceFirstChar { it.uppercase() }
 
