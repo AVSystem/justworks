@@ -932,10 +932,43 @@ class ModelGeneratorTest {
         assertEquals(0, typeAliases.size, "Schema with properties should not generate TypeAliasSpec")
     }
 
-    // -- SER-03: Kotlin keyword escaping --
+    // -- SCHM-06: Reserved word and name conflict escaping --
+    //
+    // These tests verify that:
+    // 1. Hard Kotlin keywords (class, object, val) are auto-escaped by KotlinPoet with backticks
+    // 2. Non-keyword names that could conflict (values, size, entries, keys) are safe on data classes
+    // 3. @SerialName always preserves the original wire name regardless of escaping
+    //
 
     @Test
-    fun `property named with Kotlin keyword generates backtick-escaped name with correct SerialName`() {
+    fun `property named 'class' generates backtick-escaped name with SerialName`() {
+        // KotlinPoet auto-escapes hard keywords — 'class' should become `class` in generated source
+        val schema = SchemaModel(
+            name = "Reserved",
+            description = null,
+            properties = listOf(
+                PropertyModel("class", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("class"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val source = files.first().toString()
+
+        // Hard keyword: KotlinPoet should backtick-escape
+        assertTrue(source.contains("`class`"), "Expected backtick-escaped 'class' property in:\n${source.take(500)}")
+        assertTrue(
+            source.contains("@SerialName(\"class\")"),
+            "Expected @SerialName with original wire name 'class'",
+        )
+    }
+
+    @Test
+    fun `property named 'object' generates backtick-escaped name with SerialName`() {
+        // KotlinPoet auto-escapes hard keywords — 'object' should become `object` in generated source
         val schema = SchemaModel(
             name = "Item",
             description = null,
@@ -949,20 +982,136 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val typeSpec = files
-            .first()
-            .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
-            .first()
+        val source = files.first().toString()
 
+        // Hard keyword: KotlinPoet should backtick-escape
+        assertTrue(source.contains("`object`"), "Expected backtick-escaped 'object' property in:\n${source.take(500)}")
+        assertTrue(
+            source.contains("@SerialName(\"object\")"),
+            "Expected @SerialName with original wire name 'object'",
+        )
+    }
+
+    @Test
+    fun `property named 'val' generates backtick-escaped name with SerialName`() {
+        // KotlinPoet auto-escapes hard keywords — 'val' should become `val` in generated source
+        val schema = SchemaModel(
+            name = "Reserved",
+            description = null,
+            properties = listOf(
+                PropertyModel("val", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("val"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val source = files.first().toString()
+
+        // Hard keyword: KotlinPoet should backtick-escape
+        assertTrue(source.contains("`val`"), "Expected backtick-escaped 'val' property in:\n${source.take(500)}")
+        assertTrue(
+            source.contains("@SerialName(\"val\")"),
+            "Expected @SerialName with original wire name 'val'",
+        )
+    }
+
+    @Test
+    fun `property named 'values' on data class does not conflict`() {
+        // Data classes do not inherit Map/Collection members, so 'values' is safe without escaping
+        val schema = SchemaModel(
+            name = "Container",
+            description = null,
+            properties = listOf(
+                PropertyModel("values", TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING)), null, false),
+            ),
+            requiredProperties = setOf("values"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
         val prop = typeSpec.propertySpecs.first()
 
-        // @SerialName should still use the original wire name
-        val serialName = prop.annotations.first { it.typeName.toString() == "kotlinx.serialization.SerialName" }
-        assertTrue(
-            serialName.members.any { it.toString().contains("\"object\"") },
-            "Expected @SerialName(\"object\") for wire name",
+        assertEquals("values", prop.name) // No escaping needed for non-keyword
+        val serialName = prop.annotations.first { it.typeName.toString().contains("SerialName") }
+        assertTrue(serialName.members.any { it.toString().contains("\"values\"") })
+    }
+
+    @Test
+    fun `property named 'size' on data class does not conflict`() {
+        // Data classes do not inherit Map/Collection members, so 'size' is safe without escaping
+        val schema = SchemaModel(
+            name = "Container",
+            description = null,
+            properties = listOf(
+                PropertyModel("size", TypeRef.Primitive(PrimitiveType.INT), null, false),
+            ),
+            requiredProperties = setOf("size"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
         )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
+        val prop = typeSpec.propertySpecs.first()
+
+        assertEquals("size", prop.name) // No escaping needed for non-keyword
+        val serialName = prop.annotations.first { it.typeName.toString().contains("SerialName") }
+        assertTrue(serialName.members.any { it.toString().contains("\"size\"") })
+    }
+
+    @Test
+    fun `property named 'entries' on data class does not conflict`() {
+        // Data classes do not inherit Map/Collection members, so 'entries' is safe without escaping
+        val schema = SchemaModel(
+            name = "Container",
+            description = null,
+            properties = listOf(
+                PropertyModel("entries", TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING)), null, false),
+            ),
+            requiredProperties = setOf("entries"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
+        val prop = typeSpec.propertySpecs.first()
+
+        assertEquals("entries", prop.name) // No escaping needed for non-keyword
+        val serialName = prop.annotations.first { it.typeName.toString().contains("SerialName") }
+        assertTrue(serialName.members.any { it.toString().contains("\"entries\"") })
+    }
+
+    @Test
+    fun `property named 'keys' on data class does not conflict`() {
+        // Data classes do not inherit Map/Collection members, so 'keys' is safe without escaping
+        val schema = SchemaModel(
+            name = "Container",
+            description = null,
+            properties = listOf(
+                PropertyModel("keys", TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING)), null, false),
+            ),
+            requiredProperties = setOf("keys"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files.first().members.filterIsInstance<com.squareup.kotlinpoet.TypeSpec>().first()
+        val prop = typeSpec.propertySpecs.first()
+
+        assertEquals("keys", prop.name) // No escaping needed for non-keyword
+        val serialName = prop.annotations.first { it.typeName.toString().contains("SerialName") }
+        assertTrue(serialName.members.any { it.toString().contains("\"keys\"") })
     }
 
     // -- ROB-01: Circular schema visited-set guard --
