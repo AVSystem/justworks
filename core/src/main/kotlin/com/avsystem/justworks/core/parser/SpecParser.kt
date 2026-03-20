@@ -389,15 +389,26 @@ object SpecParser {
 
     private val STRING_FORMAT_MAP = mapOf(
         "byte" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+        "binary" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
         "date-time" to TypeRef.Primitive(PrimitiveType.DATE_TIME),
         "date" to TypeRef.Primitive(PrimitiveType.DATE),
+        "uuid" to TypeRef.Primitive(PrimitiveType.UUID),
+        "uri" to TypeRef.Primitive(PrimitiveType.STRING),
+        "url" to TypeRef.Primitive(PrimitiveType.STRING),
+        "email" to TypeRef.Primitive(PrimitiveType.STRING),
+        "hostname" to TypeRef.Primitive(PrimitiveType.STRING),
+        "ipv4" to TypeRef.Primitive(PrimitiveType.STRING),
+        "ipv6" to TypeRef.Primitive(PrimitiveType.STRING),
+        "password" to TypeRef.Primitive(PrimitiveType.STRING),
     )
 
     private val INTEGER_FORMAT_MAP = mapOf(
+        "int32" to TypeRef.Primitive(PrimitiveType.INT),
         "int64" to TypeRef.Primitive(PrimitiveType.LONG),
     )
 
     private val NUMBER_FORMAT_MAP = mapOf(
         "float" to TypeRef.Primitive(PrimitiveType.FLOAT),
+        "double" to TypeRef.Primitive(PrimitiveType.DOUBLE),
     )
 }
