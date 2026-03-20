@@ -54,7 +54,8 @@ object ApiClientBaseGenerator {
 
     private fun buildMapToResult(t: TypeVariableName): FunSpec = FunSpec
         .builder(MAP_TO_RESULT)
-        .addModifiers(KModifier.PRIVATE, KModifier.SUSPEND, KModifier.INLINE)
+        .addAnnotation(PublishedApi::class)
+        .addModifiers(KModifier.INTERNAL, KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
