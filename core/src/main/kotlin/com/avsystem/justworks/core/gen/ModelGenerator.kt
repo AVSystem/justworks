@@ -323,15 +323,6 @@ class ModelGenerator(private val modelPackage: String) {
                 .initializer(kotlinName)
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
 
-            if (prop.type.containsUuid()) {
-                propBuilder.addAnnotation(
-                    AnnotationSpec
-                        .builder(SERIALIZABLE)
-                        .addMember("with = %T::class", ClassName(modelPackage, "UuidSerializer"))
-                        .build(),
-                )
-            }
-
             propBuilder.build()
         }
 
@@ -357,6 +348,12 @@ class ModelGenerator(private val modelPackage: String) {
         if (hasUuid) {
             fileBuilder.addAnnotation(
                 AnnotationSpec.builder(OPT_IN).addMember("%T::class", EXPERIMENTAL_UUID_API).build(),
+            )
+            fileBuilder.addAnnotation(
+                AnnotationSpec
+                    .builder(USE_SERIALIZERS)
+                    .addMember("%T::class", ClassName(modelPackage, "UuidSerializer"))
+                    .build(),
             )
         }
 
@@ -489,8 +486,16 @@ class ModelGenerator(private val modelPackage: String) {
         is TypeRef.Reference, TypeRef.Unknown -> false
     }
 
-    private fun ApiSpec.usesUuid(): Boolean = schemas.any { schema ->
-        schema.properties.any { it.type.containsUuid() }
+    private fun ApiSpec.usesUuid(): Boolean {
+        val schemaRefs = schemas.asSequence().flatMap { schema -> schema.properties.map { it.type } }
+        val endpointRefs = endpoints.asSequence().flatMap { endpoint ->
+            val responseRefs = endpoint.responses.values
+                .asSequence()
+                .mapNotNull { it.schema }
+            val requestRef = endpoint.requestBody?.schema
+            responseRefs + listOfNotNull(requestRef)
+        }
+        return schemaRefs.plus(endpointRefs).any { it.containsUuid() }
     }
 
     private fun generateUuidSerializer(): FileSpec {

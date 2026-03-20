@@ -30,6 +30,7 @@ val PATCH_FUN = MemberName("io.ktor.client.request", "patch")
 // ============================================================================
 
 val SERIALIZABLE = ClassName("kotlinx.serialization", "Serializable")
+val USE_SERIALIZERS = ClassName("kotlinx.serialization", "UseSerializers")
 val SERIAL_NAME = ClassName("kotlinx.serialization", "SerialName")
 val EXPERIMENTAL_SERIALIZATION_API = ClassName("kotlinx.serialization", "ExperimentalSerializationApi")
 val SERIALIZATION_EXCEPTION = ClassName("kotlinx.serialization", "SerializationException")

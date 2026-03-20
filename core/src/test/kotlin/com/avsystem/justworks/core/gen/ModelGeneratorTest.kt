@@ -970,7 +970,7 @@ class ModelGeneratorTest {
     }
 
     @Test
-    fun `data class with UUID property has Serializable with UuidSerializer annotation`() {
+    fun `data class with UUID property has file-level UseSerializers annotation`() {
         val schema = SchemaModel(
             name = "Device",
             description = null,
@@ -988,8 +988,8 @@ class ModelGeneratorTest {
         assertNotNull(deviceFile)
         val content = deviceFile.toString()
         assertTrue(
-            content.contains("@Serializable(with = UuidSerializer::class)"),
-            "Expected @Serializable(with = UuidSerializer::class) on UUID property, got:\n$content",
+            content.contains("@file:UseSerializers(UuidSerializer::class)"),
+            "Expected @file:UseSerializers(UuidSerializer::class) file annotation, got:\n$content",
         )
     }
 
@@ -1018,7 +1018,7 @@ class ModelGeneratorTest {
     }
 
     @Test
-    fun `data class with UUID array property generates UuidSerializer and OptIn annotation`() {
+    fun `data class with UUID array property generates UuidSerializer and file-level annotations`() {
         val schema = SchemaModel(
             name = "DeviceWithUuidList",
             description = null,
@@ -1037,24 +1037,26 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val allContent = files.joinToString("\n") { it.toString() }
+        val deviceFile = files.find { it.name == "DeviceWithUuidList" }
+        assertNotNull(deviceFile)
+        val content = deviceFile.toString()
 
         assertTrue(
-            allContent.contains("@Serializable(with = UuidSerializer::class)"),
-            "Expected @Serializable(with = UuidSerializer::class) on UUID used inside array, got:\n$allContent",
+            content.contains("@file:UseSerializers(UuidSerializer::class)"),
+            "Expected @file:UseSerializers(UuidSerializer::class) for UUID inside array, got:\n$content",
+        )
+
+        assertTrue(
+            content.contains("ExperimentalUuidApi"),
+            "Expected @OptIn(ExperimentalUuidApi::class) for UUID inside array, got:\n$content",
         )
 
         val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
-        assertNotNull(uuidSerializerFile, "Expected UuidSerializer file to be generated for UUID used inside array")
-
-        assertTrue(
-            allContent.contains("ExperimentalUuidApi"),
-            "Expected @OptIn(ExperimentalUuidApi::class) annotation when UUID is used inside array, got:\n$allContent",
-        )
+        assertNotNull(uuidSerializerFile, "Expected UuidSerializer file to be generated for UUID inside array")
     }
 
     @Test
-    fun `data class with UUID map property generates UuidSerializer and OptIn annotation`() {
+    fun `data class with UUID map property generates UuidSerializer and file-level annotations`() {
         val schema = SchemaModel(
             name = "DeviceWithUuidMap",
             description = null,
@@ -1073,20 +1075,22 @@ class ModelGeneratorTest {
             discriminator = null,
         )
         val files = generator.generate(spec(schemas = listOf(schema)))
-        val allContent = files.joinToString("\n") { it.toString() }
+        val deviceFile = files.find { it.name == "DeviceWithUuidMap" }
+        assertNotNull(deviceFile)
+        val content = deviceFile.toString()
 
         assertTrue(
-            allContent.contains("@Serializable(with = UuidSerializer::class)"),
-            "Expected @Serializable(with = UuidSerializer::class) on UUID used inside map, got:\n$allContent",
+            content.contains("@file:UseSerializers(UuidSerializer::class)"),
+            "Expected @file:UseSerializers(UuidSerializer::class) for UUID inside map, got:\n$content",
+        )
+
+        assertTrue(
+            content.contains("ExperimentalUuidApi"),
+            "Expected @OptIn(ExperimentalUuidApi::class) for UUID inside map, got:\n$content",
         )
 
         val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
-        assertNotNull(uuidSerializerFile, "Expected UuidSerializer file to be generated for UUID used inside map")
-
-        assertTrue(
-            allContent.contains("ExperimentalUuidApi"),
-            "Expected @OptIn(ExperimentalUuidApi::class) annotation when UUID is used inside map, got:\n$allContent",
-        )
+        assertNotNull(uuidSerializerFile, "Expected UuidSerializer file to be generated for UUID inside map")
     }
 
     @Test
