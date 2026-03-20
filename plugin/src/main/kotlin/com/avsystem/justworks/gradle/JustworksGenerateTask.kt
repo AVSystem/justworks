@@ -1,8 +1,6 @@
 package com.avsystem.justworks.gradle
 
-import com.avsystem.justworks.core.gen.ApiClientBaseGenerator
-import com.avsystem.justworks.core.gen.ClientGenerator
-import com.avsystem.justworks.core.gen.ModelGenerator
+import com.avsystem.justworks.core.gen.CodeGenerator
 import com.avsystem.justworks.core.parser.ParseResult
 import com.avsystem.justworks.core.parser.SpecParser
 import org.gradle.api.DefaultTask
@@ -17,13 +15,13 @@ import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.PathSensitive
 import org.gradle.api.tasks.PathSensitivity
 import org.gradle.api.tasks.TaskAction
+import java.io.File
 
 /**
  * Gradle task that generates Kotlin source files from an OpenAPI spec.
  *
- * Parses the OpenAPI spec via [SpecParser], feeds the result to [ModelGenerator],
- * [ClientGenerator], and [ApiClientBaseGenerator], then writes the generated
- * Kotlin source files to the output directory.
+ * Parses the OpenAPI spec via [SpecParser], feeds the result to [CodeGenerator],
+ * and writes the generated Kotlin source files to the output directory.
  */
 @CacheableTask
 abstract class JustworksGenerateTask : DefaultTask() {
@@ -31,10 +29,6 @@ abstract class JustworksGenerateTask : DefaultTask() {
     @get:InputFile
     @get:PathSensitive(PathSensitivity.RELATIVE)
     abstract val specFile: RegularFileProperty
-
-    /** Base package name for generated code. */
-    @get:Input
-    abstract val packageName: Property<String>
 
     /** Package for generated API client classes. */
     @get:Input
@@ -50,47 +44,34 @@ abstract class JustworksGenerateTask : DefaultTask() {
 
     @TaskAction
     fun generate() {
-        val outDir = outputDir.get().asFile
+        val outDir = outputDir.get().asFile.recreateDirectory()
 
-        // Clean output directory before generation to prevent stale files
-        if (outDir.exists()) {
-            outDir.deleteRecursively()
-        }
-        outDir.mkdirs()
-
-        val specFile = specFile.get().asFile
-        val result = SpecParser.parse(specFile)
-
-        when (result) {
+        val spec = specFile.get().asFile
+        when (val result = SpecParser.parse(spec)) {
             is ParseResult.Failure -> {
                 throw GradleException(
-                    "Failed to parse spec (task: $name): ${specFile.name}:\n${result.errors.joinToString("\n")}",
+                    "Failed to parse spec (task: $name): ${spec.name}:\n${result.errors.joinToString("\n")}",
                 )
             }
 
             is ParseResult.Success -> {
-                val apiSpec = result.apiSpec
-
-                val modelFiles = ModelGenerator(modelPackage.get()).generate(apiSpec)
-                modelFiles.forEach { it.writeTo(outDir) }
-
-                val hasPolymorphicTypes = apiSpec.schemas.any {
-                    !it.oneOf.isNullOrEmpty() || !it.anyOf.isNullOrEmpty()
-                }
-
-                val clientFiles = ClientGenerator(apiPackage.get(), modelPackage.get())
-                    .generate(apiSpec, hasPolymorphicTypes)
-                clientFiles.forEach { it.writeTo(outDir) }
-
-                // Generate ApiClientBase when spec has endpoints
-                if (apiSpec.endpoints.isNotEmpty()) {
-                    ApiClientBaseGenerator.generate().writeTo(outDir)
-                }
+                val (modelCount, clientCount) = CodeGenerator.generate(
+                    spec = result.apiSpec,
+                    modelPackage = modelPackage.get(),
+                    apiPackage = apiPackage.get(),
+                    outputDir = outDir,
+                )
 
                 logger.lifecycle(
-                    "Generated ${modelFiles.size} model files, ${clientFiles.size} client files from ${specFile.name}",
+                    "Generated $modelCount model files, $clientCount client files from ${spec.name}",
                 )
             }
         }
     }
+}
+
+internal fun File.recreateDirectory(): File {
+    if (exists()) deleteRecursively()
+    mkdirs()
+    return this
 }
