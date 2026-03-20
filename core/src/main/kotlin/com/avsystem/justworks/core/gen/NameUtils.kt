@@ -42,6 +42,17 @@ fun String.toEnumConstantName(): String {
  */
 fun String.toInlinedName(): String = replace(".", "_")
 
+/**
+ * Generates a PascalCase operation name from HTTP method and path.
+ * Path parameters like {id} become "ById", {userId} becomes "ByUserId".
+ * Handles hyphens, underscores, and dots in path segments.
+ *
+ * Examples:
+ * - ("POST", "/pets") -> "PostPets"
+ * - ("GET", "/pets/{id}") -> "GetPetsById"
+ * - ("PUT", "/users/{userId}/orders/{orderId}") -> "PutUsersByUserIdOrdersByOrderId"
+ * - ("GET", "/api-tokens") -> "GetApiTokens"
+ */
 fun operationNameFromPath(method: String, path: String): String {
     val methodPart = method.lowercase().replaceFirstChar { it.uppercase() }
 
