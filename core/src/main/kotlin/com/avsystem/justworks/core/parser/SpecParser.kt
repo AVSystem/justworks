@@ -117,11 +117,19 @@ object SpecParser {
                 }
             }
 
+            // Pick up synthetic schemas added by detectAndUnwrapOneOfWrappers
+            val syntheticSchemaNames = componentSchemas.keys - allSchemas.keys
+            val syntheticModels = syntheticSchemaNames.mapNotNull { name ->
+                componentSchemas[name]?.let { schema ->
+                    if (!schema.isEnumSchema) extractSchemaModel(name, schema) else null
+                }
+            }
+
             return ApiSpec(
                 title = info?.title ?: "Untitled",
                 version = info?.version ?: "0.0.0",
                 endpoints = endpoints,
-                schemas = schemaModels,
+                schemas = schemaModels + syntheticModels,
                 enums = enumModels,
             )
         }
@@ -194,7 +202,7 @@ object SpecParser {
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
-        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
+        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema, name) // may register new schemas
             ?: (schema.oneOf?.mapNotNull { it.resolveName() } to null)
 
         val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
@@ -279,7 +287,10 @@ object SpecParser {
      * Returns: Pair of (unwrapped oneOf refs, synthetic discriminator) or null if pattern not matched.
      */
     context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
-    private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Discriminator>? = nullable {
+    private fun detectAndUnwrapOneOfWrappers(
+        schema: Schema<*>,
+        parentSchemaName: String,
+    ): Pair<List<String>, Discriminator>? = nullable {
         ensure(!schema.oneOf.isNullOrEmpty() && schema.discriminator == null)
 
         val variants = schema.oneOf.orEmpty()
@@ -292,12 +303,14 @@ object SpecParser {
                 )
 
                 val schemaName = ensureNotNull(
-                    propertySchema.resolveName() ?: propertyName
-                        .takeIf { propertySchema.isInlineObject }
-                        ?.also { name ->
-                            componentSchemas[name] = propertySchema
-                            componentSchemaIdentity[propertySchema] = name
-                        },
+                    propertySchema.resolveName()
+                        ?: propertyName
+                            .takeIf { propertySchema.isInlineObject }
+                            ?.let { rawName ->
+                                componentSchemas[rawName] = propertySchema
+                                componentSchemaIdentity[propertySchema] = rawName
+                                rawName
+                            },
                 )
 
                 propertyName to schemaName

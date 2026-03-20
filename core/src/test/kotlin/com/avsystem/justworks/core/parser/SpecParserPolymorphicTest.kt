@@ -3,6 +3,7 @@ package com.avsystem.justworks.core.parser
 import com.avsystem.justworks.core.model.TypeRef
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -55,5 +56,83 @@ class SpecParserPolymorphicTest : SpecParserTestBase() {
         assertTrue(discriminator.mapping.isNotEmpty(), "Discriminator mapping should not be empty")
         assertEquals("#/components/schemas/Circle", discriminator.mapping["circle"])
         assertEquals("#/components/schemas/Square", discriminator.mapping["square"])
+    }
+
+    // -- Synthetic schemas from wrapper unwrapping --
+
+    @Test
+    fun `boolean discriminator spec preserves original schema names`() {
+        val spec = parseSpec(loadResource("boolean-discriminator-spec.yaml"))
+        val schemaNames = spec.schemas.map { it.name }.toSet()
+
+        assertTrue(
+            "true" in schemaNames,
+            "Expected schema 'true' in output — KotlinPoet handles escaping. Schemas: $schemaNames",
+        )
+        assertTrue(
+            "false" in schemaNames,
+            "Expected schema 'false' in output — KotlinPoet handles escaping. Schemas: $schemaNames",
+        )
+    }
+
+    @Test
+    fun `boolean discriminator mapping preserves original values as keys`() {
+        val spec = parseSpec(loadResource("boolean-discriminator-spec.yaml"))
+
+        val deviceStatus =
+            spec.schemas.find { it.name == "DeviceStatus" }
+                ?: fail("DeviceStatus schema not found. Schemas: ${spec.schemas.map { it.name }}")
+
+        val discriminator = assertNotNull(deviceStatus.discriminator, "DeviceStatus should have discriminator")
+        val mappingKeys = discriminator.mapping.keys
+
+        assertTrue(
+            "true" in mappingKeys,
+            "Discriminator mapping should have 'true' as key. Keys: $mappingKeys",
+        )
+        assertTrue(
+            "false" in mappingKeys,
+            "Discriminator mapping should have 'false' as key. Keys: $mappingKeys",
+        )
+
+        // Values reference original schema names
+        assertTrue(
+            discriminator.mapping["true"]!!.endsWith("true"),
+            "Mapping for 'true' should reference 'true'. Value: ${discriminator.mapping["true"]}",
+        )
+        assertTrue(
+            discriminator.mapping["false"]!!.endsWith("false"),
+            "Mapping for 'false' should reference 'false'. Value: ${discriminator.mapping["false"]}",
+        )
+    }
+
+    @Test
+    fun `wrapper-unwrapped synthetic schemas appear in parsed output`() {
+        val spec = parseSpec(loadResource("boolean-discriminator-spec.yaml"))
+        val schemaNames = spec.schemas.map { it.name }.toSet()
+
+        // DeviceStatus parent + 2 synthetic variants
+        assertTrue(
+            "DeviceStatus" in schemaNames,
+            "Parent schema 'DeviceStatus' should be in output. Schemas: $schemaNames",
+        )
+        assertTrue(
+            spec.schemas.size >= 3,
+            "Should have at least 3 schemas (parent + 2 variants). Got: ${spec.schemas.size}. Schemas: $schemaNames",
+        )
+    }
+
+    @Test
+    fun `polymorphic-spec regression test - all schemas present`() {
+        val spec = parseSpec(loadResource("polymorphic-spec.yaml"))
+        val schemaNames = spec.schemas.map { it.name }.toSet()
+
+        val expectedSchemas = setOf("Shape", "Circle", "Square", "Pet", "Cat", "Dog", "ExtendedDog")
+        for (expected in expectedSchemas) {
+            assertTrue(
+                expected in schemaNames,
+                "Expected schema '$expected' in output. Schemas: $schemaNames",
+            )
+        }
     }
 }
