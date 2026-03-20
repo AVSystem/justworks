@@ -222,11 +222,12 @@ object SpecParser {
         }
 
         // Resolve underlying type for primitive-only / $ref-wrapper schemas
-        val underlyingType = if (properties.isEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty()) {
-            schema.toTypeRef().takeUnless { it is TypeRef.Unknown }
-        } else {
-            null
-        }
+        val underlyingType = schema
+            .takeIf { properties.isEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty() }
+            ?.toTypeRef()
+            ?.takeUnless { typeRef ->
+                typeRef is TypeRef.Unknown || (typeRef is TypeRef.Reference && typeRef.schemaName == name)
+            }
 
         return SchemaModel(
             name = name,
