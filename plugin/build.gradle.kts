@@ -5,7 +5,7 @@ plugins {
     kotlin("jvm")
     `java-gradle-plugin`
     id("com.vanniktech.maven.publish")
-    id("org.jetbrains.kotlinx.kover") version "0.9.1"
+    id("org.jetbrains.kotlinx.kover")
 }
 
 kotlin {
