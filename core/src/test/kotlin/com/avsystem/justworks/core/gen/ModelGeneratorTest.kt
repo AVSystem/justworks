@@ -275,8 +275,14 @@ class ModelGeneratorTest {
         val files = generator.generate(spec(enums = listOf(statusEnum)))
         val source = files.first().toString()
         // Assert no class body braces on enum constants
-        assertFalse(source.contains(Regex("""[A-Z_]+\(\) \{""")), "Enum constants should not have anonymous class body: $source")
-        assertFalse(source.contains(Regex("""[A-Z_]+ \{""")), "Enum constants should not have class body: $source")
+        assertFalse(
+            source.contains(Regex("""[A-Z_]+\(\) \{""")),
+            "Enum constants should not have anonymous class body: $source",
+        )
+        assertFalse(
+            source.contains(Regex("""[A-Z_]+ \{""")),
+            "Enum constants should not have class body: $source",
+        )
         // Assert @SerialName present
         assertTrue(source.contains("""@SerialName("available")"""), "Missing @SerialName for available: $source")
         assertTrue(source.contains("""@SerialName("pending")"""), "Missing @SerialName for pending: $source")
