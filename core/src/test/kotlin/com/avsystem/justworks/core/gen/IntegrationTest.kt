@@ -43,8 +43,7 @@ class IntegrationTest {
         }
     }
 
-    private fun isFixtureAvailable(): Boolean =
-        javaClass.getResource("/fixtures/real-world-spec.json") != null
+    private fun isFixtureAvailable(): Boolean = javaClass.getResource("/fixtures/real-world-spec.json") != null
 
     @Test
     fun `real-world spec generates compilable enum code without class body conflicts`() {
@@ -61,7 +60,8 @@ class IntegrationTest {
         val files = generator.generate(spec)
         assertTrue(files.isNotEmpty(), "ModelGenerator should produce output files")
 
-        val enumSources = files.map { it.toString() }
+        val enumSources = files
+            .map { it.toString() }
             .filter { it.contains("enum class") }
 
         assertTrue(enumSources.isNotEmpty(), "Should generate at least one enum class")
