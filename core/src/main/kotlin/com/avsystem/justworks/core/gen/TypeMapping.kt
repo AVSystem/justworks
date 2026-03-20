@@ -32,6 +32,7 @@ object TypeMapping {
                 PrimitiveType.BYTE_ARRAY -> BYTE_ARRAY
                 PrimitiveType.DATE_TIME -> INSTANT
                 PrimitiveType.DATE -> LOCAL_DATE
+                PrimitiveType.UUID -> UUID_TYPE
             }
         }
 
