@@ -13,6 +13,13 @@ import org.gradle.api.plugins.JavaPluginExtension
  * into Kotlin source sets, and hooks `compileKotlin` to depend on code generation.
  */
 class JustworksPlugin : Plugin<Project> {
+    companion object {
+        private val SPEC_NAME_PATTERN = Regex("[a-zA-Z][a-zA-Z0-9]*")
+
+        internal fun taskNameFor(specName: String): String =
+            "justworksGenerate${specName.replaceFirstChar { it.uppercase() }}"
+    }
+
     override fun apply(project: Project) {
         // 1. Create extension
         val extension = project.extensions.create("justworks", JustworksExtension::class.java)
@@ -33,21 +40,19 @@ class JustworksPlugin : Plugin<Project> {
         // 4. Dynamic per-spec task registration
         extension.specs.all { spec ->
             // Validate spec name (alphanumeric, starts with letter)
-            if (!spec.name.matches(Regex("[a-zA-Z][a-zA-Z0-9]*"))) {
+            if (!spec.name.matches(SPEC_NAME_PATTERN)) {
                 throw GradleException(
                     "Invalid spec name '${spec.name}': must start with a letter and contain only letters and numbers",
                 )
             }
 
-            // Compute task name: justworksGenerate<Name>
-            val taskName = "justworksGenerate${spec.name.replaceFirstChar { it.uppercase() }}"
+            val taskName = taskNameFor(spec.name)
 
             // Register per-spec generate task
             val specTask =
                 project.tasks.register(taskName, JustworksGenerateTask::class.java) { task ->
                     task.dependsOn(sharedTypesTask)
                     task.specFile.set(spec.specFile)
-                    task.packageName.set(spec.packageName)
                     task.apiPackage.set(spec.apiPackage.orElse(spec.packageName.map { "$it.api" }))
                     task.modelPackage.set(spec.modelPackage.orElse(spec.packageName.map { "$it.model" }))
                     task.outputDir.set(project.layout.buildDirectory.dir("generated/justworks/${spec.name}"))
@@ -69,8 +74,7 @@ class JustworksPlugin : Plugin<Project> {
 
                 // Wire each spec's output directory
                 extension.specs.all { spec ->
-                    val taskName = "justworksGenerate${spec.name.replaceFirstChar { it.uppercase() }}"
-                    val specTask = project.tasks.named(taskName, JustworksGenerateTask::class.java)
+                    val specTask = project.tasks.named(taskNameFor(spec.name), JustworksGenerateTask::class.java)
                     sourceSet.java.srcDir(specTask.flatMap { it.outputDir })
                 }
             }
