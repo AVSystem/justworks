@@ -10,6 +10,7 @@ import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.KModifier
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -267,6 +268,27 @@ class ModelGeneratorTest {
                 .first()
         val names = typeSpec.enumConstants.keys.toList()
         assertEquals(listOf("AVAILABLE", "PENDING", "SOLD"), names)
+    }
+
+    @Test
+    fun `enum constants do not produce anonymous class body`() {
+        val files = generator.generate(spec(enums = listOf(statusEnum)))
+        val source = files.first().toString()
+        // Assert no class body braces on enum constants
+        assertFalse(
+            source.contains(Regex("""[A-Z_]+\(\) \{""")),
+            "Enum constants should not have anonymous class body: $source",
+        )
+        assertFalse(
+            source.contains(Regex("""[A-Z_]+ \{""")),
+            "Enum constants should not have class body: $source",
+        )
+        // Assert @SerialName present
+        assertTrue(source.contains("""@SerialName("available")"""), "Missing @SerialName for available: $source")
+        assertTrue(source.contains("""@SerialName("pending")"""), "Missing @SerialName for pending: $source")
+        assertTrue(source.contains("""@SerialName("sold")"""), "Missing @SerialName for sold: $source")
+        // Assert @Serializable on enum class
+        assertTrue(source.contains("@Serializable"), "Missing @Serializable on enum class: $source")
     }
 
     @Test

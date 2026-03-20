@@ -120,6 +120,14 @@ class TypeMappingTest {
         assertEquals("com.example.model.Pet_Address", result.toString())
     }
 
+    // -- SCHM-07: Instant mapping verification --
+
+    @Test
+    fun `Instant maps to kotlin-time package`() {
+        assertEquals("kotlin.time", INSTANT.packageName)
+        assertEquals("Instant", INSTANT.simpleName)
+    }
+
     // -- Unknown --
 
     @Test

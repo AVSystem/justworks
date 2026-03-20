@@ -13,6 +13,10 @@ import com.squareup.kotlinpoet.PropertySpec
  * that registers each sealed interface with its subclass variants.
  */
 class SerializersModuleGenerator(private val modelPackage: String) {
+    companion object {
+        const val FILE_NAME = "SerializersModule"
+    }
+
     /**
      * Generates a [FileSpec] containing the SerializersModule registration.
      * Returns null if the hierarchy has no sealed types to register.
@@ -48,7 +52,7 @@ class SerializersModuleGenerator(private val modelPackage: String) {
                 .build()
 
         return FileSpec
-            .builder(modelPackage, "SerializersModule")
+            .builder(modelPackage, FILE_NAME)
             .addProperty(prop)
             .build()
     }
