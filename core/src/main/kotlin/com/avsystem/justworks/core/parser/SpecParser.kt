@@ -7,6 +7,7 @@ import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
 import arrow.core.raise.either
 import arrow.core.raise.nullable
+import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.Endpoint
@@ -20,6 +21,7 @@ import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
+import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
@@ -98,6 +100,11 @@ object SpecParser {
     private fun OpenAPI.toApiSpec(): ApiSpec {
         val allSchemas = components?.schemas.orEmpty()
 
+        val securitySchemes = extractSecuritySchemes(
+            components?.securitySchemes.orEmpty(),
+            security.orEmpty(),
+        )
+
         val componentSchemaIdentity = ComponentSchemaIdentity(allSchemas.size).apply {
             allSchemas.forEach { (name, schema) -> this[schema] = name }
         }
@@ -123,7 +130,40 @@ object SpecParser {
                 endpoints = endpoints,
                 schemas = schemaModels,
                 enums = enumModels,
+                securitySchemes = securitySchemes,
             )
+        }
+    }
+
+    private fun extractSecuritySchemes(
+        definitions: Map<String, io.swagger.v3.oas.models.security.SecurityScheme>,
+        requirements: List<io.swagger.v3.oas.models.security.SecurityRequirement>,
+    ): List<SecurityScheme> {
+        val referencedNames = requirements.flatMap { it.keys }.toSet()
+        return referencedNames.mapNotNull { name ->
+            val scheme = definitions[name] ?: return@mapNotNull null
+            when (scheme.type) {
+                io.swagger.v3.oas.models.security.SecurityScheme.Type.HTTP -> {
+                    when (scheme.scheme?.lowercase()) {
+                        "bearer" -> SecurityScheme.Bearer(name)
+                        "basic" -> SecurityScheme.Basic(name)
+                        else -> null
+                    }
+                }
+
+                io.swagger.v3.oas.models.security.SecurityScheme.Type.APIKEY -> {
+                    val location = when (scheme.`in`) {
+                        io.swagger.v3.oas.models.security.SecurityScheme.In.HEADER -> ApiKeyLocation.HEADER
+                        io.swagger.v3.oas.models.security.SecurityScheme.In.QUERY -> ApiKeyLocation.QUERY
+                        else -> null
+                    } ?: return@mapNotNull null
+                    SecurityScheme.ApiKey(name, scheme.name, location)
+                }
+
+                else -> {
+                    null
+                }
+            }
         }
     }
 
