@@ -5,6 +5,7 @@ import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.Parameter
 import com.avsystem.justworks.core.model.ParameterLocation
+import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
@@ -34,13 +35,16 @@ private const val API_SUFFIX = "Api"
 class ClientGenerator(private val apiPackage: String, private val modelPackage: String) {
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
-        return grouped.map { (tag, endpoints) -> generateClientFile(tag, endpoints, hasPolymorphicTypes) }
+        return grouped.map { (tag, endpoints) ->
+            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes)
+        }
     }
 
     private fun generateClientFile(
         tag: String,
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean = false,
+        securitySchemes: List<SecurityScheme> = emptyList(),
     ): FileSpec {
         val className = ClassName(apiPackage, "${tag.toPascalCase()}$API_SUFFIX")
 
@@ -52,12 +56,27 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         }
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
+        val authParams = ApiClientBaseGenerator.buildAuthConstructorParams(securitySchemes)
 
-        val primaryConstructor = FunSpec
+        val constructorBuilder = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
-            .addParameter(TOKEN, tokenType)
-            .build()
+
+        val classBuilder = TypeSpec
+            .classBuilder(className)
+            .superclass(API_CLIENT_BASE)
+            .addSuperclassConstructorParameter(BASE_URL)
+
+        if (authParams.isEmpty() && securitySchemes.isEmpty()) {
+            // Backward compat: no security info -> default token param
+            constructorBuilder.addParameter(TOKEN, tokenType)
+            classBuilder.addSuperclassConstructorParameter(TOKEN)
+        } else {
+            for ((paramName, _) in authParams) {
+                constructorBuilder.addParameter(paramName, tokenType)
+                classBuilder.addSuperclassConstructorParameter(paramName)
+            }
+        }
 
         val httpClientProperty = PropertySpec
             .builder(CLIENT, HTTP_CLIENT)
@@ -65,12 +84,8 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             .initializer(clientInitializer)
             .build()
 
-        val classBuilder = TypeSpec
-            .classBuilder(className)
-            .superclass(API_CLIENT_BASE)
-            .addSuperclassConstructorParameter(BASE_URL)
-            .addSuperclassConstructorParameter(TOKEN)
-            .primaryConstructor(primaryConstructor)
+        classBuilder
+            .primaryConstructor(constructorBuilder.build())
             .addProperty(httpClientProperty)
 
         classBuilder.addFunctions(endpoints.map(::generateEndpointFunction))
