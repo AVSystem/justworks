@@ -60,6 +60,11 @@ class JustworksPlugin : Plugin<Project> {
                     task.description = "Generate Kotlin client from '${spec.name}' OpenAPI spec"
                 }
 
+            // Wire spec file into shared types task for security scheme extraction
+            sharedTypesTask.configure { task ->
+                task.specFiles.from(spec.specFile)
+            }
+
             // Wire spec task into aggregate task
             generateAllTask.configure { it.dependsOn(specTask) }
         }

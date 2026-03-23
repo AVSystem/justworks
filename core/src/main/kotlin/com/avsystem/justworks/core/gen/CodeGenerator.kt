@@ -28,7 +28,7 @@ object CodeGenerator {
         return Result(modelFiles.size, clientFiles.size)
     }
 
-    fun generateSharedTypes(outputDir: File, securitySchemes: List<SecurityScheme> = emptyList(),): Int {
+    fun generateSharedTypes(outputDir: File, securitySchemes: List<SecurityScheme>? = null): Int {
         val files = ApiResponseGenerator.generate() + ApiClientBaseGenerator.generate(securitySchemes)
         files.forEach { it.writeTo(outputDir) }
         return files.size
