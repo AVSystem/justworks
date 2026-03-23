@@ -518,6 +518,90 @@ class ClientGeneratorTest {
         assertFalse(body.contains("submitForm"), "Should NOT contain submitForm for JSON")
     }
 
+    // -- CONT-02: Form-urlencoded code generation --
+
+    @Test
+    fun `form-urlencoded endpoint generates submitForm call`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "createUser",
+            requestBody = RequestBody(
+                required = true,
+                contentType = "application/x-www-form-urlencoded",
+                schema = TypeRef.Inline(
+                    properties = listOf(
+                        PropertyModel("username", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                        PropertyModel("age", TypeRef.Primitive(PrimitiveType.INT), null, false),
+                    ),
+                    requiredProperties = setOf("username", "age"),
+                    contextHint = "request",
+                ),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "createUser" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("submitForm"), "Expected submitForm call")
+        assertTrue(body.contains("parameters"), "Expected parameters builder")
+
+        val paramTypes = funSpec.parameters.associate { it.name to it.type.toString() }
+        assertEquals("kotlin.String", paramTypes["username"])
+        assertEquals("kotlin.Int", paramTypes["age"])
+    }
+
+    @Test
+    fun `form-urlencoded non-string params use toString`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "createUser",
+            requestBody = RequestBody(
+                required = true,
+                contentType = "application/x-www-form-urlencoded",
+                schema = TypeRef.Inline(
+                    properties = listOf(
+                        PropertyModel("username", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                        PropertyModel("age", TypeRef.Primitive(PrimitiveType.INT), null, false),
+                    ),
+                    requiredProperties = setOf("username", "age"),
+                    contextHint = "request",
+                ),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "createUser" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("age.toString()"), "Expected toString() for non-string param")
+        assertFalse(body.contains("username.toString()"), "String param should NOT use toString()")
+    }
+
+    @Test
+    fun `form-urlencoded optional field generates nullable param with guard`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "createUser",
+            requestBody = RequestBody(
+                required = true,
+                contentType = "application/x-www-form-urlencoded",
+                schema = TypeRef.Inline(
+                    properties = listOf(
+                        PropertyModel("username", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                        PropertyModel("nickname", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                    ),
+                    requiredProperties = setOf("username"),
+                    contextHint = "request",
+                ),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "createUser" }
+        val nicknameParam = funSpec.parameters.first { it.name == "nickname" }
+        assertTrue(nicknameParam.type.isNullable, "Optional form field should be nullable")
+        assertEquals("null", nicknameParam.defaultValue.toString())
+
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("if (nickname != null)"), "Expected null guard for optional field")
+    }
+
     @Test
     fun `non-polymorphic spec has createHttpClient without serializersModule`() {
         val files = ClientGenerator(
