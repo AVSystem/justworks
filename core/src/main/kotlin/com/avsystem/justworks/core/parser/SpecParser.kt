@@ -225,7 +225,7 @@ object SpecParser {
         // Uses $ref for wrapper schemas, otherwise resolves structurally
         // from type/format to bypass componentSchemaIdentity (which would self-reference).
         val underlyingType = schema
-            .takeIf { properties.isEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty() }
+            .takeIf { properties.isEmpty() && allOf.isNullOrEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty() }
             ?.let { s -> s.`$ref`?.removePrefix(SCHEMA_PREFIX)?.let(TypeRef::Reference) ?: s.resolveByType() }
             ?.takeUnless { it is TypeRef.Unknown }
 
