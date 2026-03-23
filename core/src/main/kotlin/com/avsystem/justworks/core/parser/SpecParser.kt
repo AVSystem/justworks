@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.parser
 
+import arrow.core.compareTo
 import arrow.core.fold
 import arrow.core.merge
 import arrow.core.raise.context.Raise
@@ -117,14 +118,24 @@ object SpecParser {
                 }
             }
 
-            // Pick up synthetic schemas added by detectAndUnwrapOneOfWrappers
-            val syntheticSchemaNames = componentSchemas.keys - allSchemas.keys
-            val syntheticModels = syntheticSchemaNames.mapNotNull { name ->
-                componentSchemas[name]?.let { schema ->
-                    if (!schema.isEnumSchema) extractSchemaModel(name, schema) else null
+            // Pick up synthetic schemas added by detectAndUnwrapOneOfWrappers.
+            // Iterate until stable, since processing a synthetic schema could register more.
+            tailrec fun collectModels(processed: Set<String>, acc: List<SchemaModel>): List<SchemaModel> {
+                val currentKeys = componentSchemas.keys - allSchemas.keys - processed
+                return if (currentKeys.isEmpty()) {
+                    acc
+                } else {
+                    val newModels = currentKeys
+                        .asSequence()
+                        .mapNotNull { name -> componentSchemas[name]?.let { name to it } }
+                        .filterNot { (_, schema) -> schema.isEnumSchema }
+                        .map { (name, schema) -> extractSchemaModel(name, schema) }
+
+                    collectModels(processed + currentKeys, acc + newModels)
                 }
             }
 
+            val syntheticModels = collectModels(emptySet(), emptyList())
             return ApiSpec(
                 title = info?.title ?: "Untitled",
                 version = info?.version ?: "0.0.0",
@@ -202,7 +213,7 @@ object SpecParser {
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
-        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema, name) // may register new schemas
+        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
             ?: (schema.oneOf?.mapNotNull { it.resolveName() } to null)
 
         val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
@@ -287,10 +298,7 @@ object SpecParser {
      * Returns: Pair of (unwrapped oneOf refs, synthetic discriminator) or null if pattern not matched.
      */
     context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
-    private fun detectAndUnwrapOneOfWrappers(
-        schema: Schema<*>,
-        parentSchemaName: String,
-    ): Pair<List<String>, Discriminator>? = nullable {
+    private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Discriminator>? = nullable {
         ensure(!schema.oneOf.isNullOrEmpty() && schema.discriminator == null)
 
         val variants = schema.oneOf.orEmpty()
