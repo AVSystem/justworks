@@ -6,6 +6,7 @@ import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.Parameter
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
+import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.TypeRef
@@ -15,6 +16,7 @@ import com.squareup.kotlinpoet.ParameterizedTypeName
 import com.squareup.kotlinpoet.TypeSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
@@ -400,6 +402,120 @@ class ClientGeneratorTest {
             "Expected generatedSerializersModule reference",
         )
         assertTrue(clientInitializer.contains("createHttpClient"), "Expected createHttpClient call")
+    }
+
+    // -- CONT-01: Multipart form-data code generation --
+
+    @Test
+    fun `multipart endpoint generates submitFormWithBinaryData call`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "uploadFile",
+            requestBody = RequestBody(
+                required = true,
+                contentType = "multipart/form-data",
+                schema = TypeRef.Inline(
+                    properties = listOf(
+                        PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
+                        PropertyModel("description", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                    ),
+                    requiredProperties = setOf("file", "description"),
+                    contextHint = "request",
+                ),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "uploadFile" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("submitFormWithBinaryData"), "Expected submitFormWithBinaryData call")
+        assertTrue(body.contains("formData"), "Expected formData builder")
+    }
+
+    @Test
+    fun `multipart endpoint has ChannelProvider param for binary field`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "uploadFile",
+            requestBody = RequestBody(
+                required = true,
+                contentType = "multipart/form-data",
+                schema = TypeRef.Inline(
+                    properties = listOf(
+                        PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
+                    ),
+                    requiredProperties = setOf("file"),
+                    contextHint = "request",
+                ),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "uploadFile" }
+        val paramTypes = funSpec.parameters.associate { it.name to it.type.toString() }
+        assertEquals("io.ktor.client.request.forms.ChannelProvider", paramTypes["file"])
+        assertEquals("kotlin.String", paramTypes["fileName"])
+        assertEquals("io.ktor.http.ContentType", paramTypes["fileContentType"])
+    }
+
+    @Test
+    fun `multipart text fields use simple append`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "uploadFile",
+            requestBody = RequestBody(
+                required = true,
+                contentType = "multipart/form-data",
+                schema = TypeRef.Inline(
+                    properties = listOf(
+                        PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
+                        PropertyModel("description", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                    ),
+                    requiredProperties = setOf("file", "description"),
+                    contextHint = "request",
+                ),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "uploadFile" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("append(\"description\", description)"), "Expected simple append for text field")
+    }
+
+    @Test
+    fun `multipart binary fields include ContentDisposition header`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "uploadFile",
+            requestBody = RequestBody(
+                required = true,
+                contentType = "multipart/form-data",
+                schema = TypeRef.Inline(
+                    properties = listOf(
+                        PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
+                    ),
+                    requiredProperties = setOf("file"),
+                    contextHint = "request",
+                ),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "uploadFile" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("ContentDisposition"), "Expected ContentDisposition in headers")
+        assertTrue(body.contains("filename"), "Expected filename in ContentDisposition")
+    }
+
+    @Test
+    fun `existing JSON requestBody still generates setBody pattern`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "createPet",
+            requestBody = RequestBody(true, "application/json", TypeRef.Reference("Pet")),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "createPet" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("setBody"), "Expected setBody for JSON content type")
+        assertFalse(body.contains("submitForm"), "Should NOT contain submitForm for JSON")
     }
 
     @Test
