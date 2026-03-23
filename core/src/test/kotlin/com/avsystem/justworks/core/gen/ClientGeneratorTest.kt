@@ -526,6 +526,82 @@ class ClientGeneratorTest {
         )
     }
 
+    // -- ERR-01: Error type resolution from OpenAPI error response schemas --
+
+    @Test
+    fun `single error response schema generates typed error in HttpResult`() {
+        val ep = endpoint(
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "400" to Response("400", "Bad request", TypeRef.Reference("ValidationError")),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals(
+            "com.example.model.ValidationError",
+            returnType.typeArguments[0].toString(),
+            "Expected typed error for single error schema",
+        )
+    }
+
+    @Test
+    fun `multiple error responses with same schema generates typed error`() {
+        val ep = endpoint(
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "400" to Response("400", "Bad request", TypeRef.Reference("ValidationError")),
+                "422" to Response("422", "Unprocessable", TypeRef.Reference("ValidationError")),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals(
+            "com.example.model.ValidationError",
+            returnType.typeArguments[0].toString(),
+            "Expected typed error when all error schemas are the same",
+        )
+    }
+
+    @Test
+    fun `multiple error responses with different schemas falls back to JsonElement`() {
+        val ep = endpoint(
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "400" to Response("400", "Bad request", TypeRef.Reference("ValidationError")),
+                "404" to Response("404", "Not found", TypeRef.Reference("NotFoundError")),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals(
+            "kotlinx.serialization.json.JsonElement",
+            returnType.typeArguments[0].toString(),
+            "Expected JsonElement fallback for different error schemas",
+        )
+    }
+
+    @Test
+    fun `error response with null schema falls back to JsonElement`() {
+        val ep = endpoint(
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "401" to Response("401", "Unauthorized", null),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals(
+            "kotlinx.serialization.json.JsonElement",
+            returnType.typeArguments[0].toString(),
+            "Expected JsonElement fallback for null error schema",
+        )
+    }
+
     @Test
     fun `single Bearer scheme uses token param name for backward compat`() {
         val cls = clientClass(
