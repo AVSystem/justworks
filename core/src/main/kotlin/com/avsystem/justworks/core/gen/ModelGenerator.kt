@@ -320,6 +320,7 @@ class ModelGenerator(private val modelPackage: String) {
                 .builder(kotlinName, type)
                 .initializer(kotlinName)
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
+                .apply { if (prop.description != null) addKdoc("%L", prop.description) }
                 .build()
         }
 
@@ -415,6 +416,7 @@ class ModelGenerator(private val modelPackage: String) {
             val anonymousClass = TypeSpec
                 .anonymousClassBuilder()
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", value).build())
+                .apply { enum.valueDescriptions[value]?.let { addKdoc("%L", it) } }
                 .build()
             typeSpec.addEnumConstant(value.toEnumConstantName(), anonymousClass)
         }

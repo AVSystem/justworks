@@ -20,6 +20,7 @@ data class Endpoint(
     val method: HttpMethod,
     val operationId: String,
     val summary: String?,
+    val description: String? = null,
     val tags: List<String>,
     val parameters: List<Parameter>,
     val requestBody: RequestBody?,
@@ -95,6 +96,7 @@ data class EnumModel(
     val description: String?,
     val type: EnumBackingType,
     val values: List<String>,
+    val valueDescriptions: Map<String, String> = emptyMap(),
 )
 
 enum class EnumBackingType {
