@@ -98,7 +98,8 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
     private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = endpoint.operationId.toCamelCase()
         val returnBodyType = resolveReturnType(endpoint)
-        val returnType = HTTP_RESULT.parameterizedBy(JSON_ELEMENT, returnBodyType)
+        val errorType = resolveErrorType(endpoint)
+        val returnType = HTTP_RESULT.parameterizedBy(errorType, returnBodyType)
 
         val funBuilder = FunSpec
             .builder(functionName)
@@ -210,6 +211,21 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         code.endControlFlow() // safeCall
 
         return code.build()
+    }
+
+    private fun resolveErrorType(endpoint: Endpoint): TypeName {
+        val errorSchemas = endpoint.responses.entries
+            .asSequence()
+            .filter { !it.key.startsWith("2") }
+            .mapNotNull { it.value.schema }
+            .map { TypeMapping.toTypeName(it, modelPackage) }
+            .distinct()
+            .toList()
+
+        return when {
+            errorSchemas.size == 1 -> errorSchemas.single()
+            else -> JSON_ELEMENT
+        }
     }
 
     private fun resolveReturnType(endpoint: Endpoint): TypeName = endpoint.responses.entries
