@@ -26,6 +26,20 @@ val DELETE_FUN = MemberName("io.ktor.client.request", "delete")
 val PATCH_FUN = MemberName("io.ktor.client.request", "patch")
 
 // ============================================================================
+// Ktor Forms & Multipart
+// ============================================================================
+
+val SUBMIT_FORM_FUN = MemberName("io.ktor.client.request.forms", "submitForm")
+val SUBMIT_FORM_WITH_BINARY_DATA_FUN = MemberName("io.ktor.client.request.forms", "submitFormWithBinaryData")
+val FORM_DATA_FUN = MemberName("io.ktor.client.request.forms", "formData")
+val CHANNEL_PROVIDER = ClassName("io.ktor.client.request.forms", "ChannelProvider")
+val PARAMETERS_FUN = MemberName("io.ktor.http", "parameters")
+val CONTENT_TYPE_CLASS = ClassName("io.ktor.http", "ContentType")
+val HTTP_HEADERS_OBJECT = ClassName("io.ktor.http", "HttpHeaders")
+val HEADERS_BUILD_FUN = MemberName("io.ktor.http", "build")
+val HTTP_METHOD_CLASS = ClassName("io.ktor.http", "HttpMethod")
+
+// ============================================================================
 // kotlinx.serialization
 // ============================================================================
 

@@ -145,11 +145,24 @@ object SpecParser {
                     val requestBody = nullable {
                         val body = operation.requestBody.bind()
                         val content = body.content.bind()
-                        val schema = content[JSON_CONTENT_TYPE]?.schema.bind()
+
+                        // Priority: multipart > form-urlencoded > json
+                        val (contentType, mediaType) = sequenceOf(
+                            MULTIPART_FORM_DATA,
+                            FORM_URL_ENCODED,
+                            JSON_CONTENT_TYPE,
+                        ).firstNotNullOfOrNull { ct ->
+                            content[ct]?.let { ct to it }
+                        }.bind()
+
+                        val schema = mediaType.schema
+                            .bind()
+                            .toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request")
+
                         RequestBody(
                             required = body.required ?: false,
-                            contentType = JSON_CONTENT_TYPE,
-                            schema = schema.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request"),
+                            contentType = contentType,
+                            schema = schema,
                         )
                     }
 
@@ -385,6 +398,8 @@ object SpecParser {
         split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
 
     private const val JSON_CONTENT_TYPE = "application/json"
+    private const val MULTIPART_FORM_DATA = "multipart/form-data"
+    private const val FORM_URL_ENCODED = "application/x-www-form-urlencoded"
     private const val SCHEMA_PREFIX = "#/components/schemas/"
 
     private val STRING_FORMAT_MAP = mapOf(
