@@ -344,6 +344,162 @@ class SpecParserTest : SpecParserTestBase() {
         assertEquals("TaskConfig", configType.schemaName)
     }
 
+    // -- underlyingType resolution --
+
+    @Test
+    fun `primitive integer schema has underlyingType INT`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                GroupId:
+                  type: integer
+                  format: int64
+            """.trimIndent().toTempFile(),
+        )
+
+        val groupId = spec.schemas.find { it.name == "GroupId" }
+            ?: fail("GroupId schema not found")
+        val underlying = assertNotNull(groupId.underlyingType, "underlyingType should be set")
+        val primitive = assertIs<TypeRef.Primitive>(underlying)
+        assertEquals(PrimitiveType.LONG, primitive.type)
+    }
+
+    @Test
+    fun `primitive boolean schema has underlyingType BOOLEAN`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Active:
+                  type: boolean
+            """.trimIndent().toTempFile(),
+        )
+
+        val active = spec.schemas.find { it.name == "Active" }
+            ?: fail("Active schema not found")
+        val underlying = assertNotNull(active.underlyingType, "underlyingType should be set")
+        val primitive = assertIs<TypeRef.Primitive>(underlying)
+        assertEquals(PrimitiveType.BOOLEAN, primitive.type)
+    }
+
+    @Test
+    fun `array schema has underlyingType Array`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                TagList:
+                  type: array
+                  items:
+                    type: string
+            """.trimIndent().toTempFile(),
+        )
+
+        val tagList = spec.schemas.find { it.name == "TagList" }
+            ?: fail("TagList schema not found")
+        val underlying = assertNotNull(tagList.underlyingType, "underlyingType should be set")
+        assertIs<TypeRef.Array>(underlying)
+    }
+
+    @Test
+    fun `ref wrapper schema has underlyingType Reference`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Pet:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+                PetAlias:
+                  ${'$'}ref: '#/components/schemas/Pet'
+            """.trimIndent().toTempFile(),
+        )
+
+        val petAlias = spec.schemas.find { it.name == "PetAlias" }
+            ?: fail("PetAlias schema not found")
+        val underlying = assertNotNull(petAlias.underlyingType, "underlyingType should be set")
+        val ref = assertIs<TypeRef.Reference>(underlying)
+        assertEquals("Pet", ref.schemaName)
+    }
+
+    @Test
+    fun `object schema with properties has no underlyingType`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                User:
+                  type: object
+                  properties:
+                    name:
+                      type: string
+            """.trimIndent().toTempFile(),
+        )
+
+        val user = spec.schemas.find { it.name == "User" }
+            ?: fail("User schema not found")
+        assertEquals(null, user.underlyingType, "object with properties should not have underlyingType")
+    }
+
+    @Test
+    fun `schema with allOf has no underlyingType`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Base:
+                  type: object
+                  properties:
+                    id:
+                      type: integer
+                Extended:
+                  allOf:
+                    - ${'$'}ref: '#/components/schemas/Base'
+                  type: object
+                  properties:
+                    name:
+                      type: string
+            """.trimIndent().toTempFile(),
+        )
+
+        val extended = spec.schemas.find { it.name == "Extended" }
+            ?: fail("Extended schema not found")
+        assertEquals(null, extended.underlyingType, "allOf schema should not have underlyingType")
+    }
+
     // -- Helpers --
 
     private fun String.toTempFile(): File {

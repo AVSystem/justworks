@@ -221,6 +221,14 @@ object SpecParser {
             Discriminator(propertyName = propertyName, mapping = disc.mapping.orEmpty())
         }
 
+        // Resolve underlying type for primitive-only / $ref-wrapper schemas.
+        // Uses $ref for wrapper schemas, otherwise resolves structurally
+        // from type/format to bypass componentSchemaIdentity (which would self-reference).
+        val underlyingType = schema
+            .takeIf { properties.isEmpty() && allOf.isNullOrEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty() }
+            ?.let { s -> s.`$ref`?.removePrefix(SCHEMA_PREFIX)?.let(TypeRef::Reference) ?: s.resolveByType() }
+            ?.takeUnless { it is TypeRef.Unknown }
+
         return SchemaModel(
             name = name,
             description = schema.description,
@@ -230,6 +238,7 @@ object SpecParser {
             oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
+            underlyingType = underlyingType,
         )
     }
 
@@ -313,25 +322,29 @@ object SpecParser {
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
         ?: (resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
         ?: TypeRef.Unknown.takeIf { (allOf?.size ?: 0) > 1 }
-        ?: when (type) {
-            "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
+        ?: resolveByType(contextName)
 
-            "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
+    /** Resolves a [TypeRef] based on the schema's structural type/format, ignoring component identity. */
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
+    private fun Schema<*>.resolveByType(contextName: String? = null): TypeRef = when (type) {
+        "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-            "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
+        "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
 
-            "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
+        "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
 
-            "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
+        "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-            "object" -> when (val ap = additionalProperties) {
-                is Schema<*> -> TypeRef.Map(ap.toTypeRef())
-                is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
-                else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
-            }
+        "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
 
-            else -> TypeRef.Unknown
+        "object" -> when (val ap = additionalProperties) {
+            is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+            is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
+            else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
         }
+
+        else -> TypeRef.Unknown
+    }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? = takeIf { isInlineObject }?.let {

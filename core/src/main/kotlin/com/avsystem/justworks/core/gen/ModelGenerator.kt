@@ -127,7 +127,10 @@ class ModelGenerator(private val modelPackage: String) {
         }
 
         schema.isPrimitiveOnly -> {
-            listOf(generateTypeAlias(schema, STRING))
+            val targetType = schema.underlyingType
+                ?.let { TypeMapping.toTypeName(it, modelPackage) }
+                ?: STRING
+            listOf(generateTypeAlias(schema, targetType))
         }
 
         else -> {

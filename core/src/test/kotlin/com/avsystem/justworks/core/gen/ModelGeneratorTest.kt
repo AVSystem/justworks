@@ -732,7 +732,7 @@ class ModelGeneratorTest {
     // -- Primitive-only type alias tests --
 
     @Test
-    fun `primitive only schema generates type alias`() {
+    fun `primitive only schema generates type alias to String by default`() {
         val groupIdSchema = SchemaModel(
             name = "GroupId",
             description = null,
@@ -742,6 +742,7 @@ class ModelGeneratorTest {
             oneOf = null,
             anyOf = null,
             discriminator = null,
+            underlyingType = null,
         )
         val files = generator.generate(spec(schemas = listOf(groupIdSchema)))
         assertEquals(1, files.size)
@@ -755,6 +756,139 @@ class ModelGeneratorTest {
 
         val typeAlias = typeAliases.first()
         assertEquals("GroupId", typeAlias.name)
+        assertEquals("kotlin.String", typeAlias.type.toString(), "Default typealias should be String")
+    }
+
+    @Test
+    fun `primitive only schema with integer underlyingType generates typealias to Int`() {
+        val schema = SchemaModel(
+            name = "IntId",
+            description = null,
+            properties = emptyList(),
+            requiredProperties = emptySet(),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+            underlyingType = TypeRef.Primitive(PrimitiveType.INT),
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeAlias = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
+            .first()
+        assertEquals("kotlin.Int", typeAlias.type.toString())
+    }
+
+    @Test
+    fun `primitive only schema with boolean underlyingType generates typealias to Boolean`() {
+        val schema = SchemaModel(
+            name = "Flag",
+            description = null,
+            properties = emptyList(),
+            requiredProperties = emptySet(),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+            underlyingType = TypeRef.Primitive(PrimitiveType.BOOLEAN),
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeAlias = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
+            .first()
+        assertEquals("kotlin.Boolean", typeAlias.type.toString())
+    }
+
+    @Test
+    fun `primitive only schema with long underlyingType generates typealias to Long`() {
+        val schema = SchemaModel(
+            name = "BigId",
+            description = null,
+            properties = emptyList(),
+            requiredProperties = emptySet(),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+            underlyingType = TypeRef.Primitive(PrimitiveType.LONG),
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeAlias = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
+            .first()
+        assertEquals("kotlin.Long", typeAlias.type.toString())
+    }
+
+    @Test
+    fun `primitive only schema with double underlyingType generates typealias to Double`() {
+        val schema = SchemaModel(
+            name = "Score",
+            description = null,
+            properties = emptyList(),
+            requiredProperties = emptySet(),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+            underlyingType = TypeRef.Primitive(PrimitiveType.DOUBLE),
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeAlias = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
+            .first()
+        assertEquals("kotlin.Double", typeAlias.type.toString())
+    }
+
+    @Test
+    fun `primitive only schema with array underlyingType generates typealias to List`() {
+        val schema = SchemaModel(
+            name = "Tags",
+            description = null,
+            properties = emptyList(),
+            requiredProperties = emptySet(),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+            underlyingType = TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING)),
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeAlias = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
+            .first()
+        assertEquals("kotlin.collections.List<kotlin.String>", typeAlias.type.toString())
+    }
+
+    @Test
+    fun `primitive only schema with reference underlyingType generates typealias to referenced type`() {
+        val schema = SchemaModel(
+            name = "Wrapper",
+            description = null,
+            properties = emptyList(),
+            requiredProperties = emptySet(),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+            underlyingType = TypeRef.Reference("OtherSchema"),
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeAlias = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
+            .first()
+        assertEquals("com.example.model.OtherSchema", typeAlias.type.toString())
     }
 
     @Test
