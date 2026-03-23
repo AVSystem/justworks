@@ -1,5 +1,7 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.model.ApiKeyLocation
+import com.avsystem.justworks.core.model.SecurityScheme
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.ContextParameter
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
@@ -30,7 +32,7 @@ object ApiClientBaseGenerator {
     private const val SUCCESS_BODY = "successBody"
     private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
 
-    fun generate(): FileSpec {
+    fun generate(securitySchemes: List<SecurityScheme>? = null): FileSpec {
         val t = TypeVariableName("T").copy(reified = true)
 
         return FileSpec
@@ -39,7 +41,7 @@ object ApiClientBaseGenerator {
             .addFunction(buildMapToResult(t))
             .addFunction(buildToResult(t))
             .addFunction(buildToEmptyResult())
-            .addType(buildApiClientBaseClass())
+            .addType(buildApiClientBaseClass(securitySchemes ?: emptyList(), isExplicit = securitySchemes != null))
             .build()
     }
 
@@ -103,26 +105,45 @@ object ApiClientBaseGenerator {
         .addStatement("return %L { Unit }", MAP_TO_RESULT)
         .build()
 
-    private fun buildApiClientBaseClass(): TypeSpec {
+    private fun buildApiClientBaseClass(securitySchemes: List<SecurityScheme>, isExplicit: Boolean): TypeSpec {
         val tokenType = LambdaTypeName.get(returnType = STRING)
+        val authParams = buildAuthConstructorParams(securitySchemes)
 
-        val constructor = FunSpec
+        val constructorBuilder = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
-            .addParameter(TOKEN, tokenType)
-            .build()
+
+        val propertySpecs = mutableListOf<PropertySpec>()
 
         val baseUrlProp = PropertySpec
             .builder(BASE_URL, STRING)
             .initializer(BASE_URL)
             .addModifiers(KModifier.PROTECTED)
             .build()
+        propertySpecs.add(baseUrlProp)
 
-        val tokenProp = PropertySpec
-            .builder(TOKEN, tokenType)
-            .initializer(TOKEN)
-            .addModifiers(KModifier.PRIVATE)
-            .build()
+        if (authParams.isEmpty() && !isExplicit) {
+            // Backward compat: no securitySchemes info -> default token param
+            constructorBuilder.addParameter(TOKEN, tokenType)
+            propertySpecs.add(
+                PropertySpec
+                    .builder(TOKEN, tokenType)
+                    .initializer(TOKEN)
+                    .addModifiers(KModifier.PRIVATE)
+                    .build(),
+            )
+        } else {
+            for ((paramName, _) in authParams) {
+                constructorBuilder.addParameter(paramName, tokenType)
+                propertySpecs.add(
+                    PropertySpec
+                        .builder(paramName, tokenType)
+                        .initializer(paramName)
+                        .addModifiers(KModifier.PRIVATE)
+                        .build(),
+                )
+            }
+        }
 
         val clientProp = PropertySpec
             .builder(CLIENT, HTTP_CLIENT)
@@ -135,32 +156,143 @@ object ApiClientBaseGenerator {
             .addStatement("$CLIENT.close()")
             .build()
 
-        return TypeSpec
+        val classBuilder = TypeSpec
             .classBuilder(API_CLIENT_BASE)
             .addModifiers(KModifier.ABSTRACT)
             .addSuperinterface(CLOSEABLE)
-            .primaryConstructor(constructor)
-            .addProperty(baseUrlProp)
-            .addProperty(tokenProp)
+            .primaryConstructor(constructorBuilder.build())
+
+        for (prop in propertySpecs) {
+            classBuilder.addProperty(prop)
+        }
+
+        return classBuilder
             .addProperty(clientProp)
             .addFunction(closeFun)
-            .addFunction(buildApplyAuth())
+            .addFunction(buildApplyAuth(securitySchemes, isExplicit))
             .addFunction(buildSafeCall())
             .addFunction(buildCreateHttpClient())
             .build()
     }
 
-    private fun buildApplyAuth(): FunSpec = FunSpec
-        .builder(APPLY_AUTH)
-        .addModifiers(KModifier.PROTECTED)
-        .receiver(HTTP_REQUEST_BUILDER)
-        .beginControlFlow("%M", HEADERS_FUN)
-        .addStatement(
-            "append(%T.Authorization, %P)",
-            HTTP_HEADERS,
-            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN()}"),
-        ).endControlFlow()
-        .build()
+    /**
+     * Builds the list of auth-related constructor parameter names based on security schemes.
+     * Returns pairs of (paramName, schemeType) for each scheme.
+     */
+    internal fun buildAuthConstructorParams(
+        securitySchemes: List<SecurityScheme>,
+    ): List<Pair<String, SecurityScheme>> {
+        if (securitySchemes.isEmpty()) return emptyList()
+
+        val isSingleBearer = securitySchemes.size == 1 && securitySchemes.first() is SecurityScheme.Bearer
+
+        return securitySchemes.flatMap { scheme ->
+            when (scheme) {
+                is SecurityScheme.Bearer -> {
+                    val paramName = if (isSingleBearer) TOKEN else "${scheme.name.toCamelCase()}Token"
+                    listOf(paramName to scheme)
+                }
+
+                is SecurityScheme.ApiKey -> {
+                    listOf("${scheme.name.toCamelCase()}Key" to scheme)
+                }
+
+                is SecurityScheme.Basic -> {
+                    listOf(
+                        "${scheme.name.toCamelCase()}Username" to scheme,
+                        "${scheme.name.toCamelCase()}Password" to scheme,
+                    )
+                }
+            }
+        }
+    }
+
+    private fun buildApplyAuth(securitySchemes: List<SecurityScheme>, isExplicit: Boolean): FunSpec {
+        val builder = FunSpec
+            .builder(APPLY_AUTH)
+            .addModifiers(KModifier.PROTECTED)
+            .receiver(HTTP_REQUEST_BUILDER)
+
+        // Explicitly empty schemes = no security at all -> empty applyAuth
+        if (isExplicit && securitySchemes.isEmpty()) {
+            return builder.build()
+        }
+
+        // Backward compat: no schemes info means hardcoded Bearer with token param
+        if (securitySchemes.isEmpty()) {
+            builder.beginControlFlow("%M", HEADERS_FUN)
+            builder.addStatement(
+                "append(%T.Authorization, %P)",
+                HTTP_HEADERS,
+                CodeBlock.of($$"Bearer ${'$'}{$$TOKEN()}"),
+            )
+            builder.endControlFlow()
+            return builder.build()
+        }
+
+        val isSingleBearer = securitySchemes.size == 1 && securitySchemes.first() is SecurityScheme.Bearer
+
+        val headerSchemes = securitySchemes.filter {
+            it is SecurityScheme.Bearer ||
+                it is SecurityScheme.Basic ||
+                (it is SecurityScheme.ApiKey && it.location == ApiKeyLocation.HEADER)
+        }
+        val querySchemes = securitySchemes
+            .filterIsInstance<SecurityScheme.ApiKey>()
+            .filter { it.location == ApiKeyLocation.QUERY }
+
+        if (headerSchemes.isNotEmpty()) {
+            builder.beginControlFlow("%M", HEADERS_FUN)
+            for (scheme in headerSchemes) {
+                when (scheme) {
+                    is SecurityScheme.Bearer -> {
+                        val paramName = if (isSingleBearer) TOKEN else "${scheme.name.toCamelCase()}Token"
+                        builder.addStatement(
+                            "append(%T.Authorization, %P)",
+                            HTTP_HEADERS,
+                            CodeBlock.of("Bearer \${$paramName()}"),
+                        )
+                    }
+
+                    is SecurityScheme.Basic -> {
+                        val usernameParam = "${scheme.name.toCamelCase()}Username"
+                        val passwordParam = "${scheme.name.toCamelCase()}Password"
+                        builder.addStatement(
+                            "append(%T.Authorization, %P)",
+                            HTTP_HEADERS,
+                            CodeBlock.of(
+                                "Basic \${%T.getEncoder().encodeToString(\"${'$'}{$usernameParam()}:${'$'}{$passwordParam()}\".toByteArray())}",
+                                BASE64_CLASS,
+                            ),
+                        )
+                    }
+
+                    is SecurityScheme.ApiKey -> {
+                        val paramName = "${scheme.name.toCamelCase()}Key"
+                        builder.addStatement(
+                            "append(%S, $paramName())",
+                            scheme.parameterName,
+                        )
+                    }
+                }
+            }
+            builder.endControlFlow()
+        }
+
+        if (querySchemes.isNotEmpty()) {
+            builder.beginControlFlow("url")
+            for (scheme in querySchemes) {
+                val paramName = "${scheme.name.toCamelCase()}Key"
+                builder.addStatement(
+                    "parameters.append(%S, $paramName())",
+                    scheme.parameterName,
+                )
+            }
+            builder.endControlFlow()
+        }
+
+        return builder.build()
+    }
 
     private fun buildSafeCall(): FunSpec = FunSpec
         .builder(SAFE_CALL)
