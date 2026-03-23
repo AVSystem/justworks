@@ -16,6 +16,7 @@ import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.LambdaTypeName
 import com.squareup.kotlinpoet.MemberName
 import com.squareup.kotlinpoet.ParameterSpec
+import com.squareup.kotlinpoet.ParameterizedTypeName
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
@@ -114,9 +115,35 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             )
         }
 
+        val kdocLines = buildList {
+            endpoint.summary?.let { add(it) }
+            endpoint.description?.let {
+                if (isNotEmpty()) add("")
+                add(it)
+            }
+            val paramDocs = endpoint.parameters.filter { it.description != null }
+            if (paramDocs.isNotEmpty() && isNotEmpty()) add("")
+            paramDocs.forEach { param ->
+                add("@param ${param.name.toCamelCase()} ${param.description}")
+            }
+            if (returnBodyType != UNIT) {
+                if (isNotEmpty()) add("")
+                add("@return [HttpSuccess] containing [${returnBodyType.simpleTypeName()}] on success")
+            }
+        }
+        if (kdocLines.isNotEmpty()) {
+            funBuilder.addKdoc("%L", kdocLines.joinToString("\n"))
+        }
+
         funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
 
         return funBuilder.build()
+    }
+
+    private fun TypeName.simpleTypeName(): String = when (this) {
+        is ClassName -> simpleName
+        is ParameterizedTypeName -> rawType.simpleName
+        else -> toString()
     }
 
     private fun buildNullableParameter(
