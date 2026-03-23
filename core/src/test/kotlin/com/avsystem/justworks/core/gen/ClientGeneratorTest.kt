@@ -337,6 +337,40 @@ class ClientGeneratorTest {
         assertEquals("kotlin.Unit", returnType.typeArguments.first().toString())
     }
 
+    // -- CONT-03: Response code handling --
+
+    @Test
+    fun `201 Created with schema returns typed response`() {
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "createPet",
+            responses = mapOf(
+                "201" to Response("201", "Created", TypeRef.Reference("Pet")),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "createPet" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
+        assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
+    }
+
+    @Test
+    fun `mixed 200 and 204 responses uses 200 schema type`() {
+        val ep = endpoint(
+            method = HttpMethod.DELETE,
+            operationId = "removePet",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "204" to Response("204", "No content", null),
+            ),
+        )
+        val cls = clientClass(listOf(ep))
+        val funSpec = cls.funSpecs.first { it.name == "removePet" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
+    }
+
     // -- Client class extends ApiClientBase --
 
     @Test
