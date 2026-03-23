@@ -1,8 +1,11 @@
+import com.vanniktech.maven.publish.GradlePlugin
+import com.vanniktech.maven.publish.JavadocJar
+
 plugins {
     kotlin("jvm")
     `java-gradle-plugin`
-    `maven-publish`
-    id("org.jetbrains.kotlinx.kover") version "0.9.1"
+    id("com.vanniktech.maven.publish")
+    id("org.jetbrains.kotlinx.kover")
 }
 
 kotlin {
@@ -20,6 +23,15 @@ gradlePlugin {
             id = "com.avsystem.justworks"
             implementationClass = "com.avsystem.justworks.gradle.JustworksPlugin"
         }
+    }
+}
+
+mavenPublishing {
+    configure(GradlePlugin(javadocJar = JavadocJar.Empty()))
+
+    pom {
+        name = "justworks-plugin"
+        description = "Gradle plugin for generating Kotlin Ktor client code from OpenAPI 3.0 specifications"
     }
 }
 
