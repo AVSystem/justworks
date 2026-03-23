@@ -5,6 +5,9 @@ import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.Parameter
 import com.avsystem.justworks.core.model.ParameterLocation
+import com.avsystem.justworks.core.model.PrimitiveType
+import com.avsystem.justworks.core.model.PropertyModel
+import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
@@ -23,8 +26,12 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
 
+private fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
+
 private const val DEFAULT_TAG = "Default"
 private const val API_SUFFIX = "Api"
+private const val MULTIPART_FORM_DATA = "multipart/form-data"
+private const val FORM_URL_ENCODED = "application/x-www-form-urlencoded"
 
 /**
  * Generates one KotlinPoet [FileSpec] per API tag, each containing a client class
@@ -109,9 +116,19 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         funBuilder.addParameters(pathParams + queryParams + headerParams)
 
         if (endpoint.requestBody != null) {
-            funBuilder.addParameter(
-                buildNullableParameter(endpoint.requestBody.schema, BODY, endpoint.requestBody.required),
-            )
+            when (endpoint.requestBody.contentType) {
+                MULTIPART_FORM_DATA -> funBuilder.addParameters(
+                    buildMultipartParameters(endpoint.requestBody),
+                )
+
+                FORM_URL_ENCODED -> funBuilder.addParameters(
+                    buildFormParameters(endpoint.requestBody),
+                )
+
+                else -> funBuilder.addParameter(
+                    buildNullableParameter(endpoint.requestBody.schema, BODY, endpoint.requestBody.required),
+                )
+            }
         }
 
         funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
@@ -135,6 +152,16 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
+    ): CodeBlock = when (endpoint.requestBody?.contentType) {
+        MULTIPART_FORM_DATA -> buildMultipartBody(endpoint, params, returnBodyType)
+        FORM_URL_ENCODED -> buildFormUrlEncodedBody(endpoint, params, returnBodyType)
+        else -> buildJsonBody(endpoint, params, returnBodyType)
+    }
+
+    private fun buildJsonBody(
+        endpoint: Endpoint,
+        params: Map<ParameterLocation, List<Parameter>>,
+        returnBodyType: TypeName,
     ): CodeBlock {
         val httpMethodFun = when (endpoint.method) {
             HttpMethod.GET -> GET_FUN
@@ -144,13 +171,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             HttpMethod.PATCH -> PATCH_FUN
         }
 
-        val (format, args) = params[ParameterLocation.PATH]
-            .orEmpty()
-            .fold($$"${'$'}{$$BASE_URL}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
-                format.replace("{${param.name}}", $$"${%M(%L)}") to args + ENCODE_PARAM_FUN + param.name.toCamelCase()
-            }
-
-        val urlString = CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
+        val urlString = buildUrlString(endpoint, params)
         val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
 
         val code = CodeBlock.builder()
@@ -160,29 +181,8 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         code.beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
         code.addStatement("$APPLY_AUTH()")
 
-        val headerParams = params[ParameterLocation.HEADER]
-        if (!headerParams.isNullOrEmpty()) {
-            code.beginControlFlow("%M", HEADERS_FUN)
-            for (param in headerParams) {
-                val paramName = param.name.toCamelCase()
-                code.optionalGuard(param.required, paramName) {
-                    addStatement("append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
-                }
-            }
-            code.endControlFlow()
-        }
-
-        val queryParams = params[ParameterLocation.QUERY]
-        if (!queryParams.isNullOrEmpty()) {
-            code.beginControlFlow("url")
-            for (param in queryParams) {
-                val paramName = param.name.toCamelCase()
-                code.optionalGuard(param.required, paramName) {
-                    addStatement("this.parameters.append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
-                }
-            }
-            code.endControlFlow()
-        }
+        addHeaderParams(code, params)
+        addQueryParams(code, params)
 
         if (endpoint.requestBody != null) {
             code.optionalGuard(endpoint.requestBody.required, BODY) {
@@ -197,6 +197,189 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
 
         return code.build()
     }
+
+    private fun buildMultipartBody(
+        endpoint: Endpoint,
+        params: Map<ParameterLocation, List<Parameter>>,
+        returnBodyType: TypeName,
+    ): CodeBlock {
+        val urlString = buildUrlString(endpoint, params)
+        val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
+        val properties = extractInlineProperties(endpoint.requestBody!!)
+
+        val code = CodeBlock.builder()
+        code.beginControlFlow("return $SAFE_CALL")
+        code.beginControlFlow(
+            "$CLIENT.%M(\nurl = %L,\nformData = %M",
+            SUBMIT_FORM_WITH_BINARY_DATA_FUN,
+            urlString,
+            FORM_DATA_FUN,
+        )
+
+        for (prop in properties) {
+            val paramName = prop.name.toCamelCase()
+            if (prop.type.isBinaryUpload()) {
+                code.beginControlFlow(
+                    "append(%S, %L, %T.build",
+                    prop.name,
+                    paramName,
+                    HEADERS_CLASS,
+                )
+                code.addStatement(
+                    "append(%T.ContentType, %L.toString())",
+                    HTTP_HEADERS_OBJECT,
+                    "${paramName}ContentType",
+                )
+                code.addStatement(
+                    "append(%T.ContentDisposition, %P)",
+                    HTTP_HEADERS_OBJECT,
+                    CodeBlock.of("filename=\"\${%L}\"", "${paramName}Name"),
+                )
+                code.endControlFlow()
+                code.add(")\n")
+            } else {
+                code.addStatement("append(%S, %L)", prop.name, paramName)
+            }
+        }
+
+        code.endControlFlow() // formData
+        code.add(")\n")
+        code.beginControlFlow("")
+        code.addStatement("$APPLY_AUTH()")
+        addHeaderParams(code, params)
+        addQueryParams(code, params)
+        code.endControlFlow()
+        code.unindent()
+        code.add("}.%M()\n", resultFun)
+
+        return code.build()
+    }
+
+    private fun buildFormUrlEncodedBody(
+        endpoint: Endpoint,
+        params: Map<ParameterLocation, List<Parameter>>,
+        returnBodyType: TypeName,
+    ): CodeBlock {
+        val urlString = buildUrlString(endpoint, params)
+        val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
+        val properties = extractInlineProperties(endpoint.requestBody!!)
+        val requiredProperties = extractRequiredProperties(endpoint.requestBody)
+
+        val code = CodeBlock.builder()
+        code.beginControlFlow("return $SAFE_CALL")
+        code.beginControlFlow(
+            "$CLIENT.%M(\nurl = %L,\nformParameters = %M",
+            SUBMIT_FORM_FUN,
+            urlString,
+            PARAMETERS_FUN,
+        )
+
+        for (prop in properties) {
+            val paramName = prop.name.toCamelCase()
+            val isRequired = prop.name in requiredProperties
+            val isString = prop.type == TypeRef.Primitive(PrimitiveType.STRING)
+            val valueExpr = if (isString) paramName else "$paramName.toString()"
+
+            code.optionalGuard(isRequired, paramName) {
+                addStatement("append(%S, %L)", prop.name, valueExpr)
+            }
+        }
+
+        code.endControlFlow() // parameters
+        code.add(")\n")
+        code.beginControlFlow("")
+        code.addStatement("$APPLY_AUTH()")
+        addHeaderParams(code, params)
+        addQueryParams(code, params)
+
+        if (endpoint.method != HttpMethod.POST) {
+            code.addStatement("method = %T.%L", HTTP_METHOD_CLASS, endpoint.method.name.toPascalCase())
+        }
+
+        code.endControlFlow()
+        code.unindent()
+        code.add("}.%M()\n", resultFun)
+
+        return code.build()
+    }
+
+    private fun buildUrlString(endpoint: Endpoint, params: Map<ParameterLocation, List<Parameter>>,): CodeBlock {
+        val (format, args) = params[ParameterLocation.PATH]
+            .orEmpty()
+            .fold($$"${'$'}{$$BASE_URL}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
+                format.replace("{${param.name}}", $$"${%M(%L)}") to args + ENCODE_PARAM_FUN + param.name.toCamelCase()
+            }
+        return CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
+    }
+
+    private fun addHeaderParams(code: CodeBlock.Builder, params: Map<ParameterLocation, List<Parameter>>) {
+        val headerParams = params[ParameterLocation.HEADER]
+        if (!headerParams.isNullOrEmpty()) {
+            code.beginControlFlow("%M", HEADERS_FUN)
+            for (param in headerParams) {
+                val paramName = param.name.toCamelCase()
+                code.optionalGuard(param.required, paramName) {
+                    addStatement("append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
+                }
+            }
+            code.endControlFlow()
+        }
+    }
+
+    private fun addQueryParams(code: CodeBlock.Builder, params: Map<ParameterLocation, List<Parameter>>) {
+        val queryParams = params[ParameterLocation.QUERY]
+        if (!queryParams.isNullOrEmpty()) {
+            code.beginControlFlow("url")
+            for (param in queryParams) {
+                val paramName = param.name.toCamelCase()
+                code.optionalGuard(param.required, paramName) {
+                    addStatement("this.parameters.append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
+                }
+            }
+            code.endControlFlow()
+        }
+    }
+
+    private fun buildMultipartParameters(requestBody: RequestBody): List<ParameterSpec> {
+        val properties = extractInlineProperties(requestBody)
+        return properties.flatMap { prop ->
+            if (prop.type.isBinaryUpload()) {
+                listOf(
+                    ParameterSpec(prop.name.toCamelCase(), CHANNEL_PROVIDER),
+                    ParameterSpec("${prop.name.toCamelCase()}Name", STRING),
+                    ParameterSpec("${prop.name.toCamelCase()}ContentType", CONTENT_TYPE_CLASS),
+                )
+            } else {
+                listOf(
+                    ParameterSpec(
+                        prop.name.toCamelCase(),
+                        TypeMapping.toTypeName(prop.type, modelPackage),
+                    ),
+                )
+            }
+        }
+    }
+
+    private fun buildFormParameters(requestBody: RequestBody): List<ParameterSpec> {
+        val properties = extractInlineProperties(requestBody)
+        val required = extractRequiredProperties(requestBody)
+        return properties.map { prop ->
+            val isRequired = prop.name in required
+            buildNullableParameter(prop.type, prop.name, isRequired)
+        }
+    }
+
+    private fun extractInlineProperties(requestBody: RequestBody): List<PropertyModel> =
+        when (val schema = requestBody.schema) {
+            is TypeRef.Inline -> schema.properties
+            else -> emptyList()
+        }
+
+    private fun extractRequiredProperties(requestBody: RequestBody): Set<String> =
+        when (val schema = requestBody.schema) {
+            is TypeRef.Inline -> schema.requiredProperties
+            else -> emptySet()
+        }
 
     private fun resolveReturnType(endpoint: Endpoint): TypeName = endpoint.responses.entries
         .asSequence()
