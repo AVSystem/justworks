@@ -9,7 +9,6 @@ import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.ContextParameter
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
@@ -99,12 +98,11 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
     private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = endpoint.operationId.toCamelCase()
         val returnBodyType = resolveReturnType(endpoint)
-        val returnType = HTTP_SUCCESS.parameterizedBy(returnBodyType)
+        val returnType = HTTP_RESULT.parameterizedBy(JSON_ELEMENT, returnBodyType)
 
         val funBuilder = FunSpec
             .builder(functionName)
             .addModifiers(KModifier.SUSPEND)
-            .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
             .returns(returnType)
 
         val params = endpoint.parameters.groupBy { it.location }
@@ -206,9 +204,10 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             }
         }
 
-        code.endControlFlow() // client.METHOD
+        // Close client.METHOD block and chain .toResult() / .toEmptyResult()
         code.unindent()
         code.add("}.%M()\n", resultFun)
+        code.endControlFlow() // safeCall
 
         return code.build()
     }
