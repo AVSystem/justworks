@@ -1079,6 +1079,88 @@ class ModelGeneratorTest {
         )
     }
 
+    // -- CEM-02: Freeform/Any type handling --
+
+    @Test
+    fun `freeform object property generates JsonElement type`() {
+        val schema = SchemaModel(
+            name = "WorkflowResultDTO",
+            description = null,
+            properties = listOf(
+                PropertyModel("response", TypeRef.Unknown, null, false),
+            ),
+            requiredProperties = setOf("response"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .first()
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "response" }
+        assertEquals("kotlinx.serialization.json.JsonElement", param.type.toString())
+    }
+
+    @Test
+    fun `nullable freeform property generates nullable JsonElement with null default`() {
+        val schema = SchemaModel(
+            name = "TaskReportDTO",
+            description = null,
+            properties = listOf(
+                PropertyModel("response", TypeRef.Unknown, null, true),
+            ),
+            requiredProperties = emptySet(),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .first()
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "response" }
+        assertTrue(param.type.isNullable, "Nullable freeform property should be nullable")
+        assertEquals("kotlinx.serialization.json.JsonElement?", param.type.toString())
+        assertEquals("null", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `array of freeform items generates List of JsonElement`() {
+        val schema = SchemaModel(
+            name = "DeviceInfo",
+            description = null,
+            properties = listOf(
+                PropertyModel("healthChecks", TypeRef.Array(TypeRef.Unknown), null, true),
+            ),
+            requiredProperties = emptySet(),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .first()
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "healthChecks" }
+        assertTrue(
+            param.type.toString().contains("List<kotlinx.serialization.json.JsonElement>"),
+            "Expected List<JsonElement>, got: ${param.type}",
+        )
+    }
+
     @Test
     fun `required property in allOf schema generates as non-nullable without default`() {
         val composedSchema = SchemaModel(
