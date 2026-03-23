@@ -500,7 +500,53 @@ class SpecParserTest : SpecParserTestBase() {
         assertEquals(null, extended.underlyingType, "allOf schema should not have underlyingType")
     }
 
+    // -- SCHM-03/04/05: Extended format type mapping --
+
+    @Test
+    fun `format type mapping produces correct PrimitiveType`() {
+        val cases = listOf(
+            Triple("string", "uuid", PrimitiveType.UUID),
+            Triple("string", "uri", PrimitiveType.STRING),
+            Triple("string", "url", PrimitiveType.STRING),
+            Triple("string", "binary", PrimitiveType.BYTE_ARRAY),
+            Triple("string", "email", PrimitiveType.STRING),
+            Triple("string", "hostname", PrimitiveType.STRING),
+            Triple("string", "ipv4", PrimitiveType.STRING),
+            Triple("string", "ipv6", PrimitiveType.STRING),
+            Triple("string", "password", PrimitiveType.STRING),
+            Triple("string", "byte", PrimitiveType.BYTE_ARRAY),
+            Triple("string", "date", PrimitiveType.DATE),
+            Triple("string", "date-time", PrimitiveType.DATE_TIME),
+            Triple("integer", "int32", PrimitiveType.INT),
+            Triple("integer", "int64", PrimitiveType.LONG),
+            Triple("number", "float", PrimitiveType.FLOAT),
+            Triple("number", "double", PrimitiveType.DOUBLE),
+        )
+        for ((oasType, format, expected) in cases) {
+            val prop = parseSpec(formatSpec(oasType, format)).schemas[0].properties[0]
+            val type = assertIs<TypeRef.Primitive>(prop.type, "Expected Primitive for $oasType/$format")
+            assertEquals(expected, type.type, "$oasType with format $format should produce $expected")
+        }
+    }
+
     // -- Helpers --
+
+    private fun formatSpec(type: String, format: String): File =
+        """
+        openapi: 3.0.0
+        info:
+          title: Test
+          version: 1.0.0
+        paths: {}
+        components:
+          schemas:
+            TestModel:
+              type: object
+              properties:
+                field:
+                  type: $type
+                  format: $format
+        """.trimIndent().toTempFile()
 
     private fun String.toTempFile(): File {
         val tempFile = File.createTempFile("test-spec-", ".yaml")
