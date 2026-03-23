@@ -41,7 +41,7 @@ class IntegrationTest {
             val spec = parseSpec(fixture).apiSpec
             if (spec.enums.isEmpty()) continue
 
-            val generator = ModelGenerator(modelPackage)
+            val generator = ModelGenerator(modelPackage, NameRegistry())
             val files = generator.generate(spec)
             assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
 
@@ -98,12 +98,12 @@ class IntegrationTest {
         for (fixture in SPEC_FIXTURES) {
             val spec = parseSpec(fixture).apiSpec
 
-            val modelGenerator = ModelGenerator(modelPackage)
+            val modelGenerator = ModelGenerator(modelPackage, NameRegistry())
             val modelFiles = modelGenerator.generate(spec)
             assertTrue(modelFiles.isNotEmpty(), "$fixture: ModelGenerator should produce files")
 
             if (spec.endpoints.isNotEmpty()) {
-                val clientGenerator = ClientGenerator(apiPackage, modelPackage)
+                val clientGenerator = ClientGenerator(apiPackage, modelPackage, NameRegistry())
                 val clientFiles = clientGenerator.generate(spec)
                 assertTrue(
                     clientFiles.isNotEmpty(),

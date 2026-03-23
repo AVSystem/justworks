@@ -16,7 +16,7 @@ import kotlin.test.assertTrue
 
 class ModelGeneratorTest {
     private val modelPackage = "com.example.model"
-    private val generator = ModelGenerator(modelPackage)
+    private val generator = ModelGenerator(modelPackage, NameRegistry())
 
     private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
         title = "Test",

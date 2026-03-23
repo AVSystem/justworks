@@ -16,12 +16,18 @@ object CodeGenerator {
         apiPackage: String,
         outputDir: File
     ): Result {
-        val modelFiles = ModelGenerator(modelPackage).generate(spec)
+        val modelRegistry = NameRegistry().apply {
+            spec.schemas.forEach { reserve(it.name) }
+            spec.enums.forEach { reserve(it.name) }
+        }
+        val apiRegistry = NameRegistry()
+
+        val modelFiles = ModelGenerator(modelPackage, modelRegistry).generate(spec)
         modelFiles.forEach { it.writeTo(outputDir) }
 
         val hasPolymorphicTypes = modelFiles.any { it.name == SerializersModuleGenerator.FILE_NAME }
 
-        val clientFiles = ClientGenerator(apiPackage, modelPackage).generate(spec, hasPolymorphicTypes)
+        val clientFiles = ClientGenerator(apiPackage, modelPackage, apiRegistry).generate(spec, hasPolymorphicTypes)
         clientFiles.forEach { it.writeTo(outputDir) }
 
         return Result(modelFiles.size, clientFiles.size)

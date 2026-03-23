@@ -30,10 +30,9 @@ import kotlin.time.Instant
  * Produces one file per [SchemaModel] (data class, sealed interface, or allOf composed class)
  * and one file per [EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
-class ModelGenerator(private val modelPackage: String) {
+class ModelGenerator(private val modelPackage: String, private val nameRegistry: NameRegistry) {
     fun generate(spec: ApiSpec): List<FileSpec> = context(
         buildHierarchyInfo(spec.schemas),
-        InlineSchemaDeduplicator(spec.schemas.map { it.name }.toSet()),
     ) {
         val schemaFiles = spec.schemas.flatMap { generateSchemaFiles(it) }
 
@@ -88,7 +87,6 @@ class ModelGenerator(private val modelPackage: String) {
         return HierarchyInfo(sealedHierarchies, variantParents, anyOfWithoutDiscriminator, schemas)
     }
 
-    context(deduplicator: InlineSchemaDeduplicator)
     private fun collectAllInlineSchemas(spec: ApiSpec): List<SchemaModel> {
         val endpointRefs = spec.endpoints.flatMap { endpoint ->
             val requestRef = endpoint.requestBody?.schema
@@ -104,7 +102,7 @@ class ModelGenerator(private val modelPackage: String) {
             .distinctBy { InlineSchemaKey.from(it.properties, it.requiredProperties) }
             .map { ref ->
                 SchemaModel(
-                    name = deduplicator.getOrGenerateName(ref.properties, ref.requiredProperties, ref.contextHint),
+                    name = nameRegistry.register(ref.contextHint.toInlinedName()),
                     description = null,
                     properties = ref.properties,
                     requiredProperties = ref.requiredProperties,
@@ -411,12 +409,13 @@ class ModelGenerator(private val modelPackage: String) {
 
         val typeSpec = TypeSpec.enumBuilder(className).addAnnotation(SERIALIZABLE)
 
+        val enumRegistry = NameRegistry()
         enum.values.forEach { value ->
             val anonymousClass = TypeSpec
                 .anonymousClassBuilder()
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", value).build())
                 .build()
-            typeSpec.addEnumConstant(value.toEnumConstantName(), anonymousClass)
+            typeSpec.addEnumConstant(enumRegistry.register(value.toEnumConstantName()), anonymousClass)
         }
 
         if (enum.description != null) {

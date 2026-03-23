@@ -31,7 +31,11 @@ private const val API_SUFFIX = "Api"
  * that extends `ApiClientBase` with suspend functions for every endpoint in that tag group.
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
-class ClientGenerator(private val apiPackage: String, private val modelPackage: String) {
+class ClientGenerator(
+    private val apiPackage: String,
+    private val modelPackage: String,
+    private val nameRegistry: NameRegistry,
+) {
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) -> generateClientFile(tag, endpoints, hasPolymorphicTypes) }
@@ -42,7 +46,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean = false,
     ): FileSpec {
-        val className = ClassName(apiPackage, "${tag.toPascalCase()}$API_SUFFIX")
+        val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
 
         val clientInitializer = if (hasPolymorphicTypes) {
             val generatedSerializersModule = MemberName(modelPackage, GENERATED_SERIALIZERS_MODULE)
@@ -73,7 +77,8 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             .primaryConstructor(primaryConstructor)
             .addProperty(httpClientProperty)
 
-        classBuilder.addFunctions(endpoints.map(::generateEndpointFunction))
+        val methodRegistry = NameRegistry()
+        classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it, methodRegistry) })
 
         return FileSpec
             .builder(className)
@@ -81,8 +86,8 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             .build()
     }
 
-    private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
-        val functionName = endpoint.operationId.toCamelCase()
+    private fun generateEndpointFunction(endpoint: Endpoint, methodRegistry: NameRegistry): FunSpec {
+        val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
         val returnType = HTTP_SUCCESS.parameterizedBy(returnBodyType)
 

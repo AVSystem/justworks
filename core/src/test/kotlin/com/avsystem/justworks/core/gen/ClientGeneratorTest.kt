@@ -21,7 +21,7 @@ import kotlin.test.assertTrue
 class ClientGeneratorTest {
     private val apiPackage = "com.example.api"
     private val modelPackage = "com.example.model"
-    private val generator = ClientGenerator(apiPackage, modelPackage)
+    private val generator = ClientGenerator(apiPackage, modelPackage, NameRegistry())
 
     private fun spec(endpoints: List<Endpoint>) = ApiSpec(
         title = "Test",
@@ -352,6 +352,7 @@ class ClientGeneratorTest {
         val files = ClientGenerator(
             apiPackage,
             modelPackage,
+            NameRegistry(),
         ).generate(spec(listOf(endpoint())), hasPolymorphicTypes = true)
         val clientProperty = files
             .first()
@@ -373,6 +374,7 @@ class ClientGeneratorTest {
         val files = ClientGenerator(
             apiPackage,
             modelPackage,
+            NameRegistry(),
         ).generate(spec(listOf(endpoint())), hasPolymorphicTypes = false)
         val clientProperty = files
             .first()
