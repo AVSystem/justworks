@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.parser
 
+import arrow.core.compareTo
 import arrow.core.fold
 import arrow.core.merge
 import arrow.core.raise.context.Raise
@@ -117,11 +118,29 @@ object SpecParser {
                 }
             }
 
+            // Pick up synthetic schemas added by detectAndUnwrapOneOfWrappers.
+            // Iterate until stable, since processing a synthetic schema could register more.
+            tailrec fun collectModels(processed: Set<String>, acc: List<SchemaModel>): List<SchemaModel> {
+                val currentKeys = componentSchemas.keys - allSchemas.keys - processed
+                return if (currentKeys.isEmpty()) {
+                    acc
+                } else {
+                    val newModels = currentKeys
+                        .asSequence()
+                        .mapNotNull { name -> componentSchemas[name]?.let { name to it } }
+                        .filterNot { (_, schema) -> schema.isEnumSchema }
+                        .map { (name, schema) -> extractSchemaModel(name, schema) }
+
+                    collectModels(processed + currentKeys, acc + newModels)
+                }
+            }
+
+            val syntheticModels = collectModels(emptySet(), emptyList())
             return ApiSpec(
                 title = info?.title ?: "Untitled",
                 version = info?.version ?: "0.0.0",
                 endpoints = endpoints,
-                schemas = schemaModels,
+                schemas = schemaModels + syntheticModels,
                 enums = enumModels,
             )
         }
@@ -301,12 +320,14 @@ object SpecParser {
                 )
 
                 val schemaName = ensureNotNull(
-                    propertySchema.resolveName() ?: propertyName
-                        .takeIf { propertySchema.isInlineObject }
-                        ?.also { name ->
-                            componentSchemas[name] = propertySchema
-                            componentSchemaIdentity[propertySchema] = name
-                        },
+                    propertySchema.resolveName()
+                        ?: propertyName
+                            .takeIf { propertySchema.isInlineObject }
+                            ?.let { rawName ->
+                                componentSchemas[rawName] = propertySchema
+                                componentSchemaIdentity[propertySchema] = rawName
+                                rawName
+                            },
                 )
 
                 propertyName to schemaName
