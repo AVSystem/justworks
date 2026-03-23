@@ -89,15 +89,19 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has safeCall function`() {
+    fun `ApiClientBase has safeCall function with no context parameters`() {
         val safeCall = classSpec.funSpecs.first { it.name == "safeCall" }
         assertTrue(KModifier.PROTECTED in safeCall.modifiers)
         assertTrue(KModifier.SUSPEND in safeCall.modifiers)
-        assertTrue(safeCall.contextParameters.isNotEmpty(), "Expected context parameter")
+        assertTrue(KModifier.INLINE in safeCall.modifiers)
+        assertTrue(safeCall.contextParameters.isEmpty(), "Expected no context parameters")
+        assertEquals(2, safeCall.typeVariables.size, "Expected E and T type variables")
+        assertTrue(safeCall.typeVariables.all { it.isReified }, "Expected reified type variables")
         val body = safeCall.body.toString()
         assertTrue(body.contains("IOException"), "Expected IOException catch")
         assertTrue(body.contains("HttpRequestTimeoutException"), "Expected HttpRequestTimeoutException catch")
-        assertTrue(body.contains("Network error"), "Expected Network error message")
+        assertTrue(body.contains("Either.Left"), "Expected Either.Left in body")
+        assertTrue(body.contains("HttpError.Network"), "Expected HttpError.Network in body")
     }
 
     @Test
@@ -123,28 +127,67 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `toResult is suspend inline with reified T and context parameter`() {
+    fun `toResult is suspend inline with reified E and T, no context parameter`() {
         val fn = topLevelFun("toResult")
         assertTrue(KModifier.SUSPEND in fn.modifiers)
         assertTrue(KModifier.INLINE in fn.modifiers)
-        val typeVar = fn.typeVariables.first()
-        assertTrue(typeVar.isReified, "Expected reified type variable")
+        assertEquals(2, fn.typeVariables.size, "Expected E and T type variables")
+        assertTrue(fn.typeVariables.all { it.isReified }, "Expected reified type variables")
         assertNotNull(fn.receiverType, "Expected HttpResponse receiver")
-        assertTrue(fn.contextParameters.isNotEmpty(), "Expected context parameter")
-        val contextType = fn.contextParameters.first().type
-        assertTrue(contextType is ParameterizedTypeName)
-        assertEquals("arrow.core.raise.Raise", contextType.rawType.toString())
+        assertTrue(fn.contextParameters.isEmpty(), "Expected no context parameters")
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("com.avsystem.justworks.HttpResult", returnType.rawType.toString())
     }
 
     @Test
-    fun `toEmptyResult is suspend with context parameter and returns HttpSuccess Unit`() {
+    fun `toEmptyResult returns HttpResult E Unit with no context parameter`() {
         val fn = topLevelFun("toEmptyResult")
         assertTrue(KModifier.SUSPEND in fn.modifiers)
+        assertTrue(KModifier.INLINE in fn.modifiers)
+        assertEquals(1, fn.typeVariables.size, "Expected E type variable")
+        assertTrue(fn.typeVariables.first().isReified, "Expected reified type variable")
         assertNotNull(fn.receiverType, "Expected HttpResponse receiver")
-        assertTrue(fn.contextParameters.isNotEmpty(), "Expected context parameter")
+        assertTrue(fn.contextParameters.isEmpty(), "Expected no context parameters")
         val returnType = fn.returnType as ParameterizedTypeName
-        assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
-        assertEquals("kotlin.Unit", returnType.typeArguments.first().toString())
+        assertEquals("com.avsystem.justworks.HttpResult", returnType.rawType.toString())
+    }
+
+    @Test
+    fun `mapToResult branches on specific status codes`() {
+        val fn = topLevelFun("mapToResult")
+        val body = fn.body.toString()
+        assertTrue(body.contains("400 ->"), "Expected 400 branch")
+        assertTrue(body.contains("401 ->"), "Expected 401 branch")
+        assertTrue(body.contains("403 ->"), "Expected 403 branch")
+        assertTrue(body.contains("404 ->"), "Expected 404 branch")
+        assertTrue(body.contains("405 ->"), "Expected 405 branch")
+        assertTrue(body.contains("409 ->"), "Expected 409 branch")
+        assertTrue(body.contains("410 ->"), "Expected 410 branch")
+        assertTrue(body.contains("422 ->"), "Expected 422 branch")
+        assertTrue(body.contains("429 ->"), "Expected 429 branch")
+        assertTrue(body.contains("500 ->"), "Expected 500 branch")
+        assertTrue(body.contains("502 ->"), "Expected 502 branch")
+        assertTrue(body.contains("503 ->"), "Expected 503 branch")
+        assertTrue(body.contains("HttpError.BadRequest"), "Expected HttpError.BadRequest")
+        assertTrue(body.contains("HttpError.NotFound"), "Expected HttpError.NotFound")
+        assertTrue(body.contains("HttpError.InternalServerError"), "Expected HttpError.InternalServerError")
+        assertTrue(body.contains("HttpError.Other"), "Expected HttpError.Other catchall")
+        assertTrue(body.contains("Either.Right"), "Expected Either.Right for success")
+        assertTrue(body.contains("Either.Left"), "Expected Either.Left for errors")
+    }
+
+    @Test
+    fun `deserializeErrorBody helper function exists`() {
+        val fn = topLevelFun("deserializeErrorBody")
+        assertTrue(KModifier.INTERNAL in fn.modifiers)
+        assertTrue(KModifier.INLINE in fn.modifiers)
+        assertTrue(KModifier.SUSPEND in fn.modifiers)
+        assertEquals(1, fn.typeVariables.size, "Expected E type variable")
+        assertTrue(fn.typeVariables.first().isReified, "Expected reified type variable")
+        assertNotNull(fn.receiverType, "Expected HttpResponse receiver")
+        val body = fn.body.toString()
+        assertTrue(body.contains("body"), "Expected body() call")
+        assertTrue(body.contains("catch"), "Expected catch block for fallback")
     }
 
     @Test

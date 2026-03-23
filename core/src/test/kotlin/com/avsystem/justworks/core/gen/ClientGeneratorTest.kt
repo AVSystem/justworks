@@ -212,32 +212,36 @@ class ClientGeneratorTest {
         assertEquals("com.example.model.Pet", bodyParam.type.toString())
     }
 
-    // -- CLNT-08: Return type is Success parameterized --
+    // -- CLNT-08: Return type is HttpResult parameterized --
 
     @Test
-    fun `return type is Success parameterized`() {
+    fun `return type is HttpResult parameterized`() {
         val cls = clientClass(listOf(endpoint()))
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val returnType = funSpec.returnType
         assertNotNull(returnType)
         assertTrue(returnType is ParameterizedTypeName, "Expected ParameterizedTypeName")
-        assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
-        assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
+        assertEquals("com.avsystem.justworks.HttpResult", returnType.rawType.toString())
+        assertEquals(
+            "kotlinx.serialization.json.JsonElement",
+            returnType.typeArguments[0].toString(),
+            "Expected JsonElement as error type",
+        )
+        assertEquals(
+            "com.example.model.Pet",
+            returnType.typeArguments[1].toString(),
+            "Expected Pet as success body type",
+        )
     }
 
-    // -- Context receiver: Raise<HttpError> --
+    // -- ERR-01: No Raise context on endpoint functions --
 
     @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
-    fun `endpoint functions have Raise HttpError context parameter`() {
+    fun `endpoint functions have no context parameters`() {
         val cls = clientClass(listOf(endpoint()))
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
-        val contextParameters = funSpec.contextParameters
-        assertTrue(contextParameters.isNotEmpty(), "Expected context parameter")
-        val contextType = contextParameters.first().type
-        assertTrue(contextType is ParameterizedTypeName, "Expected parameterized Raise type")
-        assertEquals("arrow.core.raise.Raise", contextType.rawType.toString())
-        assertEquals("com.avsystem.justworks.HttpError", contextType.typeArguments.first().toString())
+        assertTrue(funSpec.contextParameters.isEmpty(), "Expected no context parameters")
     }
 
     // -- CLNT-09: Header parameters become function parameters --
@@ -326,7 +330,7 @@ class ClientGeneratorTest {
     // -- Pitfall 5: Void response uses Unit type parameter --
 
     @Test
-    fun `void response uses Unit type parameter`() {
+    fun `void response uses HttpResult with Unit type parameter`() {
         val ep =
             endpoint(
                 method = HttpMethod.DELETE,
@@ -336,8 +340,17 @@ class ClientGeneratorTest {
         val cls = clientClass(listOf(ep))
         val funSpec = cls.funSpecs.first { it.name == "deletePet" }
         val returnType = funSpec.returnType as ParameterizedTypeName
-        assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
-        assertEquals("kotlin.Unit", returnType.typeArguments.first().toString())
+        assertEquals("com.avsystem.justworks.HttpResult", returnType.rawType.toString())
+        assertEquals(
+            "kotlinx.serialization.json.JsonElement",
+            returnType.typeArguments[0].toString(),
+            "Expected JsonElement as error type",
+        )
+        assertEquals(
+            "kotlin.Unit",
+            returnType.typeArguments[1].toString(),
+            "Expected Unit as success body type",
+        )
     }
 
     // -- Client class extends ApiClientBase --
