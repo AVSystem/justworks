@@ -9,9 +9,7 @@ import kotlin.test.assertNotEquals
 
 class InlineSchemaDedupTest {
     @Test
-    fun `identical schemas return same name`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
-
+    fun `identical schemas return same name via InlineSchemaKey`() {
         val props1 = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
             PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
@@ -23,17 +21,14 @@ class InlineSchemaDedupTest {
             PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
         )
 
-        val name1 = deduplicator.getOrGenerateName(props1, required, "FirstContext")
-        val name2 = deduplicator.getOrGenerateName(props2, required, "SecondContext")
+        val key1 = InlineSchemaKey.from(props1, required)
+        val key2 = InlineSchemaKey.from(props2, required)
 
-        assertEquals("FirstContext", name1)
-        assertEquals("FirstContext", name2) // Same structure returns same name
+        assertEquals(key1, key2)
     }
 
     @Test
-    fun `different schemas return different names`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
-
+    fun `different schemas produce different keys`() {
         val props1 = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
         )
@@ -42,31 +37,25 @@ class InlineSchemaDedupTest {
             PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
         )
 
-        val name1 = deduplicator.getOrGenerateName(props1, setOf("id"), "FirstContext")
-        val name2 = deduplicator.getOrGenerateName(props2, setOf("name"), "SecondContext")
+        val key1 = InlineSchemaKey.from(props1, setOf("id"))
+        val key2 = InlineSchemaKey.from(props2, setOf("name"))
 
-        assertEquals("FirstContext", name1)
-        assertEquals("SecondContext", name2)
-        assertNotEquals(name1, name2)
+        assertNotEquals(key1, key2)
     }
 
     @Test
-    fun `name collision with component schema appends Inline suffix`() {
-        val deduplicator = InlineSchemaDeduplicator(componentSchemaNames = setOf("Pet"))
+    fun `name collision with component schema uses numeric suffix`() {
+        val registry = NameRegistry().apply {
+            reserve("Pet")
+        }
 
-        val props = listOf(
-            PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
-        )
+        val name = registry.register("Pet")
 
-        val name = deduplicator.getOrGenerateName(props, setOf("id"), "Pet")
-
-        assertEquals("PetInline", name) // Collision with component schema
+        assertEquals("Pet2", name)
     }
 
     @Test
     fun `property order does not affect equality`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
-
         val props1 = listOf(
             PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
@@ -79,49 +68,33 @@ class InlineSchemaDedupTest {
 
         val required = setOf("id", "name")
 
-        val name1 = deduplicator.getOrGenerateName(props1, required, "FirstContext")
-        val name2 = deduplicator.getOrGenerateName(props2, required, "SecondContext")
+        val key1 = InlineSchemaKey.from(props1, required)
+        val key2 = InlineSchemaKey.from(props2, required)
 
-        // Same structure despite different order
-        assertEquals("FirstContext", name1)
-        assertEquals("FirstContext", name2)
+        assertEquals(key1, key2)
     }
 
     @Test
     fun `different required sets produce different keys`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
-
         val props = listOf(
             PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
             PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, true),
         )
 
-        val name1 = deduplicator.getOrGenerateName(props, setOf("id", "name"), "FirstContext")
-        val name2 = deduplicator.getOrGenerateName(props, setOf("id"), "SecondContext")
+        val key1 = InlineSchemaKey.from(props, setOf("id", "name"))
+        val key2 = InlineSchemaKey.from(props, setOf("id"))
 
-        // Different required sets mean different structures
-        assertEquals("FirstContext", name1)
-        assertEquals("SecondContext", name2)
-        assertNotEquals(name1, name2)
+        assertNotEquals(key1, key2)
     }
 
     @Test
-    fun `collision with existing inline schema name appends Inline suffix`() {
-        val deduplicator = InlineSchemaDeduplicator(emptySet())
+    fun `collision with existing inline schema name uses numeric suffix`() {
+        val registry = NameRegistry()
 
-        val props1 = listOf(
-            PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, false),
-        )
-        val props2 = listOf(
-            PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
-        )
-
-        // First schema gets the base name
-        val name1 = deduplicator.getOrGenerateName(props1, setOf("id"), "Context")
+        val name1 = registry.register("Context")
         assertEquals("Context", name1)
 
-        // Second schema (different structure) wants same name, gets Inline suffix
-        val name2 = deduplicator.getOrGenerateName(props2, setOf("name"), "Context")
-        assertEquals("ContextInline", name2)
+        val name2 = registry.register("Context")
+        assertEquals("Context2", name2)
     }
 }
