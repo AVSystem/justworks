@@ -59,9 +59,12 @@ val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
 val RAISE = ClassName("arrow.core.raise", "Raise")
 val RAISE_FUN = MemberName("arrow.core.raise.context", "raise")
 
+val EITHER = ClassName("arrow.core", "Either")
+
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
-val HTTP_ERROR_TYPE = ClassName("com.avsystem.justworks", "HttpErrorType")
+val HTTP_ERROR_TYPE = ClassName("com.avsystem.justworks", "HttpErrorType") // TODO: remove in Plan 02
 val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
+val HTTP_RESULT = ClassName("com.avsystem.justworks", "HttpResult")
 
 // ============================================================================
 // Kotlin stdlib
