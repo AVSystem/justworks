@@ -1,6 +1,7 @@
 package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.gen.NameRegistry
+import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.parser.ParseResult
 import com.avsystem.justworks.core.parser.SpecParser
 import java.io.File
@@ -26,6 +27,11 @@ class IntegrationTest {
         )
     }
 
+    private fun buildModelRegistry(spec: ApiSpec) = NameRegistry().apply {
+        spec.schemas.forEach { reserve(it.name) }
+        spec.enums.forEach { reserve(it.name) }
+    }
+
     private fun parseSpec(resourcePath: String): ParseResult.Success {
         val specUrl = javaClass.getResource(resourcePath)
             ?: fail("Spec fixture not found: $resourcePath")
@@ -42,7 +48,7 @@ class IntegrationTest {
             val spec = parseSpec(fixture).apiSpec
             if (spec.enums.isEmpty()) continue
 
-            val generator = ModelGenerator(modelPackage, NameRegistry())
+            val generator = ModelGenerator(modelPackage, buildModelRegistry(spec))
             val files = generator.generate(spec)
             assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
 
@@ -99,7 +105,7 @@ class IntegrationTest {
         for (fixture in SPEC_FIXTURES) {
             val spec = parseSpec(fixture).apiSpec
 
-            val modelGenerator = ModelGenerator(modelPackage, NameRegistry())
+            val modelGenerator = ModelGenerator(modelPackage, buildModelRegistry(spec))
             val modelFiles = modelGenerator.generate(spec)
             assertTrue(modelFiles.isNotEmpty(), "$fixture: ModelGenerator should produce files")
 
@@ -124,7 +130,7 @@ class IntegrationTest {
         for (fixture in SPEC_FIXTURES) {
             val spec = parseSpec(fixture).apiSpec
 
-            val generator = ModelGenerator(modelPackage, NameRegistry())
+            val generator = ModelGenerator(modelPackage, buildModelRegistry(spec))
             val files = generator.generate(spec)
             assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
 
@@ -155,7 +161,7 @@ class IntegrationTest {
         for (fixture in SPEC_FIXTURES) {
             val spec = parseSpec(fixture).apiSpec
 
-            val generator = ModelGenerator(modelPackage, NameRegistry())
+            val generator = ModelGenerator(modelPackage, buildModelRegistry(spec))
             val files = generator.generate(spec)
             assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
 

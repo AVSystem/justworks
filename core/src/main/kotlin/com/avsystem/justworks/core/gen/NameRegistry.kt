@@ -14,12 +14,10 @@ class NameRegistry {
      * Registers [desired] name, returning it if available or appending a numeric suffix
      * to resolve collisions (e.g. `Foo2`, `Foo3`).
      */
-    fun register(desired: String): String {
-        if (registered.add(desired)) return desired
-        var suffix = 2
-        while (!registered.add("$desired$suffix")) suffix++
-        return "$desired$suffix"
-    }
+    fun register(desired: String): String = desired.takeIf { registered.add(it) }
+        ?: generateSequence(2) { it + 1 }
+            .map { "$desired$it" }
+            .first { registered.add(it) }
 
     /**
      * Reserves [name] so that subsequent [register] calls for the same name

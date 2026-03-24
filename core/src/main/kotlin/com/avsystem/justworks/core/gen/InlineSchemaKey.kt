@@ -7,6 +7,8 @@ import com.avsystem.justworks.core.model.TypeRef
  * Key for structural equality of inline schemas.
  * Two inline schemas are considered equal if they have the same properties
  * (name, type, required status) regardless of property order.
+ * Nested [TypeRef.Inline] types are normalized to ignore [TypeRef.Inline.contextHint],
+ * ensuring purely structural comparison.
  */
 data class InlineSchemaKey(val properties: Set<PropertyKey>) {
     data class PropertyKey(
@@ -17,7 +19,21 @@ data class InlineSchemaKey(val properties: Set<PropertyKey>) {
 
     companion object {
         fun from(properties: List<PropertyModel>, required: Set<String>) = InlineSchemaKey(
-            properties = properties.map { PropertyKey(it.name, it.type, it.name in required) }.toSet(),
+            properties = properties.map { PropertyKey(it.name, normalizeType(it.type), it.name in required) }.toSet(),
         )
+
+        private fun normalizeType(type: TypeRef): TypeRef = when (type) {
+            is TypeRef.Inline -> TypeRef.Inline(
+                properties = type.properties,
+                requiredProperties = type.requiredProperties,
+                contextHint = "",
+            )
+
+            is TypeRef.Array -> TypeRef.Array(normalizeType(type.items))
+
+            is TypeRef.Map -> TypeRef.Map(normalizeType(type.valueType))
+
+            else -> type
+        }
     }
 }

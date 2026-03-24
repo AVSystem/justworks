@@ -31,22 +31,31 @@ import kotlin.time.Instant
  * and one file per [EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 class ModelGenerator(private val modelPackage: String, private val nameRegistry: NameRegistry) {
-    fun generate(spec: ApiSpec): List<FileSpec> = context(
-        buildHierarchyInfo(spec.schemas),
-    ) {
-        val schemaFiles = spec.schemas.flatMap { generateSchemaFiles(it) }
+    data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
 
-        val inlineSchemaFiles = collectAllInlineSchemas(spec).map {
-            if (it.isNested) generateNestedInlineClass(it) else generateDataClass(it)
+    fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
+
+    fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
+        val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec)
+        val resolvedSpec = spec.resolveInlineTypes(nameMap)
+
+        val files = context(buildHierarchyInfo(resolvedSpec.schemas)) {
+            val schemaFiles = resolvedSpec.schemas.flatMap { generateSchemaFiles(it) }
+
+            val inlineSchemaFiles = inlineSchemas.map {
+                if (it.isNested) generateNestedInlineClass(it) else generateDataClass(it)
+            }
+
+            val enumFiles = resolvedSpec.enums.map(::generateEnumClass)
+
+            val serializersModuleFile = SerializersModuleGenerator(modelPackage).generate()
+
+            val uuidSerializerFile = if (resolvedSpec.usesUuid()) generateUuidSerializer() else null
+
+            schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
         }
 
-        val enumFiles = spec.enums.map(::generateEnumClass)
-
-        val serializersModuleFile = SerializersModuleGenerator(modelPackage).generate()
-
-        val uuidSerializerFile = if (spec.usesUuid()) generateUuidSerializer() else null
-
-        schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
+        return GenerateResult(files, resolvedSpec)
     }
 
     data class HierarchyInfo(
@@ -89,7 +98,7 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
         return HierarchyInfo(sealedHierarchies, variantParents, anyOfWithoutDiscriminator, schemas)
     }
 
-    private fun collectAllInlineSchemas(spec: ApiSpec): List<SchemaModel> {
+    private fun collectAllInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> {
         val endpointRefs = spec.endpoints.flatMap { endpoint ->
             val requestRef = endpoint.requestBody?.schema
             val responseRefs = endpoint.responses.values.map { it.schema }
@@ -98,13 +107,18 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
 
         val schemaPropertyRefs = spec.schemas.flatMap { schema -> schema.properties.map { it.type } }
 
-        return collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
+        val nameMap = mutableMapOf<InlineSchemaKey, String>()
+
+        val schemas = collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
             .asSequence()
             .sortedBy { it.contextHint }
             .distinctBy { InlineSchemaKey.from(it.properties, it.requiredProperties) }
             .map { ref ->
+                val key = InlineSchemaKey.from(ref.properties, ref.requiredProperties)
+                val generatedName = nameRegistry.register(ref.contextHint.toInlinedName())
+                nameMap[key] = generatedName
                 SchemaModel(
-                    name = nameRegistry.register(ref.contextHint.toInlinedName()),
+                    name = generatedName,
                     description = null,
                     properties = ref.properties,
                     requiredProperties = ref.requiredProperties,
@@ -114,6 +128,8 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
                     discriminator = null,
                 )
             }.toList()
+
+        return schemas to nameMap
     }
 
     context(hierarchy: HierarchyInfo)

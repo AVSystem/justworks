@@ -14,7 +14,7 @@ object CodeGenerator {
         spec: ApiSpec,
         modelPackage: String,
         apiPackage: String,
-        outputDir: File
+        outputDir: File,
     ): Result {
         val modelRegistry = NameRegistry().apply {
             spec.schemas.forEach { reserve(it.name) }
@@ -22,12 +22,16 @@ object CodeGenerator {
         }
         val apiRegistry = NameRegistry()
 
-        val modelFiles = ModelGenerator(modelPackage, modelRegistry).generate(spec)
+        val (modelFiles, resolvedSpec) = ModelGenerator(modelPackage, modelRegistry)
+            .generateWithResolvedSpec(spec)
+
         modelFiles.forEach { it.writeTo(outputDir) }
 
         val hasPolymorphicTypes = modelFiles.any { it.name == SerializersModuleGenerator.FILE_NAME }
 
-        val clientFiles = ClientGenerator(apiPackage, modelPackage, apiRegistry).generate(spec, hasPolymorphicTypes)
+        val clientFiles = ClientGenerator(apiPackage, modelPackage, apiRegistry)
+            .generate(resolvedSpec, hasPolymorphicTypes)
+
         clientFiles.forEach { it.writeTo(outputDir) }
 
         return Result(modelFiles.size, clientFiles.size)
