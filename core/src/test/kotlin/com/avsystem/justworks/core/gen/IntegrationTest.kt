@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.parser.ParseResult
 import com.avsystem.justworks.core.parser.SpecParser
 import java.io.File
@@ -123,7 +124,7 @@ class IntegrationTest {
         for (fixture in SPEC_FIXTURES) {
             val spec = parseSpec(fixture).apiSpec
 
-            val generator = ModelGenerator(modelPackage)
+            val generator = ModelGenerator(modelPackage, NameRegistry())
             val files = generator.generate(spec)
             assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
 
@@ -154,7 +155,7 @@ class IntegrationTest {
         for (fixture in SPEC_FIXTURES) {
             val spec = parseSpec(fixture).apiSpec
 
-            val generator = ModelGenerator(modelPackage)
+            val generator = ModelGenerator(modelPackage, NameRegistry())
             val files = generator.generate(spec)
             assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
 
