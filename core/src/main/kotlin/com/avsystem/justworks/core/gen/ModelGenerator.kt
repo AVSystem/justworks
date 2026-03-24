@@ -45,7 +45,9 @@ class ModelGenerator(private val modelPackage: String) {
 
         val serializersModuleFile = SerializersModuleGenerator(modelPackage).generate()
 
-        schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile)
+        val uuidSerializerFile = if (spec.usesUuid()) generateUuidSerializer() else null
+
+        schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
     }
 
     data class HierarchyInfo(
@@ -127,7 +129,10 @@ class ModelGenerator(private val modelPackage: String) {
         }
 
         schema.isPrimitiveOnly -> {
-            listOf(generateTypeAlias(schema, STRING))
+            val targetType = schema.underlyingType
+                ?.let { TypeMapping.toTypeName(it, modelPackage) }
+                ?: STRING
+            listOf(generateTypeAlias(schema, targetType))
         }
 
         else -> {
@@ -316,11 +321,12 @@ class ModelGenerator(private val modelPackage: String) {
 
             constructorBuilder.addParameter(paramBuilder.build())
 
-            PropertySpec
+            val propBuilder = PropertySpec
                 .builder(kotlinName, type)
                 .initializer(kotlinName)
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
-                .build()
+
+            propBuilder.build()
         }
 
         val typeSpec = TypeSpec
@@ -339,10 +345,22 @@ class ModelGenerator(private val modelPackage: String) {
             typeSpec.addKdoc("%L", schema.description)
         }
 
-        return FileSpec
-            .builder(className)
-            .addType(typeSpec.build())
-            .build()
+        val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
+
+        val hasUuid = schema.properties.any { it.type.containsUuid() }
+        if (hasUuid) {
+            fileBuilder.addAnnotation(
+                AnnotationSpec.builder(OPT_IN).addMember("%T::class", EXPERIMENTAL_UUID_API).build(),
+            )
+            fileBuilder.addAnnotation(
+                AnnotationSpec
+                    .builder(USE_SERIALIZERS)
+                    .addMember("%T::class", ClassName(modelPackage, "UuidSerializer"))
+                    .build(),
+            )
+        }
+
+        return fileBuilder.build()
     }
 
     /**
@@ -462,6 +480,69 @@ class ModelGenerator(private val modelPackage: String) {
 
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
+
+    private fun TypeRef.containsUuid(): Boolean = when (this) {
+        is TypeRef.Primitive -> type == PrimitiveType.UUID
+        is TypeRef.Array -> items.containsUuid()
+        is TypeRef.Map -> valueType.containsUuid()
+        is TypeRef.Inline -> properties.any { it.type.containsUuid() }
+        is TypeRef.Reference, TypeRef.Unknown -> false
+    }
+
+    private fun ApiSpec.usesUuid(): Boolean {
+        val schemaRefs = schemas.asSequence().flatMap { schema -> schema.properties.map { it.type } }
+        val endpointRefs = endpoints.asSequence().flatMap { endpoint ->
+            val responseRefs = endpoint.responses.values
+                .asSequence()
+                .mapNotNull { it.schema }
+            val requestRef = endpoint.requestBody?.schema
+            val parameterRefs = endpoint.parameters
+                .asSequence()
+                .map { it.schema }
+            responseRefs + listOfNotNull(requestRef) + parameterRefs
+        }
+        return schemaRefs.plus(endpointRefs).any { it.containsUuid() }
+    }
+
+    private fun generateUuidSerializer(): FileSpec {
+        val uuidSerializerClass = ClassName(modelPackage, "UuidSerializer")
+
+        val descriptorProp = PropertySpec
+            .builder("descriptor", SERIAL_DESCRIPTOR)
+            .addModifiers(KModifier.OVERRIDE)
+            .initializer("%M(%S, %T.STRING)", PRIMITIVE_SERIAL_DESCRIPTOR_FUN, "Uuid", PRIMITIVE_KIND)
+            .build()
+
+        val serializeFun = FunSpec
+            .builder("serialize")
+            .addModifiers(KModifier.OVERRIDE)
+            .addParameter("encoder", ENCODER)
+            .addParameter("value", UUID_TYPE)
+            .addStatement("encoder.encodeString(value.toString())")
+            .build()
+
+        val deserializeFun = FunSpec
+            .builder("deserialize")
+            .addModifiers(KModifier.OVERRIDE)
+            .addParameter("decoder", DECODER)
+            .returns(UUID_TYPE)
+            .addStatement("return %T.parse(decoder.decodeString())", UUID_TYPE)
+            .build()
+
+        val objectSpec = TypeSpec
+            .objectBuilder(uuidSerializerClass)
+            .addSuperinterface(K_SERIALIZER.parameterizedBy(UUID_TYPE))
+            .addProperty(descriptorProp)
+            .addFunction(serializeFun)
+            .addFunction(deserializeFun)
+            .build()
+
+        return FileSpec
+            .builder(uuidSerializerClass)
+            .addAnnotation(AnnotationSpec.builder(OPT_IN).addMember("%T::class", EXPERIMENTAL_UUID_API).build())
+            .addType(objectSpec)
+            .build()
+    }
 
     private fun generateTypeAlias(schema: SchemaModel, primitiveType: TypeName): FileSpec {
         val className = ClassName(modelPackage, schema.name)

@@ -18,4 +18,4 @@ sealed interface TypeRef {
     data object Unknown : TypeRef
 }
 
-enum class PrimitiveType { STRING, INT, LONG, DOUBLE, FLOAT, BOOLEAN, BYTE_ARRAY, DATE_TIME, DATE }
+enum class PrimitiveType { STRING, INT, LONG, DOUBLE, FLOAT, BOOLEAN, BYTE_ARRAY, DATE_TIME, DATE, UUID }

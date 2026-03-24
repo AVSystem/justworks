@@ -2,8 +2,8 @@ import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
 
 plugins {
     kotlin("jvm")
-    `maven-publish`
-    id("org.jetbrains.kotlinx.kover") version "0.9.1"
+    id("org.jetbrains.kotlinx.kover")
+    id("com.vanniktech.maven.publish")
 }
 
 kotlin {
@@ -12,9 +12,15 @@ kotlin {
 
 // todo: remove when https://github.com/JLLeitschuh/ktlint-gradle/issues/912 resolved
 ktlint {
-    version.set("1.8.0")
+    version = "1.8.0"
 }
 
+mavenPublishing {
+    pom {
+        name = "justworks-core"
+        description = "OpenAPI 3.0 parser and Kotlin Ktor client code generator"
+    }
+}
 
 dependencies {
     implementation("io.swagger.parser.v3:swagger-parser:2.1.39")
@@ -28,13 +34,7 @@ tasks.test {
     useJUnitPlatform()
 }
 
-publishing {
-    publications {
-        create<MavenPublication>("maven") {
-            from(components["java"])
-        }
-    }
-}
+
 tasks.withType<KotlinCompile>().configureEach {
     compilerOptions {
         freeCompilerArgs.add("-Xcontext-parameters")

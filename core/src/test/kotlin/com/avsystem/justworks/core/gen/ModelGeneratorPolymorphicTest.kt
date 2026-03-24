@@ -612,6 +612,170 @@ class ModelGeneratorPolymorphicTest {
         )
     }
 
+    // -- CEM-01: boolean discriminator names (KotlinPoet handles escaping) --
+
+    @Test
+    fun `boolean discriminator names produce valid data classes`() {
+        val deviceStatusSchema = schema(
+            name = "DeviceStatus",
+            oneOf = listOf(
+                TypeRef.Reference("true"),
+                TypeRef.Reference("false"),
+            ),
+            discriminator = Discriminator(
+                propertyName = "online",
+                mapping = mapOf(
+                    "true" to "#/components/schemas/true",
+                    "false" to "#/components/schemas/false",
+                ),
+            ),
+        )
+        val trueSchema = schema(
+            name = "true",
+            properties = listOf(
+                PropertyModel("connectedSince", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("connectedSince"),
+        )
+        val falseSchema = schema(
+            name = "false",
+            properties = listOf(
+                PropertyModel("lastSeen", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("lastSeen"),
+        )
+
+        val files = generator.generate(
+            spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
+        )
+
+        val trueType = findType(files, "true")
+        assertTrue(KModifier.DATA in trueType.modifiers, "'true' should be data class")
+
+        val falseType = findType(files, "false")
+        assertTrue(KModifier.DATA in falseType.modifiers, "'false' should be data class")
+
+        // Both implement DeviceStatus sealed interface
+        val trueSuperinterfaces = trueType.superinterfaces.keys.map { it.toString() }
+        assertTrue(
+            "$modelPackage.DeviceStatus" in trueSuperinterfaces,
+            "'true' should implement DeviceStatus. Superinterfaces: $trueSuperinterfaces",
+        )
+        val falseSuperinterfaces = falseType.superinterfaces.keys.map { it.toString() }
+        assertTrue(
+            "$modelPackage.DeviceStatus" in falseSuperinterfaces,
+            "'false' should implement DeviceStatus. Superinterfaces: $falseSuperinterfaces",
+        )
+    }
+
+    @Test
+    fun `all oneOf variant schemas generate data classes even with many subtypes`() {
+        val variantNames = listOf(
+            "ExtenderDevice",
+            "EthernetDevice",
+            "WanDevice",
+            "USBDevice",
+            "WiFiDevice",
+            "OtherDevice",
+        )
+
+        val networkMeshSchema = schema(
+            name = "NetworkMeshDevice",
+            oneOf = variantNames.map { TypeRef.Reference(it) },
+            discriminator = Discriminator(
+                propertyName = "deviceType",
+                mapping = variantNames.associateWith { "#/components/schemas/$it" },
+            ),
+        )
+
+        val variantSchemas = variantNames.map { name ->
+            schema(
+                name = name,
+                properties = listOf(
+                    PropertyModel("deviceId", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                ),
+                requiredProperties = setOf("deviceId"),
+            )
+        }
+
+        val files = generator.generate(
+            spec(schemas = listOf(networkMeshSchema) + variantSchemas),
+        )
+
+        // All 6 variants generated
+        for (name in variantNames) {
+            val variantType = findType(files, name)
+            assertTrue(
+                KModifier.DATA in variantType.modifiers,
+                "$name should be a data class",
+            )
+            val superinterfaces = variantType.superinterfaces.keys.map { it.toString() }
+            assertTrue(
+                "$modelPackage.NetworkMeshDevice" in superinterfaces,
+                "$name should implement NetworkMeshDevice. Superinterfaces: $superinterfaces",
+            )
+        }
+
+        // SerializersModule contains all variants
+        val serializersModuleFile = files.find { it.name == "SerializersModule" }
+        assertNotNull(serializersModuleFile, "SerializersModule file should be generated")
+        val moduleCode = serializersModuleFile.toString()
+        for (name in variantNames) {
+            assertTrue(
+                name in moduleCode,
+                "SerializersModule should reference $name. Code: $moduleCode",
+            )
+        }
+    }
+
+    @Test
+    fun `SerializersModule includes boolean variant names`() {
+        val deviceStatusSchema = schema(
+            name = "DeviceStatus",
+            oneOf = listOf(
+                TypeRef.Reference("true"),
+                TypeRef.Reference("false"),
+            ),
+            discriminator = Discriminator(
+                propertyName = "online",
+                mapping = mapOf(
+                    "true" to "#/components/schemas/true",
+                    "false" to "#/components/schemas/false",
+                ),
+            ),
+        )
+        val trueSchema = schema(
+            name = "true",
+            properties = listOf(
+                PropertyModel("connectedSince", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("connectedSince"),
+        )
+        val falseSchema = schema(
+            name = "false",
+            properties = listOf(
+                PropertyModel("lastSeen", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("lastSeen"),
+        )
+
+        val files = generator.generate(
+            spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
+        )
+
+        val serializersModuleFile = files.find { it.name == "SerializersModule" }
+        assertNotNull(serializersModuleFile, "SerializersModule file should be generated")
+        val moduleCode = serializersModuleFile.toString()
+        assertTrue(
+            "`true`" in moduleCode,
+            "SerializersModule should reference `true`. Code: $moduleCode",
+        )
+        assertTrue(
+            "`false`" in moduleCode,
+            "SerializersModule should reference `false`. Code: $moduleCode",
+        )
+    }
+
     // -- POLY-06: allOf with sealed parent --
 
     @Test
