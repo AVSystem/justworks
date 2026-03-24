@@ -79,6 +79,7 @@ data class SchemaModel(
     val oneOf: List<TypeRef>?,
     val anyOf: List<TypeRef>?,
     val discriminator: Discriminator?,
+    val underlyingType: TypeRef? = null,
 ) {
     val isNested get() = name.contains(".")
 }

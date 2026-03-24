@@ -2,7 +2,6 @@ package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.TypeRef
-import com.squareup.kotlinpoet.ANY
 import com.squareup.kotlinpoet.BOOLEAN
 import com.squareup.kotlinpoet.BYTE_ARRAY
 import com.squareup.kotlinpoet.ClassName
@@ -32,6 +31,7 @@ object TypeMapping {
                 PrimitiveType.BYTE_ARRAY -> BYTE_ARRAY
                 PrimitiveType.DATE_TIME -> INSTANT
                 PrimitiveType.DATE -> LOCAL_DATE
+                PrimitiveType.UUID -> UUID_TYPE
             }
         }
 
@@ -52,7 +52,7 @@ object TypeMapping {
         }
 
         is TypeRef.Unknown -> {
-            ANY
+            JSON_ELEMENT
         }
     }
 }

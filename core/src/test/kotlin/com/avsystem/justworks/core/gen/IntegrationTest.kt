@@ -115,4 +115,58 @@ class IntegrationTest {
             assertNotNull(apiClientBaseFile, "$fixture: ApiClientBaseGenerator should produce output")
         }
     }
+
+    // -- Phase 2: Format type mapping validation --
+
+    @Test
+    fun `format mappings produce correct types in generated output`() {
+        for (fixture in SPEC_FIXTURES) {
+            val spec = parseSpec(fixture).apiSpec
+
+            val generator = ModelGenerator(modelPackage)
+            val files = generator.generate(spec)
+            assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
+
+            val allSources = files.map { it.toString() }
+
+            val hasUuid = spec.schemas.any { schema ->
+                schema.properties.any {
+                    it.type == com.avsystem.justworks.core.model.TypeRef.Primitive(
+                        com.avsystem.justworks.core.model.PrimitiveType.UUID,
+                    )
+                }
+            }
+            if (hasUuid) {
+                assertTrue(
+                    allSources.any { it.contains("kotlin.uuid.Uuid") },
+                    "$fixture: Expected kotlin.uuid.Uuid import when spec contains UUID properties",
+                )
+                assertTrue(
+                    allSources.any { it.contains("UuidSerializer") },
+                    "$fixture: Expected UuidSerializer when spec contains UUID properties",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `all generated files are syntactically valid Kotlin`() {
+        for (fixture in SPEC_FIXTURES) {
+            val spec = parseSpec(fixture).apiSpec
+
+            val generator = ModelGenerator(modelPackage)
+            val files = generator.generate(spec)
+            assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
+
+            for (file in files) {
+                val source = file.toString()
+                assertTrue(source.isNotBlank(), "$fixture: Generated file ${file.name} should not be blank")
+
+                assertFalse(
+                    source.contains("FIXME"),
+                    "$fixture: Generated file ${file.name} should not contain FIXME markers",
+                )
+            }
+        }
+    }
 }
