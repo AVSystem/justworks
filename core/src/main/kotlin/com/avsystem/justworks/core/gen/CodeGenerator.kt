@@ -20,8 +20,10 @@ object CodeGenerator {
         modelFiles.forEach { it.writeTo(outputDir) }
 
         val hasPolymorphicTypes = modelFiles.any { it.name == SerializersModuleGenerator.FILE_NAME }
+        val classNameLookup = ModelGenerator.buildClassNameLookup(spec, modelPackage)
 
-        val clientFiles = ClientGenerator(apiPackage, modelPackage).generate(spec, hasPolymorphicTypes)
+        val clientFiles = ClientGenerator(apiPackage, modelPackage, classNameLookup)
+            .generate(spec, hasPolymorphicTypes)
         clientFiles.forEach { it.writeTo(outputDir) }
 
         return Result(modelFiles.size, clientFiles.size)

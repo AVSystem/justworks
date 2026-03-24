@@ -31,7 +31,11 @@ private const val API_SUFFIX = "Api"
  * that extends `ApiClientBase` with suspend functions for every endpoint in that tag group.
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
-class ClientGenerator(private val apiPackage: String, private val modelPackage: String) {
+class ClientGenerator(
+    private val apiPackage: String,
+    private val modelPackage: String,
+    private val classNameLookup: Map<String, ClassName> = emptyMap(),
+) {
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) -> generateClientFile(tag, endpoints, hasPolymorphicTypes) }
@@ -95,7 +99,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         val params = endpoint.parameters.groupBy { it.location }
 
         val pathParams = params[ParameterLocation.PATH].orEmpty().map { param ->
-            ParameterSpec(param.name.toCamelCase(), TypeMapping.toTypeName(param.schema, modelPackage))
+            ParameterSpec(param.name.toCamelCase(), TypeMapping.toTypeName(param.schema, modelPackage, classNameLookup))
         }
 
         val queryParams = params[ParameterLocation.QUERY].orEmpty().map { param ->
@@ -124,7 +128,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         name: String,
         required: Boolean,
     ): ParameterSpec {
-        val baseType = TypeMapping.toTypeName(typeRef, modelPackage)
+        val baseType = TypeMapping.toTypeName(typeRef, modelPackage, classNameLookup)
 
         val builder = ParameterSpec.builder(name.toCamelCase(), baseType.copy(nullable = !required))
         if (!required) builder.defaultValue("null")
@@ -202,7 +206,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         .asSequence()
         .filter { it.key.startsWith("2") }
         .firstNotNullOfOrNull { it.value.schema }
-        ?.let { successResponse -> TypeMapping.toTypeName(successResponse, modelPackage) }
+        ?.let { successResponse -> TypeMapping.toTypeName(successResponse, modelPackage, classNameLookup) }
         ?: UNIT
 
     /**
