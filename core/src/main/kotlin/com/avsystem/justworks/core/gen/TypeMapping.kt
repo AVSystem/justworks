@@ -19,7 +19,11 @@ import com.squareup.kotlinpoet.TypeName
  * Maps [TypeRef] sealed variants to KotlinPoet [TypeName] instances.
  */
 object TypeMapping {
-    fun toTypeName(typeRef: TypeRef, modelPackage: String): TypeName = when (typeRef) {
+    fun toTypeName(
+        typeRef: TypeRef,
+        modelPackage: String,
+        classNameLookup: Map<String, ClassName> = emptyMap(),
+    ): TypeName = when (typeRef) {
         is TypeRef.Primitive -> {
             when (typeRef.type) {
                 PrimitiveType.STRING -> STRING
@@ -44,7 +48,7 @@ object TypeMapping {
         }
 
         is TypeRef.Reference -> {
-            ClassName(modelPackage, typeRef.schemaName)
+            classNameLookup[typeRef.schemaName] ?: ClassName(modelPackage, typeRef.schemaName)
         }
 
         is TypeRef.Inline -> {

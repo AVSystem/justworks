@@ -27,17 +27,28 @@ import kotlin.time.Instant
 /**
  * Generates KotlinPoet [FileSpec] instances from an [ApiSpec].
  *
- * Produces one file per [SchemaModel] (data class, sealed interface, or allOf composed class)
+ * Produces one file per [SchemaModel] (data class, sealed class hierarchy, or allOf composed class)
  * and one file per [EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 class ModelGenerator(private val modelPackage: String, private val nameRegistry: NameRegistry) {
-    fun generate(spec: ApiSpec): List<FileSpec> = context(
-        buildHierarchyInfo(spec.schemas),
-    ) {
-        val schemaFiles = spec.schemas.flatMap { generateSchemaFiles(it) }
+    fun generate(spec: ApiSpec): List<FileSpec> {
+        val hierarchy = buildHierarchyInfo(spec.schemas)
+        return context(hierarchy) { generateFiles(spec) }
+    }
+
+    context(hierarchy: HierarchyInfo)
+    private fun generateFiles(spec: ApiSpec): List<FileSpec> {
+        val variantNames = hierarchy.sealedHierarchies.values
+            .flatten()
+            .toSet()
+        val classNameLookup = buildClassNameLookup()
+
+        val schemaFiles = spec.schemas
+            .filter { it.name !in variantNames || it.name in hierarchy.anyOfWithoutDiscriminatorVariants }
+            .flatMap { generateSchemaFiles(it, classNameLookup) }
 
         val inlineSchemaFiles = collectAllInlineSchemas(spec).map {
-            if (it.isNested) generateNestedInlineClass(it) else generateDataClass(it)
+            if (it.isNested) generateNestedInlineClass(it, classNameLookup) else generateDataClass(it, classNameLookup)
         }
 
         val enumFiles = spec.enums.map(::generateEnumClass)
@@ -46,7 +57,7 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
 
         val uuidSerializerFile = if (spec.usesUuid()) generateUuidSerializer() else null
 
-        schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
+        return schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
     }
 
     data class HierarchyInfo(
@@ -54,7 +65,32 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
         val variantParents: Map<String, Map<ClassName, String>>,
         val anyOfWithoutDiscriminator: Set<String>,
         val schemas: List<SchemaModel>,
-    )
+    ) {
+        /** Variant names that belong to anyOf-without-discriminator hierarchies (still use interface pattern). */
+        val anyOfWithoutDiscriminatorVariants: Set<String> by lazy {
+            sealedHierarchies
+                .filterKeys { it in anyOfWithoutDiscriminator }
+                .values
+                .flatten()
+                .toSet()
+        }
+    }
+
+    companion object {
+        /**
+         * Builds a classNameLookup map from an ApiSpec for use by other generators (e.g. ClientGenerator).
+         * Maps variant schema names to their nested ClassName (e.g. "Circle" -> Shape.Circle).
+         */
+        fun buildClassNameLookup(spec: ApiSpec, modelPackage: String): Map<String, ClassName> {
+            val generator = ModelGenerator(modelPackage, NameRegistry())
+            return generator.buildClassNameLookupFromSpec(spec)
+        }
+    }
+
+    private fun buildClassNameLookupFromSpec(spec: ApiSpec): Map<String, ClassName> {
+        val hierarchy = buildHierarchyInfo(spec.schemas)
+        return context(hierarchy) { buildClassNameLookup() }
+    }
 
     private fun buildHierarchyInfo(schemas: List<SchemaModel>): HierarchyInfo {
         fun SchemaModel.variants() = oneOf ?: anyOf ?: emptyList()
@@ -89,6 +125,24 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
         return HierarchyInfo(sealedHierarchies, variantParents, anyOfWithoutDiscriminator, schemas)
     }
 
+    context(hierarchy: HierarchyInfo)
+    private fun buildClassNameLookup(): Map<String, ClassName> {
+        val lookup = mutableMapOf<String, ClassName>()
+
+        for ((parent, variants) in hierarchy.sealedHierarchies) {
+            // Skip anyOf-without-discriminator — those still use flat names
+            if (parent in hierarchy.anyOfWithoutDiscriminator) continue
+
+            val parentClass = ClassName(modelPackage, parent)
+            lookup[parent] = parentClass
+            for (variant in variants) {
+                lookup[variant] = parentClass.nestedClass(variant)
+            }
+        }
+
+        return lookup
+    }
+
     private fun collectAllInlineSchemas(spec: ApiSpec): List<SchemaModel> {
         val endpointRefs = spec.endpoints.flatMap { endpoint ->
             val requestRef = endpoint.requestBody?.schema
@@ -117,52 +171,44 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
     }
 
     context(hierarchy: HierarchyInfo)
-    private fun generateSchemaFiles(schema: SchemaModel): List<FileSpec> = when {
-        !schema.anyOf.isNullOrEmpty() || !schema.oneOf.isNullOrEmpty() -> {
-            if (schema.name in hierarchy.anyOfWithoutDiscriminator) {
-                listOf(generateSealedInterface(schema), generatePolymorphicSerializer(schema))
-            } else {
-                listOf(generateSealedInterface(schema))
+    private fun generateSchemaFiles(schema: SchemaModel, classNameLookup: Map<String, ClassName>): List<FileSpec> =
+        when {
+            !schema.anyOf.isNullOrEmpty() || !schema.oneOf.isNullOrEmpty() -> {
+                if (schema.name in hierarchy.anyOfWithoutDiscriminator) {
+                    listOf(
+                        generateSealedInterface(schema),
+                        generatePolymorphicSerializer(schema, classNameLookup),
+                    )
+                } else {
+                    listOf(generateSealedHierarchy(schema, classNameLookup))
+                }
+            }
+
+            schema.isPrimitiveOnly -> {
+                val targetType = schema.underlyingType
+                    ?.let { TypeMapping.toTypeName(it, modelPackage, classNameLookup) }
+                    ?: STRING
+                listOf(generateTypeAlias(schema, targetType))
+            }
+
+            else -> {
+                listOf(generateDataClass(schema, classNameLookup))
             }
         }
 
-        schema.isPrimitiveOnly -> {
-            val targetType = schema.underlyingType
-                ?.let { TypeMapping.toTypeName(it, modelPackage) }
-                ?: STRING
-            listOf(generateTypeAlias(schema, targetType))
-        }
-
-        else -> {
-            listOf(generateDataClass(schema))
-        }
-    }
-
     /**
-     * Generates a sealed interface for a oneOf/anyOf schema.
-     * - anyOf without discriminator: @Serializable(with = XxxSerializer::class)
-     * - oneOf or anyOf with discriminator: plain @Serializable + @JsonClassDiscriminator
+     * Generates a sealed class with nested data class subtypes for oneOf or anyOf-with-discriminator schemas.
      */
     context(hierarchy: HierarchyInfo)
-    private fun generateSealedInterface(schema: SchemaModel): FileSpec {
+    private fun generateSealedHierarchy(schema: SchemaModel, classNameLookup: Map<String, ClassName>): FileSpec {
         val className = ClassName(modelPackage, schema.name)
+        val schemasById = hierarchy.schemas.associateBy { it.name }
 
-        val typeSpec = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
-
-        if (schema.name in hierarchy.anyOfWithoutDiscriminator) {
-            val serializerClassName = ClassName(modelPackage, "${schema.name}Serializer")
-            typeSpec.addAnnotation(
-                AnnotationSpec
-                    .builder(SERIALIZABLE)
-                    .addMember("with = %T::class", serializerClassName)
-                    .build(),
-            )
-        } else {
-            typeSpec.addAnnotation(SERIALIZABLE)
-        }
+        val parentBuilder = TypeSpec.classBuilder(className).addModifiers(KModifier.SEALED)
+        parentBuilder.addAnnotation(SERIALIZABLE)
 
         if (schema.discriminator != null) {
-            typeSpec.addAnnotation(
+            parentBuilder.addAnnotation(
                 AnnotationSpec
                     .builder(JSON_CLASS_DISCRIMINATOR)
                     .addMember("%S", schema.discriminator.propertyName)
@@ -171,10 +217,19 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
         }
 
         if (schema.description != null) {
-            typeSpec.addKdoc("%L", schema.description)
+            parentBuilder.addKdoc("%L", schema.description)
         }
 
-        val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
+        // Generate nested subtypes
+        val variants = hierarchy.sealedHierarchies[schema.name].orEmpty()
+        for (variantName in variants) {
+            val variantSchema = schemasById[variantName]
+            val serialName = resolveSerialName(schema, variantName)
+            val nestedType = buildNestedVariant(variantSchema, variantName, className, serialName, classNameLookup)
+            parentBuilder.addType(nestedType)
+        }
+
+        val fileBuilder = FileSpec.builder(className).addType(parentBuilder.build())
 
         if (schema.discriminator != null) {
             fileBuilder.addAnnotation(
@@ -189,10 +244,95 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
     }
 
     /**
+     * Builds a nested data class TypeSpec for a variant inside a sealed class hierarchy.
+     */
+    private fun buildNestedVariant(
+        variantSchema: SchemaModel?,
+        variantName: String,
+        parentClassName: ClassName,
+        serialName: String,
+        classNameLookup: Map<String, ClassName>,
+    ): TypeSpec {
+        val variantClassName = parentClassName.nestedClass(variantName)
+        val builder = TypeSpec.classBuilder(variantClassName).addModifiers(KModifier.DATA)
+        builder.superclass(parentClassName)
+        builder.addSuperclassConstructorParameter("")
+        builder.addAnnotation(SERIALIZABLE)
+        builder.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
+
+        if (variantSchema != null) {
+            val sortedProps = variantSchema.properties.sortedBy { prop ->
+                when {
+                    prop.name in variantSchema.requiredProperties && prop.defaultValue == null -> 1
+                    prop.defaultValue != null -> 2
+                    else -> 3
+                }
+            }
+
+            val constructorBuilder = FunSpec.constructorBuilder()
+            val propertySpecs = sortedProps.map { prop ->
+                val type = TypeMapping
+                    .toTypeName(prop.type, modelPackage, classNameLookup)
+                    .copy(nullable = prop.nullable)
+                val kotlinName = prop.name.toCamelCase()
+
+                val paramBuilder = ParameterSpec.builder(kotlinName, type)
+                when {
+                    prop.nullable -> paramBuilder.defaultValue(CodeBlock.of("null"))
+                    prop.defaultValue != null -> paramBuilder.defaultValue(formatDefaultValue(prop))
+                }
+                constructorBuilder.addParameter(paramBuilder.build())
+
+                PropertySpec
+                    .builder(kotlinName, type)
+                    .initializer(kotlinName)
+                    .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
+                    .build()
+            }
+            builder.primaryConstructor(constructorBuilder.build())
+            builder.addProperties(propertySpecs)
+
+            if (variantSchema.description != null) {
+                builder.addKdoc("%L", variantSchema.description)
+            }
+        } else {
+            // Empty variant with no properties — still need a constructor for data class
+            builder.primaryConstructor(FunSpec.constructorBuilder().build())
+        }
+
+        return builder.build()
+    }
+
+    /**
+     * Generates a sealed interface for anyOf without discriminator schemas.
+     * Only used for the JsonContentPolymorphicSerializer pattern.
+     */
+    context(hierarchy: HierarchyInfo)
+    private fun generateSealedInterface(schema: SchemaModel): FileSpec {
+        val className = ClassName(modelPackage, schema.name)
+
+        val typeSpec = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
+
+        val serializerClassName = ClassName(modelPackage, "${schema.name}Serializer")
+        typeSpec.addAnnotation(
+            AnnotationSpec
+                .builder(SERIALIZABLE)
+                .addMember("with = %T::class", serializerClassName)
+                .build(),
+        )
+
+        if (schema.description != null) {
+            typeSpec.addKdoc("%L", schema.description)
+        }
+
+        return FileSpec.builder(className).addType(typeSpec.build()).build()
+    }
+
+    /**
      * Generates a JsonContentPolymorphicSerializer object for an anyOf schema without discriminator.
      */
     context(hierarchy: HierarchyInfo)
-    private fun generatePolymorphicSerializer(schema: SchemaModel): FileSpec {
+    private fun generatePolymorphicSerializer(schema: SchemaModel, classNameLookup: Map<String, ClassName>,): FileSpec {
         val sealedClassName = ClassName(modelPackage, schema.name)
         val serializerClassName = ClassName(modelPackage, "${schema.name}Serializer")
 
@@ -218,7 +358,7 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
                 fields.firstOrNull { allFields[it] == 1 }
             }
 
-        val selectDeserializerBody = buildSelectDeserializerBody(schema.name, uniqueFieldsPerVariant)
+        val selectDeserializerBody = buildSelectDeserializerBody(schema.name, uniqueFieldsPerVariant, classNameLookup)
 
         val deserializationStrategy = ClassName("kotlinx.serialization", "DeserializationStrategy")
             .parameterizedBy(WildcardTypeName.producerOf(sealedClassName))
@@ -250,17 +390,19 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
     private fun buildSelectDeserializerBody(
         parentName: String,
         uniqueFieldsPerVariant: Map<String, String?>,
+        classNameLookup: Map<String, ClassName>,
     ): CodeBlock {
         val builder = CodeBlock.builder()
         builder.beginControlFlow("return when")
 
         val notUnique = uniqueFieldsPerVariant.mapNotNull { (variantName, uniqueField) ->
             if (uniqueField != null) {
+                val variantClass = classNameLookup[variantName] ?: ClassName(modelPackage, variantName)
                 builder.addStatement(
-                    "%S·in·element.%M -> %T.serializer()",
+                    "%S\u00b7in\u00b7element.%M -> %T.serializer()",
                     uniqueField,
                     JSON_OBJECT_EXT,
-                    ClassName(modelPackage, variantName),
+                    variantClass,
                 )
                 null
             } else {
@@ -288,12 +430,19 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
 
     /**
      * Generates a data class FileSpec, with superinterfaces and @SerialName resolved from hierarchy.
+     * Used for: standalone schemas, allOf composed classes, and anyOf-without-discriminator variants.
      */
     context(hierarchy: HierarchyInfo)
-    private fun generateDataClass(schema: SchemaModel): FileSpec {
+    private fun generateDataClass(schema: SchemaModel, classNameLookup: Map<String, ClassName>): FileSpec {
         val className = ClassName(modelPackage, schema.name)
 
-        val parentEntries = hierarchy.variantParents[schema.name].orEmpty()
+        // Only apply superinterfaces for anyOf-without-discriminator variants
+        val parentEntries = hierarchy.variantParents[schema.name]
+            .orEmpty()
+            .filterKeys { parentClass ->
+                val parentName = parentClass.simpleName
+                parentName in hierarchy.anyOfWithoutDiscriminator
+            }
         val serialName = parentEntries.values.firstOrNull()
         val superinterfaces = parentEntries.keys
 
@@ -307,7 +456,7 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
 
         val constructorBuilder = FunSpec.constructorBuilder()
         val propertySpecs = sortedProps.map { prop ->
-            val type = TypeMapping.toTypeName(prop.type, modelPackage).copy(nullable = prop.nullable)
+            val type = TypeMapping.toTypeName(prop.type, modelPackage, classNameLookup).copy(nullable = prop.nullable)
             val kotlinName = prop.name.toCamelCase()
 
             val paramBuilder = ParameterSpec.builder(kotlinName, type)
@@ -474,8 +623,8 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
     }
 
     context(_: HierarchyInfo)
-    private fun generateNestedInlineClass(schema: SchemaModel): FileSpec =
-        generateDataClass(schema.copy(name = schema.name.toInlinedName()))
+    private fun generateNestedInlineClass(schema: SchemaModel, classNameLookup: Map<String, ClassName>): FileSpec =
+        generateDataClass(schema.copy(name = schema.name.toInlinedName()), classNameLookup)
 
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
