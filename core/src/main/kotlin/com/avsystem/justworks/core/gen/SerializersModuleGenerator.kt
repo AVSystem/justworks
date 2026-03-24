@@ -37,7 +37,7 @@ class SerializersModuleGenerator(private val modelPackage: String) {
             val parentClass = ClassName(modelPackage, parent)
             code.beginControlFlow("%M(%T::class)", POLYMORPHIC_FUN, parentClass)
             for (variant in variants) {
-                val variantClass = ClassName(modelPackage, variant)
+                val variantClass = parentClass.nestedClass(variant)
                 code.addStatement("%M(%T::class)", SUBCLASS_FUN, variantClass)
             }
             code.endControlFlow()
