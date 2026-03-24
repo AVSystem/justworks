@@ -1,0 +1,25 @@
+openapi: '3.0.0'
+info:
+  title: Boolean Discriminator Test
+  version: '1.0'
+paths: {}
+components:
+  schemas:
+    DeviceStatus:
+      oneOf:
+        - type: object
+          properties:
+            "true":
+              type: object
+              properties:
+                connectedSince:
+                  type: string
+                  format: date-time
+        - type: object
+          properties:
+            "false":
+              type: object
+              properties:
+                lastSeen:
+                  type: string
+                  format: date-time

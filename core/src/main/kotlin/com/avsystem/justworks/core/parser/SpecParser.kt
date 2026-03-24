@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.parser
 
+import arrow.core.compareTo
 import arrow.core.fold
 import arrow.core.merge
 import arrow.core.raise.context.Raise
@@ -117,11 +118,29 @@ object SpecParser {
                 }
             }
 
+            // Pick up synthetic schemas added by detectAndUnwrapOneOfWrappers.
+            // Iterate until stable, since processing a synthetic schema could register more.
+            tailrec fun collectModels(processed: Set<String>, acc: List<SchemaModel>): List<SchemaModel> {
+                val currentKeys = componentSchemas.keys - allSchemas.keys - processed
+                return if (currentKeys.isEmpty()) {
+                    acc
+                } else {
+                    val newModels = currentKeys
+                        .asSequence()
+                        .mapNotNull { name -> componentSchemas[name]?.let { name to it } }
+                        .filterNot { (_, schema) -> schema.isEnumSchema }
+                        .map { (name, schema) -> extractSchemaModel(name, schema) }
+
+                    collectModels(processed + currentKeys, acc + newModels)
+                }
+            }
+
+            val syntheticModels = collectModels(emptySet(), emptyList())
             return ApiSpec(
                 title = info?.title ?: "Untitled",
                 version = info?.version ?: "0.0.0",
                 endpoints = endpoints,
-                schemas = schemaModels,
+                schemas = schemaModels + syntheticModels,
                 enums = enumModels,
             )
         }
@@ -221,6 +240,14 @@ object SpecParser {
             Discriminator(propertyName = propertyName, mapping = disc.mapping.orEmpty())
         }
 
+        // Resolve underlying type for primitive-only / $ref-wrapper schemas.
+        // Uses $ref for wrapper schemas, otherwise resolves structurally
+        // from type/format to bypass componentSchemaIdentity (which would self-reference).
+        val underlyingType = schema
+            .takeIf { properties.isEmpty() && allOf.isNullOrEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty() }
+            ?.let { s -> s.`$ref`?.removePrefix(SCHEMA_PREFIX)?.let(TypeRef::Reference) ?: s.resolveByType() }
+            ?.takeUnless { it is TypeRef.Unknown }
+
         return SchemaModel(
             name = name,
             description = schema.description,
@@ -230,6 +257,7 @@ object SpecParser {
             oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
+            underlyingType = underlyingType,
         )
     }
 
@@ -292,12 +320,14 @@ object SpecParser {
                 )
 
                 val schemaName = ensureNotNull(
-                    propertySchema.resolveName() ?: propertyName
-                        .takeIf { propertySchema.isInlineObject }
-                        ?.also { name ->
-                            componentSchemas[name] = propertySchema
-                            componentSchemaIdentity[propertySchema] = name
-                        },
+                    propertySchema.resolveName()
+                        ?: propertyName
+                            .takeIf { propertySchema.isInlineObject }
+                            ?.let { rawName ->
+                                componentSchemas[rawName] = propertySchema
+                                componentSchemaIdentity[propertySchema] = rawName
+                                rawName
+                            },
                 )
 
                 propertyName to schemaName
@@ -313,25 +343,29 @@ object SpecParser {
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
         ?: (resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
         ?: TypeRef.Unknown.takeIf { (allOf?.size ?: 0) > 1 }
-        ?: when (type) {
-            "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
+        ?: resolveByType(contextName)
 
-            "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
+    /** Resolves a [TypeRef] based on the schema's structural type/format, ignoring component identity. */
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
+    private fun Schema<*>.resolveByType(contextName: String? = null): TypeRef = when (type) {
+        "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-            "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
+        "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
 
-            "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
+        "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
 
-            "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
+        "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-            "object" -> when (val ap = additionalProperties) {
-                is Schema<*> -> TypeRef.Map(ap.toTypeRef())
-                is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
-                else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
-            }
+        "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
 
-            else -> TypeRef.Unknown
+        "object" -> when (val ap = additionalProperties) {
+            is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+            is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
+            else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
         }
+
+        else -> TypeRef.Unknown
+    }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? = takeIf { isInlineObject }?.let {
@@ -389,15 +423,26 @@ object SpecParser {
 
     private val STRING_FORMAT_MAP = mapOf(
         "byte" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+        "binary" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
         "date-time" to TypeRef.Primitive(PrimitiveType.DATE_TIME),
         "date" to TypeRef.Primitive(PrimitiveType.DATE),
+        "uuid" to TypeRef.Primitive(PrimitiveType.UUID),
+        "uri" to TypeRef.Primitive(PrimitiveType.STRING),
+        "url" to TypeRef.Primitive(PrimitiveType.STRING),
+        "email" to TypeRef.Primitive(PrimitiveType.STRING),
+        "hostname" to TypeRef.Primitive(PrimitiveType.STRING),
+        "ipv4" to TypeRef.Primitive(PrimitiveType.STRING),
+        "ipv6" to TypeRef.Primitive(PrimitiveType.STRING),
+        "password" to TypeRef.Primitive(PrimitiveType.STRING),
     )
 
     private val INTEGER_FORMAT_MAP = mapOf(
+        "int32" to TypeRef.Primitive(PrimitiveType.INT),
         "int64" to TypeRef.Primitive(PrimitiveType.LONG),
     )
 
     private val NUMBER_FORMAT_MAP = mapOf(
         "float" to TypeRef.Primitive(PrimitiveType.FLOAT),
+        "double" to TypeRef.Primitive(PrimitiveType.DOUBLE),
     )
 }
