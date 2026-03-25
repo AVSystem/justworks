@@ -1398,4 +1398,111 @@ class ModelGeneratorTest {
         assertTrue(!idParam.type.isNullable, "Required property should be non-nullable")
         assertEquals(null, idParam.defaultValue, "Required property should have no default")
     }
+
+    // -- Property KDoc tests (DOCS-03) --
+
+    @Test
+    fun `property with description generates KDoc`() {
+        val schema = SchemaModel(
+            name = "Pet",
+            description = null,
+            properties = listOf(
+                PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), "The pet's name", false),
+            ),
+            requiredProperties = setOf("name"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .first()
+        val prop = typeSpec.propertySpecs.first { it.name == "name" }
+        assertTrue(
+            prop.kdoc.toString().contains("The pet's name"),
+            "Expected KDoc with description, got: ${prop.kdoc}",
+        )
+    }
+
+    @Test
+    fun `property without description generates no KDoc`() {
+        val schema = SchemaModel(
+            name = "Pet",
+            description = null,
+            properties = listOf(
+                PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("name"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generator.generate(spec(schemas = listOf(schema)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .first()
+        val prop = typeSpec.propertySpecs.first { it.name == "name" }
+        assertTrue(
+            prop.kdoc.toString().isEmpty(),
+            "Expected no KDoc when description is null, got: ${prop.kdoc}",
+        )
+    }
+
+    @Test
+    fun `enum with valueDescriptions generates constant KDoc`() {
+        val enum = EnumModel(
+            name = "Status",
+            description = null,
+            type = EnumBackingType.STRING,
+            values = listOf("active", "inactive"),
+            valueDescriptions = mapOf("active" to "Currently active", "inactive" to "Not active"),
+        )
+        val files = generator.generate(spec(enums = listOf(enum)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .first()
+        val activeConstant = typeSpec.enumConstants["ACTIVE"]
+        assertNotNull(activeConstant, "Expected ACTIVE enum constant")
+        assertTrue(
+            activeConstant.kdoc.toString().contains("Currently active"),
+            "Expected KDoc 'Currently active' on ACTIVE, got: ${activeConstant.kdoc}",
+        )
+        val inactiveConstant = typeSpec.enumConstants["INACTIVE"]
+        assertNotNull(inactiveConstant, "Expected INACTIVE enum constant")
+        assertTrue(
+            inactiveConstant.kdoc.toString().contains("Not active"),
+            "Expected KDoc 'Not active' on INACTIVE, got: ${inactiveConstant.kdoc}",
+        )
+    }
+
+    @Test
+    fun `enum without valueDescriptions generates no constant KDoc`() {
+        val enum = EnumModel(
+            name = "Status",
+            description = null,
+            type = EnumBackingType.STRING,
+            values = listOf("active", "inactive"),
+        )
+        val files = generator.generate(spec(enums = listOf(enum)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .first()
+        val activeConstant = typeSpec.enumConstants["ACTIVE"]
+        assertNotNull(activeConstant, "Expected ACTIVE enum constant")
+        assertTrue(
+            activeConstant.kdoc.toString().isEmpty(),
+            "Expected no KDoc on ACTIVE when no valueDescriptions, got: ${activeConstant.kdoc}",
+        )
+    }
 }

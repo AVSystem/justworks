@@ -190,6 +190,7 @@ object SpecParser {
                         method = method,
                         operationId = operationId,
                         summary = operation.summary,
+                        description = operation.description,
                         tags = operation.tags.orEmpty(),
                         parameters = mergedParams,
                         requestBody = requestBody,
@@ -261,12 +262,21 @@ object SpecParser {
         )
     }
 
-    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel = EnumModel(
-        name = name,
-        description = schema.description,
-        type = EnumBackingType.parse(schema.type) ?: EnumBackingType.STRING,
-        values = schema.enum.map { it.toString() },
-    )
+    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel {
+        val enumValues = schema.enum.map { it.toString() }
+        val valueDescriptions = when (val ext = schema.extensions?.get("x-enum-descriptions")) {
+            is List<*> -> enumValues.zip(ext.map { it.toString() }).toMap()
+            is Map<*, *> -> ext.entries.associate { (k, v) -> k.toString() to v.toString() }
+            else -> emptyMap()
+        }
+        return EnumModel(
+            name = name,
+            description = schema.description,
+            type = EnumBackingType.parse(schema.type) ?: EnumBackingType.STRING,
+            values = enumValues,
+            valueDescriptions = valueDescriptions,
+        )
+    }
 
     // --- allOf property merging ---
 
