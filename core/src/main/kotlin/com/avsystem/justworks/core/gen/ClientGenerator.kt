@@ -114,35 +114,28 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
             )
         }
 
-        val kdocLines = buildList {
-            endpoint.summary?.let { add(it) }
-            endpoint.description?.let {
-                if (isNotEmpty()) add("")
-                add(it)
-            }
-            val paramDocs = endpoint.parameters.filter { it.description != null }
-            if (paramDocs.isNotEmpty() && isNotEmpty()) add("")
-            paramDocs.forEach { param ->
-                add("@param ${param.name.toCamelCase()} ${param.description}")
-            }
-            if (returnBodyType != UNIT) {
-                if (isNotEmpty()) add("")
-                add("@return [HttpSuccess] containing [${returnBodyType.simpleTypeName()}] on success")
-            }
+        val kdocParts = mutableListOf<String>()
+        endpoint.summary?.let { kdocParts.add(it.sanitizeKdoc()) }
+        endpoint.description?.let {
+            if (kdocParts.isNotEmpty()) kdocParts.add("")
+            kdocParts.add(it.sanitizeKdoc())
         }
-        if (kdocLines.isNotEmpty()) {
-            funBuilder.addKdoc("%L", kdocLines.joinToString("\n"))
+        val paramDocs = endpoint.parameters.filter { it.description != null }
+        if (paramDocs.isNotEmpty() && kdocParts.isNotEmpty()) kdocParts.add("")
+        paramDocs.forEach { param ->
+            kdocParts.add("@param ${param.name.toCamelCase()} ${param.description?.sanitizeKdoc()}")
+        }
+        if (kdocParts.isNotEmpty()) {
+            funBuilder.addKdoc("%L", kdocParts.joinToString("\n"))
+        }
+        if (returnBodyType != UNIT) {
+            if (kdocParts.isNotEmpty()) funBuilder.addKdoc("\n\n")
+            funBuilder.addKdoc("@return [%T] containing [%T] on success", HTTP_SUCCESS, returnBodyType)
         }
 
         funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
 
         return funBuilder.build()
-    }
-
-    private fun TypeName.simpleTypeName(): String = when (this) {
-        is ClassName -> simpleName
-        is ParameterizedTypeName -> rawType.simpleName
-        else -> toString()
     }
 
     private fun buildNullableParameter(

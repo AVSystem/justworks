@@ -325,7 +325,7 @@ class ModelGenerator(private val modelPackage: String) {
                 .builder(kotlinName, type)
                 .initializer(kotlinName)
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
-                .apply { prop.description?.let { addKdoc("%L", it) } }
+                .apply { prop.description?.let { addKdoc("%L", it.sanitizeKdoc()) } }
 
             propBuilder.build()
         }
@@ -434,13 +434,13 @@ class ModelGenerator(private val modelPackage: String) {
             val anonymousClass = TypeSpec
                 .anonymousClassBuilder()
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", value.name).build())
-                .apply { value.description?.let { addKdoc("%L", it) } }
+                .apply { value.description?.let { addKdoc("%L", it.sanitizeKdoc()) } }
                 .build()
             typeSpec.addEnumConstant(value.name.toEnumConstantName(), anonymousClass)
         }
 
         if (enum.description != null) {
-            typeSpec.addKdoc("%L", enum.description)
+            typeSpec.addKdoc("%L", enum.description.sanitizeKdoc())
         }
 
         return FileSpec
