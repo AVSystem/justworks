@@ -34,7 +34,7 @@ object SpecValidator {
         }
 
         openApi.components?.links?.let { links ->
-            ensureOrAccumulate(links.isNotEmpty()) {
+            ensureOrAccumulate(links.isEmpty()) {
                 Issue.Warning("Links are not supported in v1 and will be ignored")
             }
         }
