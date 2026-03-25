@@ -182,7 +182,7 @@ class ModelGeneratorTest {
             name = "PetStatus",
             description = null,
             type = EnumBackingType.STRING,
-            values = listOf("available", "pending", "sold"),
+            values = listOf(EnumModel.Value("available"), EnumModel.Value("pending"), EnumModel.Value("sold")),
         )
 
     @Test
@@ -243,7 +243,7 @@ class ModelGeneratorTest {
                 name = "Priority",
                 description = null,
                 type = EnumBackingType.INTEGER,
-                values = listOf("1", "2", "3"),
+                values = listOf(EnumModel.Value("1"), EnumModel.Value("2"), EnumModel.Value("3")),
             )
         val files = generator.generate(spec(enums = listOf(intEnum)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
@@ -588,7 +588,7 @@ class ModelGeneratorTest {
                 name = "Status",
                 description = null,
                 type = EnumBackingType.STRING,
-                values = listOf("active", "pending", "closed"),
+                values = listOf(EnumModel.Value("active"), EnumModel.Value("pending"), EnumModel.Value("closed")),
             )
         val schema =
             SchemaModel(
@@ -1461,8 +1461,7 @@ class ModelGeneratorTest {
             name = "Status",
             description = null,
             type = EnumBackingType.STRING,
-            values = listOf("active", "inactive"),
-            valueDescriptions = mapOf("active" to "Currently active", "inactive" to "Not active"),
+            values = listOf(EnumModel.Value("active", "Currently active"), EnumModel.Value("inactive", "Not active")),
         )
         val files = generator.generate(spec(enums = listOf(enum)))
         val typeSpec = files
@@ -1490,7 +1489,7 @@ class ModelGeneratorTest {
             name = "Status",
             description = null,
             type = EnumBackingType.STRING,
-            values = listOf("active", "inactive"),
+            values = listOf(EnumModel.Value("active"), EnumModel.Value("inactive")),
         )
         val files = generator.generate(spec(enums = listOf(enum)))
         val typeSpec = files

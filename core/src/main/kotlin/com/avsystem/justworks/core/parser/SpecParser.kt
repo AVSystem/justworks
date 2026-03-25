@@ -273,8 +273,7 @@ object SpecParser {
             name = name,
             description = schema.description,
             type = EnumBackingType.parse(schema.type) ?: EnumBackingType.STRING,
-            values = enumValues,
-            valueDescriptions = valueDescriptions,
+            values = enumValues.map { EnumModel.Value(it, valueDescriptions[it]) },
         )
     }
 

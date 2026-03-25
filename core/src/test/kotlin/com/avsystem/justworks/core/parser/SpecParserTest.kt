@@ -2,6 +2,7 @@ package com.avsystem.justworks.core.parser
 
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumBackingType
+import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
@@ -53,7 +54,7 @@ class SpecParserTest : SpecParserTestBase() {
         val petStatus = petstore.enums.find { it.name == "PetStatus" }
         assertNotNull(petStatus, "PetStatus enum missing")
         assertEquals(EnumBackingType.STRING, petStatus.type)
-        assertEquals(listOf("available", "pending", "sold"), petStatus.values)
+        assertEquals(listOf(EnumModel.Value("available"), EnumModel.Value("pending"), EnumModel.Value("sold")), petStatus.values)
     }
 
     @Test
