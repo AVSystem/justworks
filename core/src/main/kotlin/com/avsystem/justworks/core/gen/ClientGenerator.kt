@@ -115,12 +115,12 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         funBuilder.addParameters(pathParams + queryParams + headerParams)
 
         if (endpoint.requestBody != null) {
-            val params = when (endpoint.requestBody.contentType) {
+            val bodyParams = when (endpoint.requestBody.contentType) {
                 MULTIPART_FORM_DATA -> buildMultipartParameters(endpoint.requestBody)
                 FORM_URL_ENCODED -> buildFormParameters(endpoint.requestBody)
                 else -> listOf(buildNullableParameter(endpoint.requestBody.schema, BODY, endpoint.requestBody.required))
             }
-            funBuilder.addParameters(params)
+            funBuilder.addParameters(bodyParams)
         }
 
         funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
@@ -219,12 +219,12 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
                 )
                 code.addStatement(
                     "append(%T.ContentType, %L.toString())",
-                    HTTP_HEADERS_OBJECT,
+                    HTTP_HEADERS,
                     "${paramName}ContentType",
                 )
                 code.addStatement(
                     "append(%T.ContentDisposition, %P)",
-                    HTTP_HEADERS_OBJECT,
+                    HTTP_HEADERS,
                     CodeBlock.of("filename=\"\${%L}\"", "${paramName}Name"),
                 )
                 code.endControlFlow()
@@ -353,7 +353,7 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
 
     private fun buildFormParameters(requestBody: RequestBody): List<ParameterSpec> =
         requestBody.schema.properties.map { prop ->
-            val isRequired = prop.name in requestBody.schema.requiredProperties
+            val isRequired = requestBody.required && prop.name in requestBody.schema.requiredProperties
             buildNullableParameter(prop.type, prop.name, isRequired)
         }
 
