@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.parser
 
+import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumBackingType
 import com.avsystem.justworks.core.model.HttpMethod
@@ -30,7 +31,7 @@ class SpecParserTest : SpecParserTestBase() {
     private fun parseSpecErrors(file: File): List<String> {
         val result = SpecParser.parse(file)
         check(result is ParseResult.Failure) { "Expected failure" }
-        return result.errors
+        return result.warnings.map { it.message } + result.error.message
     }
 
     // -- SPEC-01: OpenAPI 3.0 parsing --
@@ -220,22 +221,22 @@ class SpecParserTest : SpecParserTestBase() {
         assertEquals(ParameterLocation.QUERY, limitParam.location)
     }
 
-    // -- SPEC-03: Error reporting --
+    // -- SPEC-03: Warning reporting --
 
     @Test
-    fun `parse invalid spec returns Failure`() {
+    fun `parse spec with missing info produces warnings`() {
         val result = SpecParser.parse(loadResource("invalid-spec.yaml"))
-        assertIs<ParseResult.Failure>(result)
+        assertIs<ParseResult.Success>(result)
+        assertTrue(result.warnings.isNotEmpty(), "Spec with missing info should produce warnings")
     }
 
     @Test
-    fun `parse invalid spec has descriptive error messages`() {
-        val errors = parseSpecErrors(loadResource("invalid-spec.yaml"))
-
-        assertTrue(errors.isNotEmpty(), "Failure should have error messages")
-        // Errors should be human-readable, not empty or codes-only
-        errors.forEach { error ->
-            assertTrue(error.length > 5, "Error message too short to be useful: '$error'")
+    fun `parse spec with missing info has descriptive warning messages`() {
+        val result = SpecParser.parse(loadResource("invalid-spec.yaml"))
+        assertIs<ParseResult.Success>(result)
+        assertTrue(result.warnings.isNotEmpty(), "Should have warning messages")
+        result.warnings.forEach { warning ->
+            assertTrue(warning.message.length > 5, "Warning message too short to be useful: '$warning'")
         }
     }
 
