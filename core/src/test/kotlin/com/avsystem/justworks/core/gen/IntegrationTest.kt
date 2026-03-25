@@ -78,7 +78,7 @@ class IntegrationTest {
             val spec = parseSpec(fixture).apiSpec
             if (spec.endpoints.isEmpty()) continue
 
-            val apiClientBaseFile = ApiClientBaseGenerator.generate()
+            val apiClientBaseFile = ApiClientBaseGenerator.generate(spec.securitySchemes)
             assertNotNull(apiClientBaseFile, "$fixture: ApiClientBaseGenerator should produce output")
 
             val source = apiClientBaseFile.toString()
@@ -111,7 +111,7 @@ class IntegrationTest {
                 )
             }
 
-            val apiClientBaseFile = ApiClientBaseGenerator.generate()
+            val apiClientBaseFile = ApiClientBaseGenerator.generate(spec.securitySchemes)
             assertNotNull(apiClientBaseFile, "$fixture: ApiClientBaseGenerator should produce output")
         }
     }

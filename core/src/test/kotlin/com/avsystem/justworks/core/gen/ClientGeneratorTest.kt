@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.HttpMethod
@@ -8,6 +9,7 @@ import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
+import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.KModifier
@@ -23,12 +25,13 @@ class ClientGeneratorTest {
     private val modelPackage = "com.example.model"
     private val generator = ClientGenerator(apiPackage, modelPackage)
 
-    private fun spec(endpoints: List<Endpoint>) = ApiSpec(
+    private fun spec(endpoints: List<Endpoint>, securitySchemes: List<SecurityScheme> = emptyList()) = ApiSpec(
         title = "Test",
         version = "1.0",
         endpoints = endpoints,
         schemas = emptyList(),
         enums = emptyList(),
+        securitySchemes = securitySchemes,
     )
 
     private fun endpoint(
@@ -53,8 +56,8 @@ class ClientGeneratorTest {
         responses = responses,
     )
 
-    private fun clientClass(endpoints: List<Endpoint>): TypeSpec {
-        val files = generator.generate(spec(endpoints))
+    private fun clientClass(endpoints: List<Endpoint>, securitySchemes: List<SecurityScheme> = emptyList()): TypeSpec {
+        val files = generator.generate(spec(endpoints, securitySchemes))
         return files
             .first()
             .members
@@ -294,14 +297,14 @@ class ClientGeneratorTest {
         assertEquals("kotlin.String", baseUrl.type.toString())
     }
 
-    // -- AUTH-01: Client constructor has token parameter --
+    // -- No security: constructor has only baseUrl --
 
     @Test
-    fun `client constructor has token provider parameter`() {
+    fun `no security schemes generates constructor with only baseUrl`() {
         val cls = clientClass(listOf(endpoint()))
         val constructor = assertNotNull(cls.primaryConstructor)
-        val token = constructor.parameters.first { it.name == "token" }
-        assertEquals("() -> kotlin.String", token.type.toString(), "token should be a () -> String lambda")
+        val paramNames = constructor.parameters.map { it.name }
+        assertEquals(listOf("baseUrl"), paramNames)
     }
 
     // -- Pitfall 3: Untagged endpoints go to DefaultClient --
@@ -424,5 +427,99 @@ class ClientGeneratorTest {
         val funSpec = cls.funSpecs.first { it.name == "deletePet" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("toEmptyResult"), "Expected toEmptyResult call")
+    }
+
+    // -- SECU: Security-aware constructor generation --
+
+    @Test
+    fun `no securitySchemes generates constructor with only baseUrl`() {
+        val cls = clientClass(listOf(endpoint()))
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertEquals(listOf("baseUrl"), paramNames)
+    }
+
+    @Test
+    fun `ApiKey HEADER scheme generates constructor with baseUrl and apiKey param`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.ApiKey("ApiKeyHeader", "X-API-Key", ApiKeyLocation.HEADER)),
+        )
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
+        assertTrue("apiKeyHeaderKey" in paramNames, "Expected apiKeyHeaderKey param")
+    }
+
+    @Test
+    fun `Basic scheme generates constructor with baseUrl, username, and password`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.Basic("BasicAuth")),
+        )
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
+        assertTrue("basicAuthUsername" in paramNames, "Expected basicAuthUsername param")
+        assertTrue("basicAuthPassword" in paramNames, "Expected basicAuthPassword param")
+    }
+
+    @Test
+    fun `multiple schemes generate all constructor params and pass all to super`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(
+                SecurityScheme.Bearer("BearerAuth"),
+                SecurityScheme.ApiKey("ApiKeyHeader", "X-API-Key", ApiKeyLocation.HEADER),
+            ),
+        )
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
+        assertTrue("bearerAuthToken" in paramNames, "Expected bearerAuthToken param")
+        assertTrue("apiKeyHeaderKey" in paramNames, "Expected apiKeyHeaderKey param")
+
+        // Verify superclass constructor params match
+        val superParams = cls.superclassConstructorParameters.map { it.toString().trim() }
+        assertTrue(superParams.contains("baseUrl"), "Expected baseUrl passed to super")
+        assertTrue(superParams.contains("bearerAuthToken"), "Expected bearerAuthToken passed to super")
+        assertTrue(superParams.contains("apiKeyHeaderKey"), "Expected apiKeyHeaderKey passed to super")
+    }
+
+    @Test
+    fun `explicit empty securitySchemes generates constructor with only baseUrl`() {
+        // Explicit empty securitySchemes = spec has security: [] (no auth required)
+        val spec = ApiSpec(
+            title = "Test",
+            version = "1.0",
+            endpoints = listOf(endpoint()),
+            schemas = emptyList(),
+            enums = emptyList(),
+            securitySchemes = emptyList(),
+        )
+        val files = generator.generate(spec)
+        val cls = files
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertEquals(
+            listOf("baseUrl"),
+            paramNames,
+            "Expected only baseUrl param when security is explicitly empty",
+        )
+    }
+
+    @Test
+    fun `single Bearer scheme uses token param name as shorthand`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.Bearer("BearerAuth")),
+        )
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertTrue("token" in paramNames, "Expected token param (single-bearer shorthand)")
     }
 }

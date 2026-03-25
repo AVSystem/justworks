@@ -29,6 +29,7 @@ class ModelGeneratorTest {
         endpoints = emptyList(),
         schemas = schemas,
         enums = enums,
+        securitySchemes = emptyList(),
     )
 
     private val petSchema =
@@ -1368,6 +1369,7 @@ class ModelGeneratorTest {
             endpoints = listOf(endpoint),
             schemas = emptyList(),
             enums = emptyList(),
+            securitySchemes = emptyList(),
         )
         val files = generator.generate(apiSpec)
         val uuidSerializerFile = files.find { it.name == "UuidSerializer" }

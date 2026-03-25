@@ -496,6 +496,125 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
+    fun `spec with security schemes generates ApiClientBase with applyAuth body`() {
+        writeFile(
+            "api/secured.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Secured API
+              version: '1.0'
+            paths:
+              /data:
+                get:
+                  operationId: getData
+                  summary: Get data
+                  tags:
+                    - data
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            properties:
+                              value:
+                                type: string
+            components:
+              securitySchemes:
+                ApiKeyAuth:
+                  type: apiKey
+                  in: header
+                  name: X-API-Key
+                BasicAuth:
+                  type: http
+                  scheme: basic
+            security:
+              - ApiKeyAuth: []
+              - BasicAuth: []
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                implementation("io.arrow-kt:arrow-core:2.2.1.1")
+            }
+
+            kotlin {
+                compilerOptions {
+                    freeCompilerArgs.add("-Xcontext-parameters")
+                }
+            }
+
+            justworks {
+                specs {
+                    register("secured") {
+                        specFile = file("api/secured.yaml")
+                        packageName = "com.example.secured"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("justworksGenerateSecured").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateSecured")?.outcome,
+        )
+
+        val apiClientBase = projectDir
+            .resolve("build/generated/justworks/shared/kotlin/com/avsystem/justworks/ApiClientBase.kt")
+        assertTrue(apiClientBase.exists(), "ApiClientBase.kt should exist")
+
+        val content = apiClientBase.readText()
+        assertTrue(content.contains("apiKeyAuthKey"), "Should contain apiKeyAuthKey param")
+        assertTrue(content.contains("basicAuthUsername"), "Should contain basicAuthUsername param")
+        assertTrue(content.contains("basicAuthPassword"), "Should contain basicAuthPassword param")
+        assertTrue(content.contains("X-API-Key"), "Should contain X-API-Key header name")
+        assertTrue(content.contains("applyAuth"), "Should contain applyAuth method")
+        assertTrue(content.contains("Authorization"), "Should contain Authorization header for Basic auth")
+        assertFalse(
+            content.contains("token: () -> String"),
+            "Should NOT contain backward-compat token param when explicit security schemes present",
+        )
+    }
+
+    @Test
+    fun `spec without security schemes generates ApiClientBase with no auth params`() {
+        writeBuildFile()
+
+        runner("justworksGenerateMain").build()
+
+        val apiClientBase = projectDir
+            .resolve("build/generated/justworks/shared/kotlin/com/avsystem/justworks/ApiClientBase.kt")
+        assertTrue(apiClientBase.exists(), "ApiClientBase.kt should exist")
+
+        val content = apiClientBase.readText()
+        assertTrue(!content.contains("token"), "Should NOT contain token param when no security schemes")
+        assertTrue(!content.contains("Bearer"), "Should NOT contain Bearer when no security schemes")
+    }
+
+    @Test
     fun `empty specs container logs warning`() {
         writeFile(
             "build.gradle.kts",

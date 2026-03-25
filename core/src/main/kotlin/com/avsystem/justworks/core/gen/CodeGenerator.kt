@@ -14,7 +14,7 @@ object CodeGenerator {
         spec: ApiSpec,
         modelPackage: String,
         apiPackage: String,
-        outputDir: File
+        outputDir: File,
     ): Result {
         val modelFiles = ModelGenerator(modelPackage).generate(spec)
         modelFiles.forEach { it.writeTo(outputDir) }
@@ -27,8 +27,10 @@ object CodeGenerator {
         return Result(modelFiles.size, clientFiles.size)
     }
 
-    fun generateSharedTypes(outputDir: File): Int {
-        val files = ApiResponseGenerator.generate() + ApiClientBaseGenerator.generate()
+    fun generateSharedTypes(outputDir: File, specs: List<ApiSpec> = emptyList()): Int {
+        val securitySchemes = specs.flatMap { it.securitySchemes }
+
+        val files = ApiResponseGenerator.generate() + ApiClientBaseGenerator.generate(securitySchemes)
         files.forEach { it.writeTo(outputDir) }
         return files.size
     }
