@@ -53,4 +53,12 @@ class NameRegistryTest {
         assertEquals("Foo", registry.register("Foo"))
         assertEquals("Bar", registry.register("Bar"))
     }
+
+    @Test
+    fun `names differing only by case are treated as distinct`() {
+        val registry = NameRegistry()
+        assertEquals("Foo", registry.register("Foo"))
+        assertEquals("foo", registry.register("foo"))
+        assertEquals("FOO", registry.register("FOO"))
+    }
 }

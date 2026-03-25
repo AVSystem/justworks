@@ -36,6 +36,7 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
     fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
 
     fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
+        ensureReserved(spec)
         val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec)
         val resolvedSpec = spec.resolveInlineTypes(nameMap)
 
@@ -104,6 +105,16 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
             .toSet()
 
         return HierarchyInfo(sealedHierarchies, variantParents, anyOfWithoutDiscriminator, schemas)
+    }
+
+    /**
+     * Ensures all top-level schema/enum names are reserved in [nameRegistry],
+     * preventing inline schemas from colliding with component types even if
+     * the caller supplied an empty registry.
+     */
+    private fun ensureReserved(spec: ApiSpec) {
+        spec.schemas.forEach { nameRegistry.reserve(it.name) }
+        spec.enums.forEach { nameRegistry.reserve(it.name) }
     }
 
     private fun collectAllInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> {
@@ -502,25 +513,16 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
         generateDataClass(schema.copy(name = schema.name.toInlinedName()))
 
     private fun TypeRef.resolveInline(nameMap: Map<InlineSchemaKey, String>): TypeRef = when (this) {
-        is TypeRef.Inline -> {
-            val key = InlineSchemaKey.from(properties, requiredProperties)
-            TypeRef.Reference(
-                nameMap[key]
-                    ?: error("Missing inline schema mapping for key (contextHint=$contextHint)"),
-            )
-        }
+        is TypeRef.Inline -> TypeRef.Reference(
+            nameMap[InlineSchemaKey.from(properties, requiredProperties)]
+                ?: error("Missing inline schema mapping for key (contextHint=$contextHint)"),
+        )
 
-        is TypeRef.Array -> {
-            TypeRef.Array(items.resolveInline(nameMap))
-        }
+        is TypeRef.Array -> TypeRef.Array(items.resolveInline(nameMap))
 
-        is TypeRef.Map -> {
-            TypeRef.Map(valueType.resolveInline(nameMap))
-        }
+        is TypeRef.Map -> TypeRef.Map(valueType.resolveInline(nameMap))
 
-        else -> {
-            this
-        }
+        else -> this
     }
 
     private val SchemaModel.isPrimitiveOnly: Boolean
