@@ -10,6 +10,7 @@ import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
 import arrow.core.raise.iorNel
 import arrow.core.raise.nullable
+import arrow.core.toNonEmptyListOrNull
 import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.Warnings
 import com.avsystem.justworks.core.model.ApiSpec
@@ -26,7 +27,6 @@ import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
-import com.avsystem.justworks.core.warn
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
@@ -83,10 +83,14 @@ object SpecParser {
         }
 
         val result = iorNel {
-            either<Issue.Error, ApiSpec> {
+            either {
                 val swaggerResult = OpenAPIParser().readLocation(specFile.absolutePath, null, parseOptions)
 
-                swaggerResult?.messages?.forEach { warn(it) }
+                swaggerResult
+                    ?.messages
+                    ?.map(Issue::Warning)
+                    ?.toNonEmptyListOrNull()
+                    ?.let(::accumulate)
 
                 val openApi = swaggerResult?.openAPI
 

@@ -3,11 +3,14 @@
 package com.avsystem.justworks.core
 
 import arrow.core.Nel
+import arrow.core.leftIor
 import arrow.core.nonEmptyListOf
 import arrow.core.raise.ExperimentalRaiseAccumulateApi
 import arrow.core.raise.IorRaise
-import arrow.core.raise.RaiseAccumulate
+import arrow.core.raise.context.bind
 import kotlin.contracts.ExperimentalContracts
+import kotlin.contracts.InvocationKind.AT_MOST_ONCE
+import kotlin.contracts.contract
 
 object Issue {
     data class Error(val message: String)
@@ -17,9 +20,3 @@ object Issue {
 }
 
 typealias Warnings = IorRaise<Nel<Issue.Warning>>
-
-context(warnings: Warnings)
-fun warn(message: String): Nothing? {
-    warnings.accumulate(nonEmptyListOf(Issue.Warning(message)))
-    return null
-}

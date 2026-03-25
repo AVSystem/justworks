@@ -1,7 +1,9 @@
 package com.avsystem.justworks.core.parser
 
+import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.Warnings
-import com.avsystem.justworks.core.warn
+import com.avsystem.justworks.core.ensureNotNullOrAccumulate
+import com.avsystem.justworks.core.ensureOrAccumulate
 import io.swagger.v3.oas.models.OpenAPI
 
 object SpecValidator {
@@ -15,25 +17,25 @@ object SpecValidator {
      */
     context(_: Warnings)
     fun validate(openApi: OpenAPI) {
-        if (openApi.info == null) {
-            warn("Spec is missing required 'info' section")
+        ensureNotNullOrAccumulate(openApi.info) {
+            Issue.Warning("Spec is missing required 'info' section")
         }
 
-        if (openApi.paths.isNullOrEmpty()) {
-            warn("Spec has no paths defined")
+        ensureOrAccumulate(!openApi.paths.isNullOrEmpty()) {
+            Issue.Warning("Spec has no paths defined")
         }
 
         openApi.paths?.values?.forEach { pathItem ->
             pathItem.readOperationsMap()?.values?.forEach { operation ->
-                if (!operation.callbacks.isNullOrEmpty()) {
-                    warn("Callbacks are not supported in v1 and will be ignored")
+                ensureOrAccumulate(operation.callbacks.isNullOrEmpty()) {
+                    Issue.Warning("Callbacks are not supported in v1 and will be ignored")
                 }
             }
         }
 
         openApi.components?.links?.let { links ->
-            if (links.isNotEmpty()) {
-                warn("Links are not supported in v1 and will be ignored")
+            ensureOrAccumulate(links.isNotEmpty()) {
+                Issue.Warning("Links are not supported in v1 and will be ignored")
             }
         }
     }
