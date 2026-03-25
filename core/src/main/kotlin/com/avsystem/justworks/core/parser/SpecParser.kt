@@ -1,6 +1,5 @@
 package com.avsystem.justworks.core.parser
 
-import arrow.core.compareTo
 import arrow.core.fold
 import arrow.core.merge
 import arrow.core.raise.context.Raise
@@ -29,6 +28,7 @@ import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
 import java.util.IdentityHashMap
+import kotlin.collections.emptyMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
 /**
@@ -265,10 +265,11 @@ object SpecParser {
     private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel {
         val enumValues = schema.enum.map { it.toString() }
         val valueDescriptions = when (val ext = schema.extensions?.get("x-enum-descriptions")) {
-            is List<*> -> enumValues.zip(ext.map { it.toString() }).toMap()
-            is Map<*, *> -> ext.entries.associate { (k, v) -> k.toString() to v.toString() }
+            is List<*> if ext.size == enumValues.size -> enumValues.zip(ext).toMap()
+            is Map<*, *> -> ext
             else -> emptyMap()
-        }
+        }.mapNotNull { (k, v) -> if (k is String && v is String) k to v else null }.toMap()
+
         return EnumModel(
             name = name,
             description = schema.description,
