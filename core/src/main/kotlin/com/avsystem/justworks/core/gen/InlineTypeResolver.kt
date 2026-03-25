@@ -22,8 +22,10 @@ fun ApiSpec.resolveInlineTypes(nameMap: Map<InlineSchemaKey, String>): ApiSpec {
         is TypeRef.Inline -> {
             val key = InlineSchemaKey.from(properties, requiredProperties)
             val className = nameMap[key]
-                ?: error("Missing inline schema mapping for key (contextHint=$contextHint). " +
-                    "This indicates a mismatch between inline schema collection and resolution.")
+                ?: error(
+                    "Missing inline schema mapping for key (contextHint=$contextHint). " +
+                        "This indicates a mismatch between inline schema collection and resolution.",
+                )
             TypeRef.Reference(className)
         }
 

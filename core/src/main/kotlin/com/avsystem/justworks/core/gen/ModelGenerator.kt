@@ -40,9 +40,11 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
         val resolvedSpec = spec.resolveInlineTypes(nameMap)
 
         val resolvedInlineSchemas = inlineSchemas.map { schema ->
-            schema.copy(properties = schema.properties.map { prop ->
-                prop.copy(type = prop.type.resolveInline(nameMap))
-            })
+            schema.copy(
+                properties = schema.properties.map { prop ->
+                    prop.copy(type = prop.type.resolveInline(nameMap))
+                },
+            )
         }
 
         val files = context(buildHierarchyInfo(resolvedSpec.schemas)) {
@@ -502,12 +504,23 @@ class ModelGenerator(private val modelPackage: String, private val nameRegistry:
     private fun TypeRef.resolveInline(nameMap: Map<InlineSchemaKey, String>): TypeRef = when (this) {
         is TypeRef.Inline -> {
             val key = InlineSchemaKey.from(properties, requiredProperties)
-            TypeRef.Reference(nameMap[key]
-                ?: error("Missing inline schema mapping for key (contextHint=$contextHint)"))
+            TypeRef.Reference(
+                nameMap[key]
+                    ?: error("Missing inline schema mapping for key (contextHint=$contextHint)"),
+            )
         }
-        is TypeRef.Array -> TypeRef.Array(items.resolveInline(nameMap))
-        is TypeRef.Map -> TypeRef.Map(valueType.resolveInline(nameMap))
-        else -> this
+
+        is TypeRef.Array -> {
+            TypeRef.Array(items.resolveInline(nameMap))
+        }
+
+        is TypeRef.Map -> {
+            TypeRef.Map(valueType.resolveInline(nameMap))
+        }
+
+        else -> {
+            this
+        }
     }
 
     private val SchemaModel.isPrimitiveOnly: Boolean

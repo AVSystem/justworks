@@ -93,10 +93,20 @@ class InlineSchemaDedupTest {
             PropertyModel("street", TypeRef.Primitive(PrimitiveType.STRING), null, nullable = false),
         )
         val props1 = listOf(
-            PropertyModel("address", TypeRef.Inline(nestedProps, setOf("street"), "RequestAddress"), null, nullable = false),
+            PropertyModel(
+                "address",
+                TypeRef.Inline(nestedProps, setOf("street"), "RequestAddress"),
+                null,
+                nullable = false,
+            ),
         )
         val props2 = listOf(
-            PropertyModel("address", TypeRef.Inline(nestedProps, setOf("street"), "ResponseAddress"), null, nullable = false),
+            PropertyModel(
+                "address",
+                TypeRef.Inline(nestedProps, setOf("street"), "ResponseAddress"),
+                null,
+                nullable = false,
+            ),
         )
 
         val key1 = InlineSchemaKey.from(props1, setOf("address"))
