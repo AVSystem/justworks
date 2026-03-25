@@ -1,6 +1,5 @@
 package com.avsystem.justworks.core.gen
 
-import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.parser.ParseResult
 import com.avsystem.justworks.core.parser.SpecParser

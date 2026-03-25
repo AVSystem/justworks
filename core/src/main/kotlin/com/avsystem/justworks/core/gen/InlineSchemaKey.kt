@@ -24,7 +24,7 @@ data class InlineSchemaKey(val properties: Set<PropertyKey>) {
 
         private fun normalizeType(type: TypeRef): TypeRef = when (type) {
             is TypeRef.Inline -> TypeRef.Inline(
-                properties = type.properties,
+                properties = type.properties.map { it.copy(type = normalizeType(it.type)) },
                 requiredProperties = type.requiredProperties,
                 contextHint = "",
             )

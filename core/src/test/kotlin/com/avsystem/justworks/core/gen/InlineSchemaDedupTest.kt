@@ -88,6 +88,24 @@ class InlineSchemaDedupTest {
     }
 
     @Test
+    fun `nested inline schemas with different contextHints produce same key`() {
+        val nestedProps = listOf(
+            PropertyModel("street", TypeRef.Primitive(PrimitiveType.STRING), null, nullable = false),
+        )
+        val props1 = listOf(
+            PropertyModel("address", TypeRef.Inline(nestedProps, setOf("street"), "RequestAddress"), null, nullable = false),
+        )
+        val props2 = listOf(
+            PropertyModel("address", TypeRef.Inline(nestedProps, setOf("street"), "ResponseAddress"), null, nullable = false),
+        )
+
+        val key1 = InlineSchemaKey.from(props1, setOf("address"))
+        val key2 = InlineSchemaKey.from(props2, setOf("address"))
+
+        assertEquals(key1, key2)
+    }
+
+    @Test
     fun `collision with existing inline schema name uses numeric suffix`() {
         val registry = NameRegistry()
 
