@@ -166,17 +166,17 @@ object SpecParser {
                         val content = body.content.bind()
 
                         // Priority: multipart > form-urlencoded > json
-                        val (contentType, mediaType) = sequenceOf(
+                        val contentType = sequenceOf(
                             MULTIPART_FORM_DATA,
                             FORM_URL_ENCODED,
                             JSON_CONTENT_TYPE,
-                        ).firstNotNullOfOrNull { ct ->
-                            content[ct]?.let { ct to it }
-                        }.bind()
+                        ).find { it in content }.bind()
+
+                        val mediaType = content[contentType].bind()
 
                         val schema = mediaType.schema
+                            ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request")
                             .bind()
-                            .toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request")
 
                         RequestBody(
                             required = body.required ?: false,
