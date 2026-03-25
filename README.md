@@ -81,8 +81,10 @@ dependencies {
 Each generated client extends `ApiClientBase` and creates its own pre-configured `HttpClient` internally.
 You only need to provide the base URL and authentication credentials:
 
+Generated client class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). If the spec has no tags, the class is named `DefaultApi`.
+
 ```kotlin
-val client = PetstoreApi(
+val client = PetsApi(
     baseUrl = "https://api.example.com",
     token = { "your-bearer-token" },
 )
@@ -91,7 +93,7 @@ val client = PetstoreApi(
 Auth parameters are lambdas (`() -> String`), so you can supply a token provider that refreshes automatically:
 
 ```kotlin
-val client = PetstoreApi(
+val client = PetsApi(
     baseUrl = "https://api.example.com",
     token = { tokenStore.getAccessToken() },
 )
@@ -101,52 +103,24 @@ The client implements `Closeable` -- call `client.close()` when done to release 
 
 ### Authentication
 
-The generated constructor signature depends on the security schemes defined in your OpenAPI spec:
-
-**Bearer Token** (single scheme):
+The generated constructor always takes a `baseUrl: String` and a `token: () -> String` parameter. The `token` lambda is called on each request and its value is sent as a `Bearer` token in the `Authorization` header:
 
 ```kotlin
-val client = PetstoreApi(
+val client = PetsApi(
     baseUrl = "https://api.example.com",
     token = { "your-bearer-token" },
 )
 ```
 
-**API Key** (sent as header or query parameter based on the spec):
-
-```kotlin
-val client = PetstoreApi(
-    baseUrl = "https://api.example.com",
-    myApiKey = { "your-api-key" },
-)
-```
-
-**HTTP Basic**:
-
-```kotlin
-val client = PetstoreApi(
-    baseUrl = "https://api.example.com",
-    myAuthUsername = { "user" },
-    myAuthPassword = { "pass" },
-)
-```
-
-**No Authentication** (spec has no security schemes):
-
-```kotlin
-val client = PetstoreApi(
-    baseUrl = "https://api.example.com",
-)
-```
-
-When the spec defines multiple security schemes, the constructor includes a parameter for each one.
-
 ### Making Requests
 
-Every endpoint becomes a `suspend` function on the client. The return type is `HttpResult<E, T>`, where `E` is the error body type and `T` is the success body type:
+Every endpoint becomes a `suspend` function on the client. Functions use Arrow's [Raise](https://arrow-kt.io/docs/typed-errors/) for structured error handling -- they require a `context(Raise<HttpError>)` and return `HttpSuccess<T>` on success:
 
 ```kotlin
-val result: HttpResult<JsonElement, List<Pet>> = client.listPets(limit = 10)
+// Inside a Raise<HttpError> context (e.g., within either { ... })
+val result: HttpSuccess<List<Pet>> = client.listPets(limit = 10)
+println(result.body) // the deserialized response body
+println(result.code) // the HTTP status code
 ```
 
 Path, query, and header parameters map to function arguments. Optional parameters default to `null`:
@@ -157,44 +131,46 @@ val result = client.findPets(status = "available", limit = 20)
 
 ### Error Handling
 
-`HttpResult<E, T>` is a typealias for `Either<HttpError<E>, HttpSuccess<T>>` (using [Arrow](https://arrow-kt.io/)).
-Every API call returns a result instead of throwing exceptions:
+Generated endpoints use [Arrow's Raise](https://arrow-kt.io/docs/typed-errors/) -- errors are raised, not returned as `Either`. Use Arrow's `either { ... }` block to obtain an `Either<HttpError, HttpSuccess<T>>`:
 
 ```kotlin
-when (val result = client.getPet(petId = 123)) {
-    is Either.Right -> {
-        val pet = result.value.body
-        println("Found: ${pet.name}")
-    }
-    is Either.Left -> when (val error = result.value) {
-        is HttpError.NotFound -> println("Pet not found")
-        is HttpError.Unauthorized -> println("Auth required")
-        is HttpError.Network -> println("Connection failed: ${error.cause}")
-        else -> println("Error ${error.statusCode}: ${error.body}")
-    }
+val result: Either<HttpError, HttpSuccess<Pet>> = either {
+    client.getPet(petId = 123)
 }
+
+result.fold(
+    ifLeft = { error ->
+        when (error.type) {
+            HttpErrorType.Client -> println("Client error ${error.code}: ${error.message}")
+            HttpErrorType.Server -> println("Server error ${error.code}: ${error.message}")
+            HttpErrorType.Redirect -> println("Redirect ${error.code}")
+            HttpErrorType.Network -> println("Connection failed: ${error.message}")
+        }
+    },
+    ifRight = { success ->
+        println("Found: ${success.body.name}")
+    }
+)
 ```
 
-`HttpError` covers specific HTTP status codes as sealed subtypes:
+`HttpError` is a data class with the following fields:
 
-| Subtype                | Status |
-|------------------------|--------|
-| `BadRequest`           | 400    |
-| `Unauthorized`         | 401    |
-| `Forbidden`            | 403    |
-| `NotFound`             | 404    |
-| `MethodNotAllowed`     | 405    |
-| `Conflict`             | 409    |
-| `Gone`                 | 410    |
-| `UnprocessableEntity`  | 422    |
-| `TooManyRequests`      | 429    |
-| `InternalServerError`  | 500    |
-| `BadGateway`           | 502    |
-| `ServiceUnavailable`   | 503    |
-| `Network`              | --     |
-| `Other`                | any    |
+| Field     | Type            | Description                              |
+|-----------|-----------------|------------------------------------------|
+| `code`    | `Int`           | HTTP status code (or `0` for network errors) |
+| `message` | `String`        | Response body text or exception message  |
+| `type`    | `HttpErrorType` | Category of the error                    |
 
-Network errors (connection timeouts, DNS failures) are caught and wrapped in `HttpError.Network` instead of propagating exceptions.
+`HttpErrorType` categorizes errors:
+
+| `HttpErrorType` value | Covered statuses / scenario        |
+|-----------------------|-------------------------------------|
+| `Client`              | HTTP 4xx client errors             |
+| `Server`              | HTTP 5xx server errors             |
+| `Redirect`            | HTTP 3xx redirect responses        |
+| `Network`             | I/O failures, timeouts, DNS issues |
+
+Network errors (connection timeouts, DNS failures) are caught and reported as `HttpError(code = 0, ..., type = HttpErrorType.Network)` instead of propagating exceptions.
 
 ### Serialization Setup
 
@@ -202,7 +178,7 @@ Generated models use `@Serializable` from kotlinx.serialization. The client sets
 
 If your spec uses polymorphic types (`oneOf` / `anyOf` with discriminators), the generator produces a `SerializersModule` that is automatically registered with the internal JSON instance. No manual serialization configuration is needed.
 
-If you need to customize the JSON configuration for external use (e.g., parsing API responses outside the client), use the same settings:
+The internal `createHttpClient()` uses default `Json` settings (it does not set `ignoreUnknownKeys` or `isLenient`). If you need a `Json` instance for external use (e.g., parsing API responses outside the client), you may want to configure these yourself:
 
 ```kotlin
 val json = Json {
