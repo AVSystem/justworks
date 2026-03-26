@@ -84,17 +84,9 @@ object ApiResponseGenerator {
             .addModifiers(KModifier.DATA)
             .addTypeVariable(t)
             .primaryConstructor(primaryConstructor)
-            .addProperty(
-                PropertySpec
-                    .builder(CODE, INT)
-                    .initializer(CODE)
-                    .build(),
-            ).addProperty(
-                PropertySpec
-                    .builder(BODY, t)
-                    .initializer(BODY)
-                    .build(),
-            ).build()
+            .addProperty(PropertySpec.builder(CODE, INT).initializer(CODE).build())
+            .addProperty(PropertySpec.builder(BODY, t).initializer(BODY).build())
+            .build()
 
         return FileSpec
             .builder(HTTP_SUCCESS)
