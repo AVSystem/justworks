@@ -60,9 +60,9 @@ internal object ApiClientBaseGenerator {
     private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
 
     fun generate(): FileSpec {
-        val t = TypeVariableName.Companion("T").copy(reified = true)
+        val t = TypeVariableName("T").copy(reified = true)
 
-        return FileSpec.Companion
+        return FileSpec
             .builder(API_CLIENT_BASE)
             .addFunction(buildEncodeParam(t))
             .addFunction(buildMapToResult(t))
@@ -72,24 +72,24 @@ internal object ApiClientBaseGenerator {
             .build()
     }
 
-    private fun buildEncodeParam(t: TypeVariableName): FunSpec = FunSpec.Companion
+    private fun buildEncodeParam(t: TypeVariableName): FunSpec = FunSpec
         .builder(ENCODE_PARAM_FUN.simpleName)
         .addModifiers(KModifier.INLINE)
         .addTypeVariable(t)
-        .addParameter("value", TypeVariableName.Companion("T"))
+        .addParameter("value", TypeVariableName("T"))
         .returns(STRING)
         .addStatement("return %T.%M(value).trim('\"')", JSON_CLASS, ENCODE_TO_STRING_FUN)
         .build()
 
-    private fun buildMapToResult(t: TypeVariableName): FunSpec = FunSpec.Companion
+    private fun buildMapToResult(t: TypeVariableName): FunSpec = FunSpec
         .builder(MAP_TO_RESULT)
         .addAnnotation(PublishedApi::class)
         .addModifiers(KModifier.INTERNAL, KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
-        .addParameter(SUCCESS_BODY, LambdaTypeName.Companion.get(returnType = TypeVariableName.Companion("T")))
-        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName.Companion("T")))
+        .addParameter(SUCCESS_BODY, LambdaTypeName.get(returnType = TypeVariableName("T")))
+        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
         .beginControlFlow("return when (status.value)")
         .addStatement("in 200..299 -> %T(status.value, %L())", HTTP_SUCCESS, SUCCESS_BODY)
         .addStatement(
@@ -113,17 +113,17 @@ internal object ApiClientBaseGenerator {
         ).endControlFlow()
         .build()
 
-    private fun buildToResult(t: TypeVariableName): FunSpec = FunSpec.Companion
+    private fun buildToResult(t: TypeVariableName): FunSpec = FunSpec
         .builder("toResult")
         .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
-        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName.Companion("T")))
+        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
         .addStatement("return %L { %M() }", MAP_TO_RESULT, BODY_FUN)
         .build()
 
-    private fun buildToEmptyResult(): FunSpec = FunSpec.Companion
+    private fun buildToEmptyResult(): FunSpec = FunSpec
         .builder("toEmptyResult")
         .addModifiers(KModifier.SUSPEND)
         .receiver(HTTP_RESPONSE)
@@ -133,38 +133,38 @@ internal object ApiClientBaseGenerator {
         .build()
 
     private fun buildApiClientBaseClass(): TypeSpec {
-        val tokenType = LambdaTypeName.Companion.get(returnType = STRING)
+        val tokenType = LambdaTypeName.get(returnType = STRING)
 
-        val constructor = FunSpec.Companion
+        val constructor = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
             .addParameter(TOKEN, tokenType)
             .build()
 
-        val baseUrlProp = PropertySpec.Companion
+        val baseUrlProp = PropertySpec
             .builder(BASE_URL, STRING)
             .initializer(BASE_URL)
             .addModifiers(KModifier.PROTECTED)
             .build()
 
-        val tokenProp = PropertySpec.Companion
+        val tokenProp = PropertySpec
             .builder(TOKEN, tokenType)
             .initializer(TOKEN)
             .addModifiers(KModifier.PRIVATE)
             .build()
 
-        val clientProp = PropertySpec.Companion
+        val clientProp = PropertySpec
             .builder(CLIENT, HTTP_CLIENT)
             .addModifiers(KModifier.PROTECTED, KModifier.ABSTRACT)
             .build()
 
-        val closeFun = FunSpec.Companion
+        val closeFun = FunSpec
             .builder("close")
             .addModifiers(KModifier.OVERRIDE)
             .addStatement("$CLIENT.close()")
             .build()
 
-        return TypeSpec.Companion
+        return TypeSpec
             .classBuilder(API_CLIENT_BASE)
             .addModifiers(KModifier.ABSTRACT)
             .addSuperinterface(CLOSEABLE)
@@ -179,7 +179,7 @@ internal object ApiClientBaseGenerator {
             .build()
     }
 
-    private fun buildApplyAuth(): FunSpec = FunSpec.Companion
+    private fun buildApplyAuth(): FunSpec = FunSpec
         .builder(APPLY_AUTH)
         .addModifiers(KModifier.PROTECTED)
         .receiver(HTTP_REQUEST_BUILDER)
@@ -187,15 +187,15 @@ internal object ApiClientBaseGenerator {
         .addStatement(
             "append(%T.Authorization, %P)",
             HTTP_HEADERS,
-            CodeBlock.Companion.of($$"Bearer ${'$'}{${TOKEN}()}"),
+            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN()}"),
         ).endControlFlow()
         .build()
 
-    private fun buildSafeCall(): FunSpec = FunSpec.Companion
+    private fun buildSafeCall(): FunSpec = FunSpec
         .builder(SAFE_CALL)
         .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
-        .addParameter(BLOCK, LambdaTypeName.Companion.get(returnType = HTTP_RESPONSE).copy(suspending = true))
+        .addParameter(BLOCK, LambdaTypeName.get(returnType = HTTP_RESPONSE).copy(suspending = true))
         .returns(HTTP_RESPONSE)
         .beginControlFlow("return try")
         .addStatement("%L()", BLOCK)
@@ -216,11 +216,11 @@ internal object ApiClientBaseGenerator {
         ).endControlFlow()
         .build()
 
-    private fun buildCreateHttpClient(): FunSpec = FunSpec.Companion
+    private fun buildCreateHttpClient(): FunSpec = FunSpec
         .builder(CREATE_HTTP_CLIENT)
         .addModifiers(KModifier.PROTECTED)
         .addParameter(
-            ParameterSpec.Companion
+            ParameterSpec
                 .builder(SERIALIZERS_MODULE_PARAM, SERIALIZERS_MODULE.copy(nullable = true))
                 .defaultValue("null")
                 .build(),

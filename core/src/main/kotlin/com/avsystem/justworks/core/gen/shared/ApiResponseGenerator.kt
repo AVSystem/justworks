@@ -27,7 +27,7 @@ object ApiResponseGenerator {
     fun generate(): List<FileSpec> = listOf(generateHttpError(), generateHttpSuccess())
 
     fun generateHttpError(): FileSpec {
-        val enumType = TypeSpec.Companion
+        val enumType = TypeSpec
             .enumBuilder(HTTP_ERROR_TYPE)
             .addEnumConstant("Client")
             .addEnumConstant("Server")
@@ -35,35 +35,35 @@ object ApiResponseGenerator {
             .addEnumConstant("Network")
             .build()
 
-        val primaryConstructor = FunSpec.Companion
+        val primaryConstructor = FunSpec
             .constructorBuilder()
             .addParameter(CODE, INT)
             .addParameter(MESSAGE, STRING)
             .addParameter(TYPE, HTTP_ERROR_TYPE)
             .build()
 
-        val dataClassType = TypeSpec.Companion
+        val dataClassType = TypeSpec
             .classBuilder(HTTP_ERROR)
             .addModifiers(KModifier.DATA)
             .primaryConstructor(primaryConstructor)
             .addProperty(
-                PropertySpec.Companion
+                PropertySpec
                     .builder(CODE, INT)
                     .initializer(CODE)
                     .build(),
             ).addProperty(
-                PropertySpec.Companion
+                PropertySpec
                     .builder(MESSAGE, STRING)
                     .initializer(MESSAGE)
                     .build(),
             ).addProperty(
-                PropertySpec.Companion
+                PropertySpec
                     .builder(TYPE, HTTP_ERROR_TYPE)
                     .initializer(TYPE)
                     .build(),
             ).build()
 
-        return FileSpec.Companion
+        return FileSpec
             .builder(HTTP_ERROR)
             .addType(enumType)
             .addType(dataClassType)
@@ -71,32 +71,32 @@ object ApiResponseGenerator {
     }
 
     fun generateHttpSuccess(): FileSpec {
-        val t = TypeVariableName.Companion("T")
+        val t = TypeVariableName("T")
 
-        val primaryConstructor = FunSpec.Companion
+        val primaryConstructor = FunSpec
             .constructorBuilder()
             .addParameter(CODE, INT)
             .addParameter(BODY, t)
             .build()
 
-        val successType = TypeSpec.Companion
+        val successType = TypeSpec
             .classBuilder(HTTP_SUCCESS)
             .addModifiers(KModifier.DATA)
             .addTypeVariable(t)
             .primaryConstructor(primaryConstructor)
             .addProperty(
-                PropertySpec.Companion
+                PropertySpec
                     .builder(CODE, INT)
                     .initializer(CODE)
                     .build(),
             ).addProperty(
-                PropertySpec.Companion
+                PropertySpec
                     .builder(BODY, t)
                     .initializer(BODY)
                     .build(),
             ).build()
 
-        return FileSpec.Companion
+        return FileSpec
             .builder(HTTP_SUCCESS)
             .addType(successType)
             .build()

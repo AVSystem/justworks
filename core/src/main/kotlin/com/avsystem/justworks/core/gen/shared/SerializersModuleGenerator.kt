@@ -36,13 +36,13 @@ internal object SerializersModuleGenerator {
 
         if (discriminatorHierarchies.isEmpty()) return null
 
-        val code = CodeBlock.Companion.builder().beginControlFlow("%T", SERIALIZERS_MODULE)
+        val code = CodeBlock.builder().beginControlFlow("%T", SERIALIZERS_MODULE)
 
         for ((parent, variants) in discriminatorHierarchies) {
-            val parentClass = ClassName.Companion(modelPackage, parent)
+            val parentClass = ClassName(modelPackage, parent)
             code.beginControlFlow("%M(%T::class)", POLYMORPHIC_FUN, parentClass)
             for (variant in variants) {
-                val variantClass = ClassName.Companion(modelPackage, variant)
+                val variantClass = ClassName(modelPackage, variant)
                 code.addStatement("%M(%T::class)", SUBCLASS_FUN, variantClass)
             }
             code.endControlFlow()
@@ -51,12 +51,12 @@ internal object SerializersModuleGenerator {
         code.endControlFlow()
 
         val prop =
-            PropertySpec.Companion
+            PropertySpec
                 .builder(GENERATED_SERIALIZERS_MODULE, SERIALIZERS_MODULE)
                 .initializer(code.build())
                 .build()
 
-        return FileSpec.Companion
+        return FileSpec
             .builder(modelPackage.name, FILE_NAME)
             .addProperty(prop)
             .build()
