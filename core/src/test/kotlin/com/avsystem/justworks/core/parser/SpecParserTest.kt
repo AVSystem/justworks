@@ -1,6 +1,5 @@
 package com.avsystem.justworks.core.parser
 
-import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumBackingType
 import com.avsystem.justworks.core.model.HttpMethod
@@ -28,7 +27,7 @@ class SpecParserTest : SpecParserTestBase() {
         }
     }
 
-    private fun parseSpecErrors(file: File): List<String> {
+    private fun parseSpecIssues(file: File): List<String> {
         val result = SpecParser.parse(file)
         check(result is ParseResult.Failure) { "Expected failure" }
         return result.warnings.map { it.message } + result.error.message
@@ -293,7 +292,7 @@ class SpecParserTest : SpecParserTestBase() {
 
     @Test
     fun `mixed anyOf and oneOf raises error`() {
-        val errors = parseSpecErrors(loadResource("mixed-combinator-spec.yaml"))
+        val errors = parseSpecIssues(loadResource("mixed-combinator-spec.yaml"))
 
         val errorMessages = errors.joinToString("\n")
         assertTrue(

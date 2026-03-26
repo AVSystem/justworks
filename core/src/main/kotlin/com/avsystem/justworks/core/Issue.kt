@@ -1,5 +1,3 @@
-@file:OptIn(ExperimentalContracts::class, ExperimentalRaiseAccumulateApi::class)
-
 package com.avsystem.justworks.core
 
 import arrow.core.Nel
