@@ -36,7 +36,6 @@ val CHANNEL_PROVIDER = ClassName("io.ktor.client.request.forms", "ChannelProvide
 val PARAMETERS_FUN = MemberName("io.ktor.http", "parameters")
 val CONTENT_TYPE_CLASS = ClassName("io.ktor.http", "ContentType")
 val HEADERS_CLASS = ClassName("io.ktor.http", "Headers")
-val HEADERS_BUILD_FUN = MemberName("io.ktor.http", "build")
 val HTTP_METHOD_CLASS = ClassName("io.ktor.http", "HttpMethod")
 
 // ============================================================================

@@ -1,11 +1,6 @@
 package com.avsystem.justworks.core.model
 
 sealed interface TypeRef {
-    val properties: List<PropertyModel>
-        get() = emptyList()
-    val requiredProperties: Set<String>
-        get() = emptySet()
-
     data class Primitive(val type: PrimitiveType) : TypeRef
 
     data class Array(val items: TypeRef) : TypeRef
@@ -15,8 +10,8 @@ sealed interface TypeRef {
     data class Map(val valueType: TypeRef) : TypeRef
 
     data class Inline(
-        override val properties: List<PropertyModel>,
-        override val requiredProperties: Set<String>,
+        val properties: List<PropertyModel>,
+        val requiredProperties: Set<String>,
         val contextHint: String, // "request"|"response"|property name for context-aware naming
     ) : TypeRef
 

@@ -6,6 +6,7 @@ import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.Parameter
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
+import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
@@ -24,8 +25,6 @@ import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
-
-private fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
 
 private const val DEFAULT_TAG = "Default"
 private const val API_SUFFIX = "Api"
@@ -197,7 +196,10 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
     ): CodeBlock {
         val urlString = buildUrlString(endpoint, params)
         val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
-        val properties = endpoint.requestBody!!.schema.properties
+        val properties = endpoint.requestBody
+            ?.schema
+            ?.properties
+            .orEmpty()
 
         val code = CodeBlock.builder()
         code.beginControlFlow("return $SAFE_CALL")
@@ -258,8 +260,16 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
     ): CodeBlock {
         val urlString = buildUrlString(endpoint, params)
         val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
-        val properties = endpoint.requestBody!!.schema.properties
-        val requiredProperties = endpoint.requestBody.schema.requiredProperties
+
+        val properties = endpoint.requestBody
+            ?.schema
+            ?.properties
+            .orEmpty()
+
+        val requiredProperties = endpoint.requestBody
+            ?.schema
+            ?.requiredProperties
+            .orEmpty()
 
         val code = CodeBlock.builder()
         code.beginControlFlow("return $SAFE_CALL")
@@ -376,4 +386,17 @@ class ClientGenerator(private val apiPackage: String, private val modelPackage: 
         block()
         if (!required) endControlFlow()
     }
+
+    private val TypeRef.properties: List<PropertyModel>
+        get() = when (this) {
+            is TypeRef.Inline -> properties
+            is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptyList()
+        }
+    private val TypeRef.requiredProperties: Set<String>
+        get() = when (this) {
+            is TypeRef.Inline -> requiredProperties
+            is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptySet()
+        }
+
+    private fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
 }
