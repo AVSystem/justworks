@@ -21,7 +21,10 @@ import kotlin.test.assertTrue
 
 class ModelGeneratorTest {
     private val modelPackage = "com.example.model"
-    private val generator = ModelGenerator(modelPackage)
+
+    private fun generate(spec: ApiSpec) = context(ModelPackage("com.example.model")) {
+        ModelGenerator.generate(spec)
+    }
 
     private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
         title = "Test",
@@ -52,7 +55,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `generates data class with DATA modifier`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
         assertEquals(1, files.size)
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         assertTrue(KModifier.DATA in typeSpec.modifiers, "Expected DATA modifier")
@@ -60,7 +63,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `generates class with Serializable annotation`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val annotations = typeSpec.annotations.map { it.typeName.toString() }
         assertTrue("kotlinx.serialization.Serializable" in annotations, "Expected @Serializable")
@@ -68,7 +71,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `required property is non-nullable in constructor`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor, "Expected primary constructor")
         val idParam = constructor.parameters.first { it.name == "id" }
@@ -77,7 +80,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `optional property is nullable with default null`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val tagParam = constructor.parameters.first { it.name == "tag" }
@@ -88,7 +91,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `every property has SerialName annotation with wire name`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         for (prop in typeSpec.propertySpecs) {
             val serialName =
@@ -115,7 +118,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val prop = typeSpec.propertySpecs[0]
         assertEquals("createdAt", prop.name)
@@ -131,7 +134,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `schema with description produces KDoc`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         assertTrue(typeSpec.kdoc.toString().contains("A pet in the store"), "Expected KDoc from description")
     }
@@ -152,7 +155,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val petProp = typeSpec.propertySpecs.first { it.name == "pet" }
         assertEquals("com.example.model.Pet", petProp.type.toString())
@@ -161,13 +164,13 @@ class ModelGeneratorTest {
     @Test
     fun `generate produces one FileSpec per schema`() {
         val schema2 = petSchema.copy(name = "Category", description = null)
-        val files = generator.generate(spec(schemas = listOf(petSchema, schema2)))
+        val files = generate(spec(schemas = listOf(petSchema, schema2)))
         assertEquals(2, files.size)
     }
 
     @Test
     fun `required properties ordered before optional in constructor`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
@@ -187,7 +190,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `string enum has Serializable annotation`() {
-        val files = generator.generate(spec(enums = listOf(statusEnum)))
+        val files = generate(spec(enums = listOf(statusEnum)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val annotations = typeSpec.annotations.map { it.typeName.toString() }
         assertTrue("kotlinx.serialization.Serializable" in annotations, "Expected @Serializable on enum")
@@ -195,7 +198,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `string enum constants have SerialName with wire value`() {
-        val files = generator.generate(spec(enums = listOf(statusEnum)))
+        val files = generate(spec(enums = listOf(statusEnum)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         assertEquals(3, typeSpec.enumConstants.size)
         for ((name, spec) in typeSpec.enumConstants) {
@@ -209,7 +212,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `enum constant names are UPPER_SNAKE_CASE`() {
-        val files = generator.generate(spec(enums = listOf(statusEnum)))
+        val files = generate(spec(enums = listOf(statusEnum)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val names = typeSpec.enumConstants.keys.toList()
         assertEquals(listOf("AVAILABLE", "PENDING", "SOLD"), names)
@@ -217,7 +220,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `enum constants do not produce anonymous class body`() {
-        val files = generator.generate(spec(enums = listOf(statusEnum)))
+        val files = generate(spec(enums = listOf(statusEnum)))
         val source = files[0].toString()
         // Assert no class body braces on enum constants
         assertFalse(
@@ -245,7 +248,7 @@ class ModelGeneratorTest {
                 type = EnumBackingType.INTEGER,
                 values = listOf("1", "2", "3"),
             )
-        val files = generator.generate(spec(enums = listOf(intEnum)))
+        val files = generate(spec(enums = listOf(intEnum)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constants = typeSpec.enumConstants.entries.toList()
         assertEquals("1", constants[0].key)
@@ -269,13 +272,13 @@ class ModelGeneratorTest {
     @Test
     fun `generate returns FileSpecs for schemas and enums combined`() {
         val schema2 = petSchema.copy(name = "Category", description = null)
-        val files = generator.generate(spec(schemas = listOf(petSchema, schema2), enums = listOf(statusEnum)))
+        val files = generate(spec(schemas = listOf(petSchema, schema2), enums = listOf(statusEnum)))
         assertEquals(3, files.size)
     }
 
     @Test
     fun `all FileSpecs have correct package name`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema), enums = listOf(statusEnum)))
+        val files = generate(spec(schemas = listOf(petSchema), enums = listOf(statusEnum)))
         for (file in files) {
             assertEquals(modelPackage, file.packageName)
         }
@@ -308,7 +311,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
 
-        val files = generator.generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
+        val files = generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
         val paymentType = files.first { it.name == "Payment" }.members.filterIsInstance<TypeSpec>()[0]
 
         assertTrue(KModifier.SEALED in paymentType.modifiers, "Expected SEALED modifier on Payment")
@@ -340,7 +343,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
 
-        val files = generator.generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
+        val files = generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
         val creditCardType = files.first { it.name == "CreditCard" }.members.filterIsInstance<TypeSpec>()[0]
 
         val serialNameAnnotation =
@@ -379,7 +382,7 @@ class ModelGeneratorTest {
                 discriminator = null,
             )
 
-        val files = generator.generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
+        val files = generate(spec(schemas = listOf(paymentSchema, creditCardSchema)))
         val paymentType = files.first { it.name == "Payment" }.members.filterIsInstance<TypeSpec>()[0]
 
         val discriminatorAnnotation =
@@ -411,7 +414,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "name" }
@@ -435,7 +438,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val ageParam = constructor.parameters.first { it.name == "age" }
@@ -460,7 +463,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "active" }
@@ -489,7 +492,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "createdAt" }
@@ -519,7 +522,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "eventDate" }
@@ -548,7 +551,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
@@ -572,7 +575,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "name" }
@@ -604,7 +607,7 @@ class ModelGeneratorTest {
                 anyOf = null,
                 discriminator = null,
             )
-        val files = generator.generate(spec(schemas = listOf(schema), enums = listOf(statusEnum)))
+        val files = generate(spec(schemas = listOf(schema), enums = listOf(statusEnum)))
         val typeSpec = files.first { it.name == "Task" }.members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "status" }
@@ -629,7 +632,7 @@ class ModelGeneratorTest {
             discriminator = null,
             underlyingType = null,
         )
-        val files = generator.generate(spec(schemas = listOf(groupIdSchema)))
+        val files = generate(spec(schemas = listOf(groupIdSchema)))
         assertEquals(1, files.size)
 
         val file = files[0]
@@ -657,7 +660,7 @@ class ModelGeneratorTest {
             discriminator = null,
             underlyingType = TypeRef.Primitive(PrimitiveType.INT),
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeAlias = files
             .first()
             .members
@@ -679,7 +682,7 @@ class ModelGeneratorTest {
             discriminator = null,
             underlyingType = TypeRef.Primitive(PrimitiveType.BOOLEAN),
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeAlias = files
             .first()
             .members
@@ -701,7 +704,7 @@ class ModelGeneratorTest {
             discriminator = null,
             underlyingType = TypeRef.Primitive(PrimitiveType.LONG),
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeAlias = files
             .first()
             .members
@@ -723,7 +726,7 @@ class ModelGeneratorTest {
             discriminator = null,
             underlyingType = TypeRef.Primitive(PrimitiveType.DOUBLE),
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeAlias = files
             .first()
             .members
@@ -745,7 +748,7 @@ class ModelGeneratorTest {
             discriminator = null,
             underlyingType = TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING)),
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeAlias = files
             .first()
             .members
@@ -767,7 +770,7 @@ class ModelGeneratorTest {
             discriminator = null,
             underlyingType = TypeRef.Reference("OtherSchema"),
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeAlias = files
             .first()
             .members
@@ -788,7 +791,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(userIdSchema)))
+        val files = generate(spec(schemas = listOf(userIdSchema)))
         val typeAlias = files[0].members.filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()[0]
 
         assertTrue(
@@ -800,7 +803,7 @@ class ModelGeneratorTest {
     @Test
     fun `schema with properties generates data class not type alias`() {
         // Verify existing behavior unchanged - schemas with properties still get data classes
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
 
         val typeSpecs = files[0].members.filterIsInstance<TypeSpec>()
         val typeAliases = files[0].members.filterIsInstance<com.squareup.kotlinpoet.TypeAliasSpec>()
@@ -832,7 +835,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val source = files[0].toString()
 
         // Hard keyword: KotlinPoet should backtick-escape
@@ -858,7 +861,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val source = files[0].toString()
 
         // Hard keyword: KotlinPoet should backtick-escape
@@ -884,7 +887,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val source = files[0].toString()
 
         // Hard keyword: KotlinPoet should backtick-escape
@@ -910,7 +913,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val prop = typeSpec.propertySpecs[0]
 
@@ -934,7 +937,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val prop = typeSpec.propertySpecs[0]
 
@@ -958,7 +961,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val prop = typeSpec.propertySpecs[0]
 
@@ -982,7 +985,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val prop = typeSpec.propertySpecs[0]
 
@@ -1028,7 +1031,7 @@ class ModelGeneratorTest {
         )
 
         // Should complete without StackOverflowError
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         assertNotNull(files, "generate should return results without StackOverflowError")
     }
 
@@ -1049,7 +1052,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
 
@@ -1090,7 +1093,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(baseSchema, composedSchema)))
+        val files = generate(spec(schemas = listOf(baseSchema, composedSchema)))
         val childFile = files.first { it.name == "Child" }
         val typeSpec = childFile.members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)
@@ -1121,7 +1124,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files
             .first()
             .members
@@ -1146,7 +1149,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files
             .first()
             .members
@@ -1173,7 +1176,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val typeSpec = files
             .first()
             .members
@@ -1203,7 +1206,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
         assertNotNull(uuidSerializerFile, "Expected UuidSerializer file to be generated")
         val content = uuidSerializerFile.toString()
@@ -1225,7 +1228,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val deviceFile = files.find { it.name == "Device" }
         assertNotNull(deviceFile)
         val content = deviceFile.toString()
@@ -1249,7 +1252,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val deviceFile = files.find { it.name == "Device" }
         assertNotNull(deviceFile)
         val content = deviceFile.toString()
@@ -1278,7 +1281,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val deviceFile = files.find { it.name == "DeviceWithUuidList" }
         assertNotNull(deviceFile)
         val content = deviceFile.toString()
@@ -1316,7 +1319,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(schema)))
+        val files = generate(spec(schemas = listOf(schema)))
         val deviceFile = files.find { it.name == "DeviceWithUuidMap" }
         assertNotNull(deviceFile)
         val content = deviceFile.toString()
@@ -1337,7 +1340,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `data class without UUID property does not generate UuidSerializer`() {
-        val files = generator.generate(spec(schemas = listOf(petSchema)))
+        val files = generate(spec(schemas = listOf(petSchema)))
         val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
         assertEquals(null, uuidSerializerFile, "Expected no UuidSerializer file without UUID properties")
     }
@@ -1369,7 +1372,7 @@ class ModelGeneratorTest {
             schemas = emptyList(),
             enums = emptyList(),
         )
-        val files = generator.generate(apiSpec)
+        val files = generate(apiSpec)
         val uuidSerializerFile = files.find { it.name == "UuidSerializer" }
         assertNotNull(uuidSerializerFile, "Expected UuidSerializer when UUID is used in endpoint parameter")
     }
@@ -1389,7 +1392,7 @@ class ModelGeneratorTest {
             anyOf = null,
             discriminator = null,
         )
-        val files = generator.generate(spec(schemas = listOf(composedSchema)))
+        val files = generate(spec(schemas = listOf(composedSchema)))
         val childFile = files.first { it.name == "Child" }
         val typeSpec = childFile.members.filterIsInstance<TypeSpec>()[0]
         val constructor = assertNotNull(typeSpec.primaryConstructor)

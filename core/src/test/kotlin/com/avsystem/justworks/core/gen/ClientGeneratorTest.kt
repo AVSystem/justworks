@@ -2,6 +2,7 @@ package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.gen.client.ClientGenerator
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.Parameter
@@ -12,6 +13,7 @@ import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
+import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.ParameterizedTypeName
 import com.squareup.kotlinpoet.TypeSpec
@@ -24,12 +26,16 @@ import kotlin.test.assertTrue
 class ClientGeneratorTest {
     private val apiPackage = "com.example.api"
     private val modelPackage = "com.example.model"
-    private val generator = ClientGenerator(apiPackage, modelPackage)
 
-    private fun spec(endpoints: List<Endpoint>) = ApiSpec(
+    private fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
+        context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
+            ClientGenerator.generate(spec, hasPolymorphicTypes)
+        }
+
+    private fun spec(vararg endpoints: Endpoint) = ApiSpec(
         title = "Test",
         version = "1.0",
-        endpoints = endpoints,
+        endpoints = endpoints.toList(),
         schemas = emptyList(),
         enums = emptyList(),
     )
@@ -56,8 +62,8 @@ class ClientGeneratorTest {
         responses = responses,
     )
 
-    private fun clientClass(endpoints: List<Endpoint>): TypeSpec {
-        val files = generator.generate(spec(endpoints))
+    private fun clientClass(vararg endpoints: Endpoint): TypeSpec {
+        val files = generate(spec(*endpoints))
         return files
             .first()
             .members
@@ -69,12 +75,11 @@ class ClientGeneratorTest {
 
     @Test
     fun `generates one client class per tag`() {
-        val endpoints =
-            listOf(
-                endpoint(operationId = "listPets", tags = listOf("Pets")),
-                endpoint(path = "/store", operationId = "getInventory", tags = listOf("Store")),
-            )
-        val files = generator.generate(spec(endpoints))
+        val endpoints = arrayOf(
+            endpoint(operationId = "listPets", tags = listOf("Pets")),
+            endpoint(path = "/store", operationId = "getInventory", tags = listOf("Store")),
+        )
+        val files = generate(spec(*endpoints))
         assertEquals(2, files.size)
         val classNames =
             files
@@ -91,7 +96,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `endpoint functions are suspend`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         assertTrue(KModifier.SUSPEND in funSpec.modifiers, "Expected SUSPEND modifier")
     }
@@ -100,23 +105,16 @@ class ClientGeneratorTest {
 
     @Test
     fun `supports all HTTP methods`() {
-        val methods =
-            listOf(
-                HttpMethod.GET to "getPet",
-                HttpMethod.POST to "createPet",
-                HttpMethod.PUT to "updatePet",
-                HttpMethod.DELETE to "deletePet",
-                HttpMethod.PATCH to "patchPet",
-            )
-        val endpoints =
-            methods.map { (method, opId) ->
-                endpoint(method = method, operationId = opId)
-            }
-        val cls = clientClass(endpoints)
-        val funBodies =
-            cls.funSpecs.associate {
-                it.name to it.body.toString()
-            }
+        val methods = listOf(
+            HttpMethod.GET to "getPet",
+            HttpMethod.POST to "createPet",
+            HttpMethod.PUT to "updatePet",
+            HttpMethod.DELETE to "deletePet",
+            HttpMethod.PATCH to "patchPet",
+        )
+        val endpoints = methods.map { (method, opId) -> endpoint(method = method, operationId = opId) }.toTypedArray()
+        val cls = clientClass(*endpoints)
+        val funBodies = cls.funSpecs.associate { it.name to it.body.toString() }
         assertTrue(
             funBodies["getPet"]!!.contains("request.get(") || funBodies["getPet"]!!.contains("request.`get`("),
             "GET method expected",
@@ -148,12 +146,11 @@ class ClientGeneratorTest {
             endpoint(
                 path = "/pets/{petId}",
                 operationId = "getPet",
-                parameters =
-                    listOf(
-                        Parameter("petId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.LONG), null),
-                    ),
+                parameters = listOf(
+                    Parameter("petId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.LONG), null),
+                ),
             )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "getPet" }
         val param = funSpec.parameters.first { it.name == "petId" }
         assertEquals("kotlin.Long", param.type.toString())
@@ -171,7 +168,7 @@ class ClientGeneratorTest {
                         Parameter("limit", ParameterLocation.QUERY, true, TypeRef.Primitive(PrimitiveType.INT), null),
                     ),
             )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val param = funSpec.parameters.first { it.name == "limit" }
         assertEquals("kotlin.Int", param.type.toString())
@@ -181,15 +178,14 @@ class ClientGeneratorTest {
 
     @Test
     fun `optional query parameters default to null`() {
-        val ep =
-            endpoint(
-                operationId = "listPets",
-                parameters =
-                    listOf(
-                        Parameter("limit", ParameterLocation.QUERY, false, TypeRef.Primitive(PrimitiveType.INT), null),
-                    ),
-            )
-        val cls = clientClass(listOf(ep))
+        val ep = endpoint(
+            operationId = "listPets",
+            parameters =
+                listOf(
+                    Parameter("limit", ParameterLocation.QUERY, false, TypeRef.Primitive(PrimitiveType.INT), null),
+                ),
+        )
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val param = funSpec.parameters.first { it.name == "limit" }
         assertTrue(param.type.isNullable, "Optional query param should be nullable")
@@ -200,13 +196,12 @@ class ClientGeneratorTest {
 
     @Test
     fun `request body becomes function parameter`() {
-        val ep =
-            endpoint(
-                method = HttpMethod.POST,
-                operationId = "createPet",
-                requestBody = RequestBody(true, "application/json", TypeRef.Reference("Pet")),
-            )
-        val cls = clientClass(listOf(ep))
+        val ep = endpoint(
+            method = HttpMethod.POST,
+            operationId = "createPet",
+            requestBody = RequestBody(true, ContentType.JSON_CONTENT_TYPE, TypeRef.Reference("Pet")),
+        )
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "createPet" }
         val bodyParam = funSpec.parameters.first { it.name == "body" }
         assertEquals("com.example.model.Pet", bodyParam.type.toString())
@@ -216,7 +211,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `return type is Success parameterized`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val returnType = funSpec.returnType
         assertNotNull(returnType)
@@ -230,7 +225,7 @@ class ClientGeneratorTest {
     @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
     fun `endpoint functions have Raise HttpError context parameter`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val contextParameters = funSpec.contextParameters
         assertTrue(contextParameters.isNotEmpty(), "Expected context parameter")
@@ -244,21 +239,20 @@ class ClientGeneratorTest {
 
     @Test
     fun `header parameters become function parameters`() {
-        val ep =
-            endpoint(
-                operationId = "listPets",
-                parameters =
-                    listOf(
-                        Parameter(
-                            "X-Request-Id",
-                            ParameterLocation.HEADER,
-                            true,
-                            TypeRef.Primitive(PrimitiveType.STRING),
-                            null,
-                        ),
+        val ep = endpoint(
+            operationId = "listPets",
+            parameters =
+                listOf(
+                    Parameter(
+                        "X-Request-Id",
+                        ParameterLocation.HEADER,
+                        true,
+                        TypeRef.Primitive(PrimitiveType.STRING),
+                        null,
                     ),
-            )
-        val cls = clientClass(listOf(ep))
+                ),
+        )
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val param = funSpec.parameters.first { it.name == "xRequestId" }
         assertEquals("kotlin.String", param.type.toString())
@@ -266,21 +260,20 @@ class ClientGeneratorTest {
 
     @Test
     fun `header parameters are emitted inside headers block`() {
-        val ep =
-            endpoint(
-                operationId = "listPets",
-                parameters =
-                    listOf(
-                        Parameter(
-                            "X-Request-Id",
-                            ParameterLocation.HEADER,
-                            true,
-                            TypeRef.Primitive(PrimitiveType.STRING),
-                            null,
-                        ),
+        val ep = endpoint(
+            operationId = "listPets",
+            parameters =
+                listOf(
+                    Parameter(
+                        "X-Request-Id",
+                        ParameterLocation.HEADER,
+                        true,
+                        TypeRef.Primitive(PrimitiveType.STRING),
+                        null,
                     ),
-            )
-        val cls = clientClass(listOf(ep))
+                ),
+        )
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("headers"), "Expected headers block in generated body")
@@ -291,7 +284,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `client constructor has baseUrl parameter`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         val constructor = assertNotNull(cls.primaryConstructor)
         val baseUrl = constructor.parameters.first { it.name == "baseUrl" }
         assertEquals("kotlin.String", baseUrl.type.toString())
@@ -301,7 +294,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `client constructor has token provider parameter`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         val constructor = assertNotNull(cls.primaryConstructor)
         val token = constructor.parameters.first { it.name == "token" }
         assertEquals("() -> kotlin.String", token.type.toString(), "token should be a () -> String lambda")
@@ -312,7 +305,7 @@ class ClientGeneratorTest {
     @Test
     fun `untagged endpoints go to DefaultApi`() {
         val ep = endpoint(operationId = "healthCheck", tags = emptyList())
-        val files = generator.generate(spec(listOf(ep)))
+        val files = generate(spec(ep))
         val className =
             files
                 .first()
@@ -327,13 +320,12 @@ class ClientGeneratorTest {
 
     @Test
     fun `void response uses Unit type parameter`() {
-        val ep =
-            endpoint(
-                method = HttpMethod.DELETE,
-                operationId = "deletePet",
-                responses = mapOf("204" to Response("204", "No content", null)),
-            )
-        val cls = clientClass(listOf(ep))
+        val ep = endpoint(
+            method = HttpMethod.DELETE,
+            operationId = "deletePet",
+            responses = mapOf("204" to Response("204", "No content", null)),
+        )
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "deletePet" }
         val returnType = funSpec.returnType as ParameterizedTypeName
         assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
@@ -351,7 +343,7 @@ class ClientGeneratorTest {
                 "201" to Response("201", "Created", TypeRef.Reference("Pet")),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "createPet" }
         val returnType = funSpec.returnType as ParameterizedTypeName
         assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
@@ -368,7 +360,7 @@ class ClientGeneratorTest {
                 "204" to Response("204", "No content", null),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "removePet" }
         val returnType = funSpec.returnType as ParameterizedTypeName
         assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
@@ -378,7 +370,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `client class extends ApiClientBase`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         assertEquals("com.avsystem.justworks.ApiClientBase", cls.superclass.toString())
     }
 
@@ -386,10 +378,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `polymorphic spec wires serializersModule in createHttpClient call`() {
-        val files = ClientGenerator(
-            apiPackage,
-            modelPackage,
-        ).generate(spec(listOf(endpoint())), hasPolymorphicTypes = true)
+        val files = generate(spec(endpoint()), hasPolymorphicTypes = true)
         val clientProperty = files
             .first()
             .members
@@ -414,7 +403,7 @@ class ClientGeneratorTest {
             operationId = "uploadFile",
             requestBody = RequestBody(
                 required = true,
-                contentType = "multipart/form-data",
+                contentType = ContentType.MULTIPART_FORM_DATA,
                 schema = TypeRef.Inline(
                     properties = listOf(
                         PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
@@ -425,7 +414,7 @@ class ClientGeneratorTest {
                 ),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "uploadFile" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("submitFormWithBinaryData"), "Expected submitFormWithBinaryData call")
@@ -439,7 +428,7 @@ class ClientGeneratorTest {
             operationId = "uploadFile",
             requestBody = RequestBody(
                 required = true,
-                contentType = "multipart/form-data",
+                contentType = ContentType.MULTIPART_FORM_DATA,
                 schema = TypeRef.Inline(
                     properties = listOf(
                         PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
@@ -449,7 +438,7 @@ class ClientGeneratorTest {
                 ),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "uploadFile" }
         val paramTypes = funSpec.parameters.associate { it.name to it.type.toString() }
         assertEquals("io.ktor.client.request.forms.ChannelProvider", paramTypes["file"])
@@ -464,7 +453,7 @@ class ClientGeneratorTest {
             operationId = "uploadFile",
             requestBody = RequestBody(
                 required = true,
-                contentType = "multipart/form-data",
+                contentType = ContentType.MULTIPART_FORM_DATA,
                 schema = TypeRef.Inline(
                     properties = listOf(
                         PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
@@ -475,7 +464,7 @@ class ClientGeneratorTest {
                 ),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "uploadFile" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("append(\"description\", description)"), "Expected simple append for text field")
@@ -488,7 +477,7 @@ class ClientGeneratorTest {
             operationId = "uploadFile",
             requestBody = RequestBody(
                 required = true,
-                contentType = "multipart/form-data",
+                contentType = ContentType.MULTIPART_FORM_DATA,
                 schema = TypeRef.Inline(
                     properties = listOf(
                         PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
@@ -498,7 +487,7 @@ class ClientGeneratorTest {
                 ),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "uploadFile" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("ContentDisposition"), "Expected ContentDisposition in headers")
@@ -510,9 +499,9 @@ class ClientGeneratorTest {
         val ep = endpoint(
             method = HttpMethod.POST,
             operationId = "createPet",
-            requestBody = RequestBody(true, "application/json", TypeRef.Reference("Pet")),
+            requestBody = RequestBody(true, ContentType.JSON_CONTENT_TYPE, TypeRef.Reference("Pet")),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "createPet" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("setBody"), "Expected setBody for JSON content type")
@@ -528,7 +517,7 @@ class ClientGeneratorTest {
             operationId = "createUser",
             requestBody = RequestBody(
                 required = true,
-                contentType = "application/x-www-form-urlencoded",
+                contentType = ContentType.FORM_URL_ENCODED,
                 schema = TypeRef.Inline(
                     properties = listOf(
                         PropertyModel("username", TypeRef.Primitive(PrimitiveType.STRING), null, false),
@@ -539,7 +528,7 @@ class ClientGeneratorTest {
                 ),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "createUser" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("submitForm"), "Expected submitForm call")
@@ -557,7 +546,7 @@ class ClientGeneratorTest {
             operationId = "createUser",
             requestBody = RequestBody(
                 required = true,
-                contentType = "application/x-www-form-urlencoded",
+                contentType = ContentType.FORM_URL_ENCODED,
                 schema = TypeRef.Inline(
                     properties = listOf(
                         PropertyModel("username", TypeRef.Primitive(PrimitiveType.STRING), null, false),
@@ -568,7 +557,7 @@ class ClientGeneratorTest {
                 ),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "createUser" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("age.toString()"), "Expected toString() for non-string param")
@@ -582,7 +571,7 @@ class ClientGeneratorTest {
             operationId = "createUser",
             requestBody = RequestBody(
                 required = true,
-                contentType = "application/x-www-form-urlencoded",
+                contentType = ContentType.FORM_URL_ENCODED,
                 schema = TypeRef.Inline(
                     properties = listOf(
                         PropertyModel("username", TypeRef.Primitive(PrimitiveType.STRING), null, false),
@@ -593,7 +582,7 @@ class ClientGeneratorTest {
                 ),
             ),
         )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "createUser" }
         val nicknameParam = funSpec.parameters.first { it.name == "nickname" }
         assertTrue(nicknameParam.type.isNullable, "Optional form field should be nullable")
@@ -605,10 +594,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `non-polymorphic spec has createHttpClient without serializersModule`() {
-        val files = ClientGenerator(
-            apiPackage,
-            modelPackage,
-        ).generate(spec(listOf(endpoint())), hasPolymorphicTypes = false)
+        val files = generate(spec(endpoint()), hasPolymorphicTypes = false)
         val clientProperty = files
             .first()
             .members
@@ -625,7 +611,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `generated code calls applyAuth`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("applyAuth()"), "Expected applyAuth() call")
@@ -633,7 +619,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `generated code calls safeCall`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("safeCall"), "Expected safeCall call")
@@ -641,7 +627,7 @@ class ClientGeneratorTest {
 
     @Test
     fun `generated code calls toResult for typed response`() {
-        val cls = clientClass(listOf(endpoint()))
+        val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("toResult"), "Expected toResult call")
@@ -655,7 +641,7 @@ class ClientGeneratorTest {
                 operationId = "deletePet",
                 responses = mapOf("204" to Response("204", "No content", null)),
             )
-        val cls = clientClass(listOf(ep))
+        val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "deletePet" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("toEmptyResult"), "Expected toEmptyResult call")

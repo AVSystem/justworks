@@ -186,7 +186,7 @@ internal object ApiClientBaseGenerator {
         .addStatement(
             "append(%T.Authorization, %P)",
             HTTP_HEADERS,
-            CodeBlock.of($$"Bearer ${'$'}{${TOKEN}()}"),
+            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN()}"),
         ).endControlFlow()
         .build()
 

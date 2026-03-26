@@ -1,6 +1,7 @@
 package com.avsystem.justworks.core.parser
 
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.EnumBackingType
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.ParameterLocation
@@ -129,7 +130,7 @@ class SpecParserTest : SpecParserTestBase() {
 
         val body = assertNotNull(createPet.requestBody, "createPet should have a request body")
         assertTrue(body.required, "Request body should be required")
-        assertEquals("application/json", body.contentType)
+        assertEquals(ContentType.JSON_CONTENT_TYPE, body.contentType)
 
         val bodyType = assertIs<TypeRef.Reference>(body.schema)
         assertEquals("NewPet", bodyType.schemaName)
