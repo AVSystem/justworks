@@ -24,7 +24,7 @@ class CodeGeneratorTest {
             val specFile = File(specUrl.toURI())
             val spec = when (val result = SpecParser.parse(specFile)) {
                 is ParseResult.Success -> result.apiSpec
-                is ParseResult.Failure -> fail("Failed to parse $fixture: ${result.errors}")
+                is ParseResult.Failure -> fail("Failed to parse $fixture: ${result.error}")
             }
 
             val outputDir = Files.createTempDirectory("codegen-test").toFile()
