@@ -1,6 +1,7 @@
 package com.avsystem.justworks.core.gen.client
 
 import com.avsystem.justworks.core.gen.APPLY_AUTH
+import com.avsystem.justworks.core.gen.BASE_URL
 import com.avsystem.justworks.core.gen.BODY
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CONTENT_TYPE_APPLICATION
@@ -189,7 +190,7 @@ internal object BodyGenerator {
     private fun buildUrlString(endpoint: Endpoint, params: Map<ParameterLocation, List<Parameter>>): CodeBlock {
         val (format, args) = params[ParameterLocation.PATH]
             .orEmpty()
-            .fold($$"${'$'}{${BASE_URL}}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
+            .fold($$"${'$'}{$$BASE_URL}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
                 format.replace("{${param.name}}", $$"${%M(%L)}") to args + ENCODE_PARAM_FUN + param.name.toCamelCase()
             }
         return CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
