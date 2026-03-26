@@ -1,18 +1,26 @@
 package com.avsystem.justworks.core.parser
 
+import arrow.core.raise.iorNel
+import com.avsystem.justworks.core.Issue
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
 import io.swagger.v3.oas.models.Paths
 import io.swagger.v3.oas.models.info.Info
 import kotlin.test.Test
-import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 class SpecValidatorTest {
+    private fun validateAndCollectWarnings(openApi: OpenAPI): List<Issue.Warning> =
+        iorNel { SpecValidator.validate(openApi) }.fold(
+            { warnings -> warnings },
+            { emptyList() },
+            { warnings, _ -> warnings },
+        )
+
     // -- VALID-01: Valid spec --
 
     @Test
-    fun `valid OpenAPI object produces no errors`() {
+    fun `valid OpenAPI object produces no issues`() {
         val openApi =
             OpenAPI().apply {
                 info =
@@ -26,14 +34,14 @@ class SpecValidatorTest {
                     }
             }
 
-        val errors = SpecValidator.validate(openApi)
-        assertTrue(errors.isEmpty(), "Valid spec should produce no errors, got: $errors")
+        val warnings = validateAndCollectWarnings(openApi)
+        assertTrue(warnings.isEmpty(), "Valid spec should produce no warnings, got: $warnings")
     }
 
     // -- VALID-02: Missing required fields --
 
     @Test
-    fun `OpenAPI with null info produces errors`() {
+    fun `OpenAPI with null info produces warning`() {
         val openApi =
             OpenAPI().apply {
                 info = null
@@ -43,11 +51,11 @@ class SpecValidatorTest {
                     }
             }
 
-        val issues = SpecValidator.validate(openApi)
-        assertTrue(issues.isNotEmpty(), "Missing info should produce issues")
+        val warnings = validateAndCollectWarnings(openApi)
+        assertTrue(warnings.isNotEmpty(), "Missing info should produce warnings")
         assertTrue(
-            issues.any { it.message.contains("info", ignoreCase = true) },
-            "Error should mention 'info': $issues",
+            warnings.any { it.message.contains("info", ignoreCase = true) },
+            "Warning should mention 'info': $warnings",
         )
     }
 
@@ -65,13 +73,11 @@ class SpecValidatorTest {
                 paths = null
             }
 
-        val issues = SpecValidator.validate(openApi)
-        assertTrue(issues.isNotEmpty(), "Spec with no paths should produce issues")
-        val warning = issues.firstOrNull { it is SpecValidator.ValidationIssue.Warning }
-        assertIs<SpecValidator.ValidationIssue.Warning>(warning, "Expected a Warning for no paths, got: $issues")
+        val warnings = validateAndCollectWarnings(openApi)
+        assertTrue(warnings.isNotEmpty(), "Spec with no paths should produce warnings")
         assertTrue(
-            warning.message.contains("paths", ignoreCase = true),
-            "Warning should mention 'paths': ${warning.message}",
+            warnings.any { it.message.contains("paths", ignoreCase = true) },
+            "Warning should mention 'paths': $warnings",
         )
     }
 }

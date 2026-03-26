@@ -36,7 +36,7 @@ class IntegrationTest {
         val specFile = File(specUrl.toURI())
         return when (val result = SpecParser.parse(specFile)) {
             is ParseResult.Success -> result
-            is ParseResult.Failure -> fail("Failed to parse $resourcePath: ${result.errors}")
+            is ParseResult.Failure -> fail("Failed to parse $resourcePath: ${result.error}")
         }
     }
 
