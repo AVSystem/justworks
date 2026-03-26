@@ -1,5 +1,7 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.client.ApiClientBaseGenerator
+import com.avsystem.justworks.core.gen.client.ClientGenerator
 import com.avsystem.justworks.core.parser.ParseResult
 import com.avsystem.justworks.core.parser.SpecParser
 import java.io.File
