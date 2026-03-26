@@ -1,3 +1,4 @@
+package com.avsystem.justworks.core.gen.client
 
 import com.avsystem.justworks.core.gen.APPLY_AUTH
 import com.avsystem.justworks.core.gen.BASE_URL
@@ -40,39 +41,8 @@ import com.squareup.kotlinpoet.UNIT
 import kotlin.collections.orEmpty
 import kotlin.collections.plus
 
-        val headerParams = params[ParameterLocation.HEADER].orEmpty().map { param ->
-            buildNullableParameter(param.schema, param.name, param.required)
-        }
-
-        funBuilder.addParameters(pathParams + queryParams + headerParams)
-
-        if (endpoint.requestBody != null) {
-            val bodyParams = when (endpoint.requestBody.contentType) {
-                MULTIPART_FORM_DATA -> buildMultipartParameters(endpoint.requestBody)
-                FORM_URL_ENCODED -> buildFormParameters(endpoint.requestBody)
-                else -> listOf(buildNullableParameter(endpoint.requestBody.schema, BODY, endpoint.requestBody.required))
-            }
-            funBuilder.addParameters(bodyParams)
-        }
-
-        funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
-
-        return funBuilder.build()
-    }
-
-    private fun buildNullableParameter(
-        typeRef: TypeRef,
-        name: String,
-        required: Boolean,
-    ): ParameterSpec {
-        val baseType = TypeMapping.toTypeName(typeRef, modelPackage)
-
-        val builder = ParameterSpec.builder(name.toCamelCase(), baseType.copy(nullable = !required))
-        if (!required) builder.defaultValue("null")
-        return builder.build()
-    }
-
-    private fun buildFunctionBody(
+internal object BodyGenerator {
+    fun buildFunctionBody(
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
@@ -103,7 +73,7 @@ import kotlin.collections.plus
         code.beginControlFlow("return $SAFE_CALL")
 
         code.beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
-        code.addStatement("$APPLY_AUTH()")
+        code.addStatement("${APPLY_AUTH}()")
 
         addHeaderParams(code, params)
         addQueryParams(code, params)
@@ -160,7 +130,7 @@ import kotlin.collections.plus
                 code.addStatement(
                     "append(%T.ContentDisposition, %P)",
                     HTTP_HEADERS,
-                    CodeBlock.of("filename=\"\${%L}\"", "${paramName}Name"),
+                    CodeBlock.of($$"filename=\"${%L}\"", "${paramName}Name"),
                 )
                 code.endControlFlow()
                 code.add(")\n")
@@ -171,7 +141,7 @@ import kotlin.collections.plus
 
         code.endControlFlow() // formData
         code.beginControlFlow(")")
-        code.addStatement("$APPLY_AUTH()")
+        code.addStatement("${APPLY_AUTH}()")
         addHeaderParams(code, params)
         addQueryParams(code, params)
 
@@ -226,7 +196,7 @@ import kotlin.collections.plus
 
         code.endControlFlow() // parameters
         code.beginControlFlow(")")
-        code.addStatement("$APPLY_AUTH()")
+        code.addStatement("${APPLY_AUTH}()")
         addHeaderParams(code, params)
         addQueryParams(code, params)
 
@@ -244,7 +214,7 @@ import kotlin.collections.plus
     private fun buildUrlString(endpoint: Endpoint, params: Map<ParameterLocation, List<Parameter>>): CodeBlock {
         val (format, args) = params[ParameterLocation.PATH]
             .orEmpty()
-            .fold($$"${'$'}{$$BASE_URL}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
+            .fold($$"${'$'}{${BASE_URL}}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
                 format.replace("{${param.name}}", $$"${%M(%L)}") to args + ENCODE_PARAM_FUN + param.name.toCamelCase()
             }
         return CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
@@ -277,59 +247,4 @@ import kotlin.collections.plus
             code.endControlFlow()
         }
     }
-
-    private fun buildMultipartParameters(requestBody: RequestBody): List<ParameterSpec> =
-        requestBody.schema.properties.flatMap { prop ->
-            val name = prop.name.toCamelCase()
-            if (prop.type.isBinaryUpload()) {
-                listOf(
-                    ParameterSpec(name, CHANNEL_PROVIDER),
-                    ParameterSpec("${name}Name", STRING),
-                    ParameterSpec("${name}ContentType", CONTENT_TYPE_CLASS),
-                )
-            } else {
-                listOf(
-                    ParameterSpec(name, TypeMapping.toTypeName(prop.type, modelPackage)),
-                )
-            }
-        }
-
-    private fun buildFormParameters(requestBody: RequestBody): List<ParameterSpec> =
-        requestBody.schema.properties.map { prop ->
-            val isRequired = requestBody.required && prop.name in requestBody.schema.requiredProperties
-            buildNullableParameter(prop.type, prop.name, isRequired)
-        }
-
-    private fun resolveReturnType(endpoint: Endpoint): TypeName = endpoint.responses.entries
-        .asSequence()
-        .filter { it.key.startsWith("2") }
-        .firstNotNullOfOrNull { it.value.schema }
-        ?.let { successResponse -> TypeMapping.toTypeName(successResponse, modelPackage) }
-        ?: UNIT
-
-    /**
-     * If [required], emits [block] directly. Otherwise wraps it in `if (name != null) { ... }`.
-     */
-    private inline fun CodeBlock.Builder.optionalGuard(
-        required: Boolean,
-        name: String,
-        block: CodeBlock.Builder.() -> Unit,
-    ) {
-        if (!required) beginControlFlow("if (%L != null)", name)
-        block()
-        if (!required) endControlFlow()
-    }
-
-    private val TypeRef.properties: List<PropertyModel>
-        get() = when (this) {
-            is TypeRef.Inline -> properties
-            is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptyList()
-        }
-    private val TypeRef.requiredProperties: Set<String>
-        get() = when (this) {
-            is TypeRef.Inline -> requiredProperties
-            is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptySet()
-        }
-
-    private fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
 }
