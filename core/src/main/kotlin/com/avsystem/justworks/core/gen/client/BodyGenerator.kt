@@ -1,111 +1,44 @@
-package com.avsystem.justworks.core.gen
 
-import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.gen.APPLY_AUTH
+import com.avsystem.justworks.core.gen.BASE_URL
+import com.avsystem.justworks.core.gen.BODY
+import com.avsystem.justworks.core.gen.CLIENT
+import com.avsystem.justworks.core.gen.CONTENT_TYPE_APPLICATION
+import com.avsystem.justworks.core.gen.CONTENT_TYPE_FUN
+import com.avsystem.justworks.core.gen.DELETE_FUN
+import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
+import com.avsystem.justworks.core.gen.FORM_DATA_FUN
+import com.avsystem.justworks.core.gen.GET_FUN
+import com.avsystem.justworks.core.gen.HEADERS_CLASS
+import com.avsystem.justworks.core.gen.HEADERS_FUN
+import com.avsystem.justworks.core.gen.HTTP_HEADERS
+import com.avsystem.justworks.core.gen.HTTP_METHOD_CLASS
+import com.avsystem.justworks.core.gen.PARAMETERS_FUN
+import com.avsystem.justworks.core.gen.PATCH_FUN
+import com.avsystem.justworks.core.gen.POST_FUN
+import com.avsystem.justworks.core.gen.PUT_FUN
+import com.avsystem.justworks.core.gen.SAFE_CALL
+import com.avsystem.justworks.core.gen.SET_BODY_FUN
+import com.avsystem.justworks.core.gen.SUBMIT_FORM_FUN
+import com.avsystem.justworks.core.gen.SUBMIT_FORM_WITH_BINARY_DATA_FUN
+import com.avsystem.justworks.core.gen.TO_EMPTY_RESULT_FUN
+import com.avsystem.justworks.core.gen.TO_RESULT_FUN
+import com.avsystem.justworks.core.gen.optionalGuard
+import com.avsystem.justworks.core.gen.properties
+import com.avsystem.justworks.core.gen.requiredProperties
+import com.avsystem.justworks.core.gen.toCamelCase
+import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.Parameter
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
-import com.avsystem.justworks.core.model.PropertyModel
-import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.TypeRef
-import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.ContextParameter
-import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
-import com.squareup.kotlinpoet.FileSpec
-import com.squareup.kotlinpoet.FunSpec
-import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.LambdaTypeName
-import com.squareup.kotlinpoet.MemberName
-import com.squareup.kotlinpoet.ParameterSpec
-import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
-import com.squareup.kotlinpoet.PropertySpec
-import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
-import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.UNIT
-
-private const val DEFAULT_TAG = "Default"
-private const val API_SUFFIX = "Api"
-private const val MULTIPART_FORM_DATA = "multipart/form-data"
-private const val FORM_URL_ENCODED = "application/x-www-form-urlencoded"
-
-/**
- * Generates one KotlinPoet [FileSpec] per API tag, each containing a client class
- * that extends `ApiClientBase` with suspend functions for every endpoint in that tag group.
- */
-@OptIn(ExperimentalKotlinPoetApi::class)
-class ClientGenerator(private val apiPackage: String, private val modelPackage: String) {
-    fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> {
-        val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
-        return grouped.map { (tag, endpoints) -> generateClientFile(tag, endpoints, hasPolymorphicTypes) }
-    }
-
-    private fun generateClientFile(
-        tag: String,
-        endpoints: List<Endpoint>,
-        hasPolymorphicTypes: Boolean = false,
-    ): FileSpec {
-        val className = ClassName(apiPackage, "${tag.toPascalCase()}$API_SUFFIX")
-
-        val clientInitializer = if (hasPolymorphicTypes) {
-            val generatedSerializersModule = MemberName(modelPackage, GENERATED_SERIALIZERS_MODULE)
-            CodeBlock.of("$CREATE_HTTP_CLIENT(%M)", generatedSerializersModule)
-        } else {
-            CodeBlock.of("$CREATE_HTTP_CLIENT()")
-        }
-
-        val tokenType = LambdaTypeName.get(returnType = STRING)
-
-        val primaryConstructor = FunSpec
-            .constructorBuilder()
-            .addParameter(BASE_URL, STRING)
-            .addParameter(TOKEN, tokenType)
-            .build()
-
-        val httpClientProperty = PropertySpec
-            .builder(CLIENT, HTTP_CLIENT)
-            .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
-            .initializer(clientInitializer)
-            .build()
-
-        val classBuilder = TypeSpec
-            .classBuilder(className)
-            .superclass(API_CLIENT_BASE)
-            .addSuperclassConstructorParameter(BASE_URL)
-            .addSuperclassConstructorParameter(TOKEN)
-            .primaryConstructor(primaryConstructor)
-            .addProperty(httpClientProperty)
-
-        classBuilder.addFunctions(endpoints.map(::generateEndpointFunction))
-
-        return FileSpec
-            .builder(className)
-            .addType(classBuilder.build())
-            .build()
-    }
-
-    private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
-        val functionName = endpoint.operationId.toCamelCase()
-        val returnBodyType = resolveReturnType(endpoint)
-        val returnType = HTTP_SUCCESS.parameterizedBy(returnBodyType)
-
-        val funBuilder = FunSpec
-            .builder(functionName)
-            .addModifiers(KModifier.SUSPEND)
-            .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
-            .returns(returnType)
-
-        val params = endpoint.parameters.groupBy { it.location }
-
-        val pathParams = params[ParameterLocation.PATH].orEmpty().map { param ->
-            ParameterSpec(param.name.toCamelCase(), TypeMapping.toTypeName(param.schema, modelPackage))
-        }
-
-        val queryParams = params[ParameterLocation.QUERY].orEmpty().map { param ->
-            buildNullableParameter(param.schema, param.name, param.required)
-        }
+import kotlin.collections.orEmpty
+import kotlin.collections.plus
 
         val headerParams = params[ParameterLocation.HEADER].orEmpty().map { param ->
             buildNullableParameter(param.schema, param.name, param.required)
