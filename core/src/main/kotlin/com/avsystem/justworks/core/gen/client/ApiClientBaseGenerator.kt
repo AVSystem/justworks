@@ -1,5 +1,33 @@
-package com.avsystem.justworks.core.gen
+package com.avsystem.justworks.core.gen.client
 
+import com.avsystem.justworks.core.gen.API_CLIENT_BASE
+import com.avsystem.justworks.core.gen.APPLY_AUTH
+import com.avsystem.justworks.core.gen.BASE_URL
+import com.avsystem.justworks.core.gen.BODY_AS_TEXT_FUN
+import com.avsystem.justworks.core.gen.BODY_FUN
+import com.avsystem.justworks.core.gen.CLIENT
+import com.avsystem.justworks.core.gen.CLOSEABLE
+import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
+import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
+import com.avsystem.justworks.core.gen.ENCODE_TO_STRING_FUN
+import com.avsystem.justworks.core.gen.HEADERS_FUN
+import com.avsystem.justworks.core.gen.HTTP_CLIENT
+import com.avsystem.justworks.core.gen.HTTP_ERROR
+import com.avsystem.justworks.core.gen.HTTP_ERROR_TYPE
+import com.avsystem.justworks.core.gen.HTTP_HEADERS
+import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
+import com.avsystem.justworks.core.gen.HTTP_REQUEST_TIMEOUT_EXCEPTION
+import com.avsystem.justworks.core.gen.HTTP_RESPONSE
+import com.avsystem.justworks.core.gen.HTTP_SUCCESS
+import com.avsystem.justworks.core.gen.IO_EXCEPTION
+import com.avsystem.justworks.core.gen.JSON_CLASS
+import com.avsystem.justworks.core.gen.JSON_FUN
+import com.avsystem.justworks.core.gen.NETWORK_ERROR
+import com.avsystem.justworks.core.gen.RAISE
+import com.avsystem.justworks.core.gen.RAISE_FUN
+import com.avsystem.justworks.core.gen.SAFE_CALL
+import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.TOKEN
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.ContextParameter
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
@@ -24,14 +52,14 @@ import com.squareup.kotlinpoet.UNIT
  * - `ApiClientBase` abstract class with common client infrastructure
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
-object ApiClientBaseGenerator {
+internal object ApiClientBaseGenerator {
     private const val BLOCK = "block"
     private const val MAP_TO_RESULT = "mapToResult"
     private const val SUCCESS_BODY = "successBody"
     private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
 
     fun generate(): FileSpec {
-        val t = TypeVariableName("T").copy(reified = true)
+        val t = TypeVariableName.Companion("T").copy(reified = true)
 
         return FileSpec
             .builder(API_CLIENT_BASE)
@@ -47,7 +75,7 @@ object ApiClientBaseGenerator {
         .builder("encodeParam")
         .addModifiers(KModifier.INLINE)
         .addTypeVariable(t)
-        .addParameter("value", TypeVariableName("T"))
+        .addParameter("value", TypeVariableName.Companion("T"))
         .returns(STRING)
         .addStatement("return %T.%M(value).trim('\"')", JSON_CLASS, ENCODE_TO_STRING_FUN)
         .build()
@@ -59,8 +87,8 @@ object ApiClientBaseGenerator {
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
-        .addParameter(SUCCESS_BODY, LambdaTypeName.get(returnType = TypeVariableName("T")))
-        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
+        .addParameter(SUCCESS_BODY, LambdaTypeName.get(returnType = TypeVariableName.Companion("T")))
+        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName.Companion("T")))
         .beginControlFlow("return when (status.value)")
         .addStatement("in 200..299 -> %T(status.value, %L())", HTTP_SUCCESS, SUCCESS_BODY)
         .addStatement(
@@ -90,7 +118,7 @@ object ApiClientBaseGenerator {
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
         .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
-        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
+        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName.Companion("T")))
         .addStatement("return %L { %M() }", MAP_TO_RESULT, BODY_FUN)
         .build()
 
@@ -158,7 +186,7 @@ object ApiClientBaseGenerator {
         .addStatement(
             "append(%T.Authorization, %P)",
             HTTP_HEADERS,
-            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN()}"),
+            CodeBlock.of($$"Bearer ${'$'}{${TOKEN}()}"),
         ).endControlFlow()
         .build()
 
