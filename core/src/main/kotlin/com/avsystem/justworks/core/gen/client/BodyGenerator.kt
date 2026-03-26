@@ -1,7 +1,6 @@
 package com.avsystem.justworks.core.gen.client
 
 import com.avsystem.justworks.core.gen.APPLY_AUTH
-import com.avsystem.justworks.core.gen.BASE_URL
 import com.avsystem.justworks.core.gen.BODY
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CONTENT_TYPE_APPLICATION
@@ -24,7 +23,6 @@ import com.avsystem.justworks.core.gen.SUBMIT_FORM_FUN
 import com.avsystem.justworks.core.gen.SUBMIT_FORM_WITH_BINARY_DATA_FUN
 import com.avsystem.justworks.core.gen.TO_EMPTY_RESULT_FUN
 import com.avsystem.justworks.core.gen.TO_RESULT_FUN
-import com.avsystem.justworks.core.gen.optionalGuard
 import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.gen.requiredProperties
 import com.avsystem.justworks.core.gen.toCamelCase
@@ -39,25 +37,31 @@ import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.UNIT
-import kotlin.collections.orEmpty
-import kotlin.collections.plus
 
 internal object BodyGenerator {
     fun buildFunctionBody(
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
-    ): CodeBlock = when (endpoint.requestBody?.contentType) {
-        ContentType.MULTIPART_FORM_DATA -> buildMultipartBody(endpoint, params, returnBodyType)
-        ContentType.FORM_URL_ENCODED -> buildFormUrlEncodedBody(endpoint, params, returnBodyType)
-        ContentType.JSON_CONTENT_TYPE, null -> buildJsonBody(endpoint, params, returnBodyType)
-    }
+    ): CodeBlock = CodeBlock
+        .builder()
+        .beginControlFlow("return $SAFE_CALL")
+        .apply {
+            val urlString = buildUrlString(endpoint, params)
+            when (endpoint.requestBody?.contentType) {
+                ContentType.MULTIPART_FORM_DATA -> buildMultipartBody(endpoint, params, urlString)
+                ContentType.FORM_URL_ENCODED -> buildFormUrlEncodedBody(endpoint, params, urlString)
+                ContentType.JSON_CONTENT_TYPE, null -> buildJsonBody(endpoint, params, urlString)
+            }
+        }.unindent()
+        .add("}.%M()\n", if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN)
+        .build()
 
-    private fun buildJsonBody(
+    private fun CodeBlock.Builder.buildJsonBody(
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
-        returnBodyType: TypeName,
-    ): CodeBlock {
+        urlString: CodeBlock,
+    ) {
         val httpMethodFun = when (endpoint.method) {
             HttpMethod.GET -> GET_FUN
             HttpMethod.POST -> POST_FUN
@@ -66,48 +70,28 @@ internal object BodyGenerator {
             HttpMethod.PATCH -> PATCH_FUN
         }
 
-        val urlString = buildUrlString(endpoint, params)
-        val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
+        beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
+        addCommonRequestParts(params)
 
-        val code = CodeBlock.builder()
-
-        code.beginControlFlow("return $SAFE_CALL")
-
-        code.beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
-        code.addStatement("${APPLY_AUTH}()")
-
-        code.addHeaderParams(params)
-        code.addQueryParams(params)
-
-        if (endpoint.requestBody != null) {
-            code.optionalGuard(endpoint.requestBody.required, BODY) {
-                addStatement("%M(%T.Json)", CONTENT_TYPE_FUN, CONTENT_TYPE_APPLICATION)
-                addStatement("%M(%L)", SET_BODY_FUN, BODY)
-            }
+        optionalGuard(endpoint.requestBody?.required ?: false, BODY) {
+            addStatement("%M(%T.Json)", CONTENT_TYPE_FUN, CONTENT_TYPE_APPLICATION)
+            addStatement("%M(%L)", SET_BODY_FUN, BODY)
         }
 
-        code.endControlFlow() // client.METHOD
-        code.unindent()
-        code.add("}.%M()\n", resultFun)
-
-        return code.build()
+        endControlFlow() // client.METHOD
     }
 
-    private fun buildMultipartBody(
+    private fun CodeBlock.Builder.buildMultipartBody(
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
-        returnBodyType: TypeName,
-    ): CodeBlock {
-        val urlString = buildUrlString(endpoint, params)
-        val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
+        urlString: CodeBlock,
+    ) {
         val properties = endpoint.requestBody
             ?.schema
             ?.properties
             .orEmpty()
 
-        val code = CodeBlock.builder()
-        code.beginControlFlow("return $SAFE_CALL")
-        code.beginControlFlow(
+        beginControlFlow(
             "$CLIENT.%M(\nurl = %L,\nformData = %M",
             SUBMIT_FORM_WITH_BINARY_DATA_FUN,
             urlString,
@@ -117,54 +101,37 @@ internal object BodyGenerator {
         for (prop in properties) {
             val paramName = prop.name.toCamelCase()
             if (prop.type.isBinaryUpload()) {
-                code.beginControlFlow(
+                beginControlFlow(
                     "append(%S, %L, %T.build",
                     prop.name,
                     paramName,
                     HEADERS_CLASS,
                 )
-                code.addStatement(
+                addStatement(
                     "append(%T.ContentType, %L.toString())",
                     HTTP_HEADERS,
                     "${paramName}ContentType",
                 )
-                code.addStatement(
+                addStatement(
                     "append(%T.ContentDisposition, %P)",
                     HTTP_HEADERS,
                     CodeBlock.of($$"filename=\"${%L}\"", "${paramName}Name"),
                 )
-                code.endControlFlow()
-                code.add(")\n")
+                endControlFlow()
+                add(")\n")
             } else {
-                code.addStatement("append(%S, %L)", prop.name, paramName)
+                addStatement("append(%S, %L)", prop.name, paramName)
             }
         }
 
-        code.endControlFlow() // formData
-        code.beginControlFlow(")")
-        code.addStatement("${APPLY_AUTH}()")
-        code.addHeaderParams(params)
-        code.addQueryParams(params)
-
-        if (endpoint.method != HttpMethod.POST) {
-            code.addStatement("method = %T.%L", HTTP_METHOD_CLASS, endpoint.method.name.toPascalCase())
-        }
-
-        code.endControlFlow()
-        code.unindent()
-        code.add("}.%M()\n", resultFun)
-
-        return code.build()
+        finishFormRequest(endpoint, params)
     }
 
-    private fun buildFormUrlEncodedBody(
+    private fun CodeBlock.Builder.buildFormUrlEncodedBody(
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
-        returnBodyType: TypeName,
-    ): CodeBlock {
-        val urlString = buildUrlString(endpoint, params)
-        val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
-
+        urlString: CodeBlock,
+    ) {
         val properties = endpoint.requestBody
             ?.schema
             ?.properties
@@ -175,9 +142,7 @@ internal object BodyGenerator {
             ?.requiredProperties
             .orEmpty()
 
-        val code = CodeBlock.builder()
-        code.beginControlFlow("return $SAFE_CALL")
-        code.beginControlFlow(
+        beginControlFlow(
             "$CLIENT.%M(\nurl = %L,\nformParameters = %M",
             SUBMIT_FORM_FUN,
             urlString,
@@ -190,26 +155,35 @@ internal object BodyGenerator {
             val isString = prop.type == TypeRef.Primitive(PrimitiveType.STRING)
             val valueExpr = if (isString) paramName else "$paramName.toString()"
 
-            code.optionalGuard(isRequired, paramName) {
+            optionalGuard(isRequired, paramName) {
                 addStatement("append(%S, %L)", prop.name, valueExpr)
             }
         }
 
-        code.endControlFlow() // parameters
-        code.beginControlFlow(")")
-        code.addStatement("${APPLY_AUTH}()")
-        code.addHeaderParams(params)
-        code.addQueryParams(params)
+        finishFormRequest(endpoint, params)
+    }
 
-        if (endpoint.method != HttpMethod.POST) {
-            code.addStatement("method = %T.%L", HTTP_METHOD_CLASS, endpoint.method.name.toPascalCase())
+    private fun CodeBlock.Builder.finishFormRequest(
+        endpoint: Endpoint,
+        params: Map<ParameterLocation, List<Parameter>>,
+    ) {
+        endControlFlow() // formData / parameters
+        beginControlFlow(")")
+        addCommonRequestParts(params)
+        addHttpMethodIfNeeded(endpoint.method)
+        endControlFlow()
+    }
+
+    private fun CodeBlock.Builder.addCommonRequestParts(params: Map<ParameterLocation, List<Parameter>>) {
+        addStatement("${APPLY_AUTH}()")
+        addHeaderParams(params)
+        addQueryParams(params)
+    }
+
+    private fun CodeBlock.Builder.addHttpMethodIfNeeded(method: HttpMethod) {
+        if (method != HttpMethod.POST) {
+            addStatement("method = %T.%L", HTTP_METHOD_CLASS, method.name.toPascalCase())
         }
-
-        code.endControlFlow()
-        code.unindent()
-        code.add("}.%M()\n", resultFun)
-
-        return code.build()
     }
 
     private fun buildUrlString(endpoint: Endpoint, params: Map<ParameterLocation, List<Parameter>>): CodeBlock {
@@ -247,5 +221,15 @@ internal object BodyGenerator {
             }
             endControlFlow()
         }
+    }
+
+    internal inline fun CodeBlock.Builder.optionalGuard(
+        required: Boolean,
+        name: String,
+        block: CodeBlock.Builder.() -> Unit,
+    ) {
+        if (!required) beginControlFlow("if (%L != null)", name)
+        block()
+        if (!required) endControlFlow()
     }
 }

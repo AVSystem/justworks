@@ -9,6 +9,7 @@ import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CLOSEABLE
 import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
+import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
 import com.avsystem.justworks.core.gen.ENCODE_TO_STRING_FUN
 import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
@@ -72,7 +73,7 @@ internal object ApiClientBaseGenerator {
     }
 
     private fun buildEncodeParam(t: TypeVariableName): FunSpec = FunSpec
-        .builder("encodeParam")
+        .builder(ENCODE_PARAM_FUN.simpleName)
         .addModifiers(KModifier.INLINE)
         .addTypeVariable(t)
         .addParameter("value", TypeVariableName.Companion("T"))
