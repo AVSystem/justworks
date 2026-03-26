@@ -54,7 +54,10 @@ class SpecParserTest : SpecParserTestBase() {
         val petStatus = petstore.enums.find { it.name == "PetStatus" }
         assertNotNull(petStatus, "PetStatus enum missing")
         assertEquals(EnumBackingType.STRING, petStatus.type)
-        assertEquals(listOf(EnumModel.Value("available"), EnumModel.Value("pending"), EnumModel.Value("sold")), petStatus.values)
+        assertEquals(
+            listOf(EnumModel.Value("available"), EnumModel.Value("pending"), EnumModel.Value("sold")),
+            petStatus.values,
+        )
     }
 
     @Test
