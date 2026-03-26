@@ -1,5 +1,7 @@
 package com.avsystem.justworks.core.model
 
+import kotlin.enums.enumEntries
+
 /**
  * Intermediate model representing a fully parsed OpenAPI specification.
  *
@@ -31,11 +33,7 @@ enum class HttpMethod {
     POST,
     PUT,
     DELETE,
-    PATCH;
-
-    companion object {
-        fun parse(name: String): HttpMethod? = entries.find { it.name.equals(name, true) }
-    }
+    PATCH
 }
 
 data class Parameter(
@@ -50,11 +48,7 @@ data class Parameter(
 enum class ParameterLocation {
     PATH,
     QUERY,
-    HEADER;
-
-    companion object {
-        fun parse(name: String): ParameterLocation? = entries.find { it.name.equals(name, true) }
-    }
+    HEADER
 }
 
 data class RequestBody(
@@ -107,11 +101,9 @@ data class EnumModel(
 
 enum class EnumBackingType {
     STRING,
-    INTEGER;
-
-    companion object {
-        fun parse(name: String): EnumBackingType? = entries.find { it.name.equals(name, true) }
-    }
+    INTEGER
 }
 
 data class Discriminator(val propertyName: String, val mapping: Map<String, String>)
+
+inline fun <reified T : Enum<T>> String.toEnumOrNull(): T? = enumEntries<T>().find { it.name.equals(this, true) }

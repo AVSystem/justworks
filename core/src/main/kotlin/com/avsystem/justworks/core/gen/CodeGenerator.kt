@@ -18,7 +18,7 @@ object CodeGenerator {
         apiPackage: String,
         outputDir: File,
     ): Result = context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
-        val modelFiles = ModelGenerator(modelPackage).generate(spec)
+        val modelFiles = ModelGenerator.generate(spec)
         modelFiles.forEach { it.writeTo(outputDir) }
 
         val hasPolymorphicTypes = modelFiles.any { it.name == SerializersModuleGenerator.FILE_NAME }

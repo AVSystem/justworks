@@ -23,6 +23,7 @@ import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
+import com.avsystem.justworks.core.model.toEnumOrNull
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
@@ -155,7 +156,7 @@ object SpecParser {
             pathItem
                 .readOperationsMap()
                 .asSequence()
-                .mapNotNull { (method, value) -> HttpMethod.parse(method.name)?.let { it to value } }
+                .mapNotNull { (method, value) -> method.name.toEnumOrNull<HttpMethod>()?.let { it to value } }
                 .map { (method, operation) ->
                     val operationId = operation.operationId ?: generateOperationId(method, path)
 
@@ -211,7 +212,7 @@ object SpecParser {
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun SwaggerParameter.toParameter(): Parameter = Parameter(
         name = name ?: "",
-        location = ParameterLocation.parse(`in`) ?: ParameterLocation.QUERY,
+        location = `in`.toEnumOrNull<ParameterLocation>() ?: ParameterLocation.QUERY,
         required = required ?: false,
         schema = schema?.toTypeRef() ?: TypeRef.Primitive(PrimitiveType.STRING),
         description = description,
@@ -274,7 +275,7 @@ object SpecParser {
     private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel = EnumModel(
         name = name,
         description = schema.description,
-        type = EnumBackingType.parse(schema.type) ?: EnumBackingType.STRING,
+        type = schema.type.toEnumOrNull<EnumBackingType>() ?: EnumBackingType.STRING,
         values = schema.enum.map { it.toString() },
     )
 
