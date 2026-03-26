@@ -1,7 +1,8 @@
 package com.avsystem.justworks.core.gen
 
-import com.avsystem.justworks.core.gen.client.ApiClientBaseGenerator
 import com.avsystem.justworks.core.gen.client.ClientGenerator
+import com.avsystem.justworks.core.gen.model.ModelGenerator
+import com.avsystem.justworks.core.gen.shared.ApiClientBaseGenerator
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.parser.ParseResult
 import com.avsystem.justworks.core.parser.SpecParser

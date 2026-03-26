@@ -1,5 +1,7 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.model.ModelGenerator
+import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.PropertySpec
 import kotlin.test.Test

@@ -1,6 +1,35 @@
-package com.avsystem.justworks.core.gen
+package com.avsystem.justworks.core.gen.model
 
 import arrow.core.raise.catch
+import com.avsystem.justworks.core.gen.DECODER
+import com.avsystem.justworks.core.gen.ENCODER
+import com.avsystem.justworks.core.gen.EXPERIMENTAL_SERIALIZATION_API
+import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
+import com.avsystem.justworks.core.gen.INSTANT
+import com.avsystem.justworks.core.gen.InlineSchemaDeduplicator
+import com.avsystem.justworks.core.gen.InlineSchemaKey
+import com.avsystem.justworks.core.gen.JSON_CLASS_DISCRIMINATOR
+import com.avsystem.justworks.core.gen.JSON_CONTENT_POLYMORPHIC_SERIALIZER
+import com.avsystem.justworks.core.gen.JSON_ELEMENT
+import com.avsystem.justworks.core.gen.JSON_OBJECT_EXT
+import com.avsystem.justworks.core.gen.K_SERIALIZER
+import com.avsystem.justworks.core.gen.LOCAL_DATE
+import com.avsystem.justworks.core.gen.ModelPackage
+import com.avsystem.justworks.core.gen.OPT_IN
+import com.avsystem.justworks.core.gen.PRIMITIVE_KIND
+import com.avsystem.justworks.core.gen.PRIMITIVE_SERIAL_DESCRIPTOR_FUN
+import com.avsystem.justworks.core.gen.SERIALIZABLE
+import com.avsystem.justworks.core.gen.SERIALIZATION_EXCEPTION
+import com.avsystem.justworks.core.gen.SERIAL_DESCRIPTOR
+import com.avsystem.justworks.core.gen.SERIAL_NAME
+import com.avsystem.justworks.core.gen.TypeMapping
+import com.avsystem.justworks.core.gen.USE_SERIALIZERS
+import com.avsystem.justworks.core.gen.UUID_TYPE
+import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
+import com.avsystem.justworks.core.gen.toCamelCase
+import com.avsystem.justworks.core.gen.toEnumConstantName
+import com.avsystem.justworks.core.gen.toInlinedName
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.PrimitiveType
@@ -22,13 +51,14 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
 import kotlinx.datetime.LocalDate
+import kotlin.sequences.flatMap
 import kotlin.time.Instant
 
 /**
- * Generates KotlinPoet [FileSpec] instances from an [ApiSpec].
+ * Generates KotlinPoet [com.squareup.kotlinpoet.FileSpec] instances from an [com.avsystem.justworks.core.model.ApiSpec].
  *
- * Produces one file per [SchemaModel] (data class, sealed interface, or allOf composed class)
- * and one file per [EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
+ * Produces one file per [com.avsystem.justworks.core.model.SchemaModel] (data class, sealed interface, or allOf composed class)
+ * and one file per [com.avsystem.justworks.core.model.EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 internal object ModelGenerator {
     context(_: ModelPackage)
@@ -76,7 +106,7 @@ internal object ModelGenerator {
         val variantParents = polymorphicSchemas
             .asSequence()
             .flatMap { schema ->
-                val parentClass = ClassName(modelPackage, schema.name)
+                val parentClass = ClassName.Companion(modelPackage, schema.name)
                 schema.variants().filterIsInstance<TypeRef.Reference>().map { ref ->
                     ref.schemaName to (parentClass to resolveSerialName(schema, ref.schemaName))
                 }
@@ -105,7 +135,7 @@ internal object ModelGenerator {
         return collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
             .asSequence()
             .sortedBy { it.contextHint }
-            .distinctBy { InlineSchemaKey.from(it.properties, it.requiredProperties) }
+            .distinctBy { InlineSchemaKey.Companion.from(it.properties, it.requiredProperties) }
             .map { ref ->
                 SchemaModel(
                     name = deduplicator.getOrGenerateName(ref.properties, ref.requiredProperties, ref.contextHint),
@@ -149,14 +179,14 @@ internal object ModelGenerator {
      */
     context(hierarchy: HierarchyInfo, modelPackage: ModelPackage)
     private fun generateSealedInterface(schema: SchemaModel): FileSpec {
-        val className = ClassName(modelPackage, schema.name)
+        val className = ClassName.Companion(modelPackage, schema.name)
 
-        val typeSpec = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
+        val typeSpec = TypeSpec.Companion.interfaceBuilder(className).addModifiers(KModifier.SEALED)
 
         if (schema.name in hierarchy.anyOfWithoutDiscriminator) {
-            val serializerClassName = ClassName(modelPackage, "${schema.name}Serializer")
+            val serializerClassName = ClassName.Companion(modelPackage, "${schema.name}Serializer")
             typeSpec.addAnnotation(
-                AnnotationSpec
+                AnnotationSpec.Companion
                     .builder(SERIALIZABLE)
                     .addMember("with = %T::class", serializerClassName)
                     .build(),
@@ -167,7 +197,7 @@ internal object ModelGenerator {
 
         if (schema.discriminator != null) {
             typeSpec.addAnnotation(
-                AnnotationSpec
+                AnnotationSpec.Companion
                     .builder(JSON_CLASS_DISCRIMINATOR)
                     .addMember("%S", schema.discriminator.propertyName)
                     .build(),
@@ -178,11 +208,11 @@ internal object ModelGenerator {
             typeSpec.addKdoc("%L", schema.description)
         }
 
-        val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
+        val fileBuilder = FileSpec.Companion.builder(className).addType(typeSpec.build())
 
         if (schema.discriminator != null) {
             fileBuilder.addAnnotation(
-                AnnotationSpec
+                AnnotationSpec.Companion
                     .builder(OPT_IN)
                     .addMember("%T::class", EXPERIMENTAL_SERIALIZATION_API)
                     .build(),
@@ -197,8 +227,8 @@ internal object ModelGenerator {
      */
     context(hierarchy: HierarchyInfo, modelPackage: ModelPackage)
     private fun generatePolymorphicSerializer(schema: SchemaModel): FileSpec {
-        val sealedClassName = ClassName(modelPackage, schema.name)
-        val serializerClassName = ClassName(modelPackage, "${schema.name}Serializer")
+        val sealedClassName = ClassName.Companion(modelPackage, schema.name)
+        val serializerClassName = ClassName.Companion(modelPackage, "${schema.name}Serializer")
 
         val schemasById = hierarchy.schemas.associateBy { it.name }
 
@@ -225,24 +255,24 @@ internal object ModelGenerator {
         val selectDeserializerBody = buildSelectDeserializerBody(schema.name, uniqueFieldsPerVariant)
 
         val deserializationStrategy = ClassName("kotlinx.serialization", "DeserializationStrategy")
-            .parameterizedBy(WildcardTypeName.producerOf(sealedClassName))
+            .parameterizedBy(WildcardTypeName.Companion.producerOf(sealedClassName))
 
-        val selectFun = FunSpec
+        val selectFun = FunSpec.Companion
             .builder("selectDeserializer")
             .addModifiers(KModifier.OVERRIDE)
-            .addParameter(ParameterSpec.builder("element", JSON_ELEMENT).build())
+            .addParameter(ParameterSpec.Companion.builder("element", JSON_ELEMENT).build())
             .returns(deserializationStrategy)
             .addCode(selectDeserializerBody)
             .build()
 
-        val objectSpec = TypeSpec
+        val objectSpec = TypeSpec.Companion
             .objectBuilder(serializerClassName)
             .superclass(JSON_CONTENT_POLYMORPHIC_SERIALIZER.parameterizedBy(sealedClassName))
             .addSuperclassConstructorParameter("%T::class", sealedClassName)
             .addFunction(selectFun)
             .build()
 
-        return FileSpec
+        return FileSpec.Companion
             .builder(serializerClassName)
             .addType(objectSpec)
             .build()
@@ -256,7 +286,7 @@ internal object ModelGenerator {
         parentName: String,
         uniqueFieldsPerVariant: Map<String, String?>,
     ): CodeBlock {
-        val builder = CodeBlock.builder()
+        val builder = CodeBlock.Companion.builder()
         builder.beginControlFlow("return when")
 
         val notUnique = uniqueFieldsPerVariant.mapNotNull { (variantName, uniqueField) ->
@@ -265,7 +295,7 @@ internal object ModelGenerator {
                     "%S·in·element.%M -> %T.serializer()",
                     uniqueField,
                     JSON_OBJECT_EXT,
-                    ClassName(modelPackage, variantName),
+                    ClassName.Companion(modelPackage, variantName),
                 )
                 null
             } else {
@@ -296,7 +326,7 @@ internal object ModelGenerator {
      */
     context(hierarchy: HierarchyInfo, modelPackage: ModelPackage)
     private fun generateDataClass(schema: SchemaModel): FileSpec {
-        val className = ClassName(modelPackage, schema.name)
+        val className = ClassName.Companion(modelPackage, schema.name)
 
         val parentEntries = hierarchy.variantParents[schema.name].orEmpty()
         val serialName = parentEntries.values.firstOrNull()
@@ -310,29 +340,34 @@ internal object ModelGenerator {
             }
         }
 
-        val constructorBuilder = FunSpec.constructorBuilder()
+        val constructorBuilder = FunSpec.Companion.constructorBuilder()
         val propertySpecs = sortedProps.map { prop ->
             val type = TypeMapping.toTypeName(prop.type).copy(nullable = prop.nullable)
             val kotlinName = prop.name.toCamelCase()
 
-            val paramBuilder = ParameterSpec.builder(kotlinName, type)
+            val paramBuilder = ParameterSpec.Companion.builder(kotlinName, type)
 
             when {
-                prop.nullable -> paramBuilder.defaultValue(CodeBlock.of("null"))
+                prop.nullable -> paramBuilder.defaultValue(CodeBlock.Companion.of("null"))
                 prop.defaultValue != null -> paramBuilder.defaultValue(formatDefaultValue(prop))
             }
 
             constructorBuilder.addParameter(paramBuilder.build())
 
-            val propBuilder = PropertySpec
+            val propBuilder = PropertySpec.Companion
                 .builder(kotlinName, type)
                 .initializer(kotlinName)
-                .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
+                .addAnnotation(
+                    AnnotationSpec.Companion
+                        .builder(SERIAL_NAME)
+                        .addMember("%S", prop.name)
+                        .build(),
+                )
 
             propBuilder.build()
         }
 
-        val typeSpec = TypeSpec
+        val typeSpec = TypeSpec.Companion
             .classBuilder(className)
             .addModifiers(KModifier.DATA)
             .primaryConstructor(constructorBuilder.build())
@@ -341,24 +376,32 @@ internal object ModelGenerator {
             .addSuperinterfaces(superinterfaces)
 
         if (serialName != null) {
-            typeSpec.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
+            typeSpec.addAnnotation(
+                AnnotationSpec.Companion
+                    .builder(SERIAL_NAME)
+                    .addMember("%S", serialName)
+                    .build(),
+            )
         }
 
         if (schema.description != null) {
             typeSpec.addKdoc("%L", schema.description)
         }
 
-        val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
+        val fileBuilder = FileSpec.Companion.builder(className).addType(typeSpec.build())
 
         val hasUuid = schema.properties.any { it.type.containsUuid() }
         if (hasUuid) {
             fileBuilder.addAnnotation(
-                AnnotationSpec.builder(OPT_IN).addMember("%T::class", EXPERIMENTAL_UUID_API).build(),
+                AnnotationSpec.Companion
+                    .builder(OPT_IN)
+                    .addMember("%T::class", EXPERIMENTAL_UUID_API)
+                    .build(),
             )
             fileBuilder.addAnnotation(
-                AnnotationSpec
+                AnnotationSpec.Companion
                     .builder(USE_SERIALIZERS)
-                    .addMember("%T::class", ClassName(modelPackage, "UuidSerializer"))
+                    .addMember("%T::class", ClassName.Companion(modelPackage, "UuidSerializer"))
                     .build(),
             )
         }
@@ -374,18 +417,18 @@ internal object ModelGenerator {
     private fun formatDefaultValue(prop: PropertyModel): CodeBlock = when (prop.type) {
         is TypeRef.Primitive -> {
             when (prop.type.type) {
-                PrimitiveType.STRING -> CodeBlock.of("%S", prop.defaultValue)
+                PrimitiveType.STRING -> CodeBlock.Companion.of("%S", prop.defaultValue)
 
                 PrimitiveType.INT,
                 PrimitiveType.LONG,
                 PrimitiveType.DOUBLE,
                 PrimitiveType.FLOAT,
                 PrimitiveType.BOOLEAN,
-                -> CodeBlock.of("%L", prop.defaultValue)
+                -> CodeBlock.Companion.of("%L", prop.defaultValue)
 
                 PrimitiveType.DATE_TIME -> catch(
-                    { Instant.parse(prop.defaultValue as String) },
-                    { CodeBlock.of("%T.parse(%S)", INSTANT, prop.defaultValue) },
+                    { Instant.Companion.parse(prop.defaultValue as String) },
+                    { CodeBlock.Companion.of("%T.parse(%S)", INSTANT, prop.defaultValue) },
                     { e ->
                         throw IllegalArgumentException(
                             "Invalid ISO-8601 date-time default '${prop.defaultValue}' for property ${prop.name}: ${e.message}",
@@ -394,8 +437,8 @@ internal object ModelGenerator {
                 )
 
                 PrimitiveType.DATE -> catch(
-                    { LocalDate.parse(prop.defaultValue as String) },
-                    { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, prop.defaultValue) },
+                    { LocalDate.Companion.parse(prop.defaultValue as String) },
+                    { CodeBlock.Companion.of("%T.parse(%S)", LOCAL_DATE, prop.defaultValue) },
                     { e ->
                         throw IllegalArgumentException(
                             "Invalid ISO-8601 date default '${prop.defaultValue}' for property ${prop.name}: ${e.message}",
@@ -409,7 +452,7 @@ internal object ModelGenerator {
 
         is TypeRef.Reference -> {
             val constantName = prop.defaultValue.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", ClassName(modelPackage, prop.type.schemaName), constantName)
+            CodeBlock.Companion.of("%T.%L", ClassName.Companion(modelPackage, prop.type.schemaName), constantName)
         }
 
         else -> {
@@ -431,15 +474,19 @@ internal object ModelGenerator {
 
     context(modelPackage: ModelPackage)
     private fun generateEnumClass(enum: EnumModel): FileSpec {
-        val className = ClassName(modelPackage, enum.name)
+        val className = ClassName.Companion(modelPackage, enum.name)
 
-        val typeSpec = TypeSpec.enumBuilder(className).addAnnotation(SERIALIZABLE)
+        val typeSpec = TypeSpec.Companion.enumBuilder(className).addAnnotation(SERIALIZABLE)
 
         enum.values.forEach { value ->
-            val anonymousClass = TypeSpec
+            val anonymousClass = TypeSpec.Companion
                 .anonymousClassBuilder()
-                .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", value).build())
-                .build()
+                .addAnnotation(
+                    AnnotationSpec.Companion
+                        .builder(SERIAL_NAME)
+                        .addMember("%S", value)
+                        .build(),
+                ).build()
             typeSpec.addEnumConstant(value.toEnumConstantName(), anonymousClass)
         }
 
@@ -447,7 +494,7 @@ internal object ModelGenerator {
             typeSpec.addKdoc("%L", enum.description)
         }
 
-        return FileSpec
+        return FileSpec.Companion
             .builder(className)
             .addType(typeSpec.build())
             .build()
@@ -512,15 +559,15 @@ internal object ModelGenerator {
 
     context(modelPackage: ModelPackage)
     private fun generateUuidSerializer(): FileSpec {
-        val uuidSerializerClass = ClassName(modelPackage, "UuidSerializer")
+        val uuidSerializerClass = ClassName.Companion(modelPackage, "UuidSerializer")
 
-        val descriptorProp = PropertySpec
+        val descriptorProp = PropertySpec.Companion
             .builder("descriptor", SERIAL_DESCRIPTOR)
             .addModifiers(KModifier.OVERRIDE)
             .initializer("%M(%S, %T.STRING)", PRIMITIVE_SERIAL_DESCRIPTOR_FUN, "Uuid", PRIMITIVE_KIND)
             .build()
 
-        val serializeFun = FunSpec
+        val serializeFun = FunSpec.Companion
             .builder("serialize")
             .addModifiers(KModifier.OVERRIDE)
             .addParameter("encoder", ENCODER)
@@ -528,7 +575,7 @@ internal object ModelGenerator {
             .addStatement("encoder.encodeString(value.toString())")
             .build()
 
-        val deserializeFun = FunSpec
+        val deserializeFun = FunSpec.Companion
             .builder("deserialize")
             .addModifiers(KModifier.OVERRIDE)
             .addParameter("decoder", DECODER)
@@ -536,7 +583,7 @@ internal object ModelGenerator {
             .addStatement("return %T.parse(decoder.decodeString())", UUID_TYPE)
             .build()
 
-        val objectSpec = TypeSpec
+        val objectSpec = TypeSpec.Companion
             .objectBuilder(uuidSerializerClass)
             .addSuperinterface(K_SERIALIZER.parameterizedBy(UUID_TYPE))
             .addProperty(descriptorProp)
@@ -544,24 +591,28 @@ internal object ModelGenerator {
             .addFunction(deserializeFun)
             .build()
 
-        return FileSpec
+        return FileSpec.Companion
             .builder(uuidSerializerClass)
-            .addAnnotation(AnnotationSpec.builder(OPT_IN).addMember("%T::class", EXPERIMENTAL_UUID_API).build())
-            .addType(objectSpec)
+            .addAnnotation(
+                AnnotationSpec.Companion
+                    .builder(OPT_IN)
+                    .addMember("%T::class", EXPERIMENTAL_UUID_API)
+                    .build(),
+            ).addType(objectSpec)
             .build()
     }
 
     context(modelPackage: ModelPackage)
     private fun generateTypeAlias(schema: SchemaModel, primitiveType: TypeName): FileSpec {
-        val className = ClassName(modelPackage, schema.name)
+        val className = ClassName.Companion(modelPackage, schema.name)
 
-        val typeAlias = TypeAliasSpec.builder(schema.name, primitiveType)
+        val typeAlias = TypeAliasSpec.Companion.builder(schema.name, primitiveType)
 
         if (schema.description != null) {
             typeAlias.addKdoc("%L", schema.description)
         }
 
-        return FileSpec
+        return FileSpec.Companion
             .builder(className)
             .addTypeAlias(typeAlias.build())
             .build()

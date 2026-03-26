@@ -1,10 +1,17 @@
-package com.avsystem.justworks.core.gen
+package com.avsystem.justworks.core.gen.shared
 
-import com.avsystem.justworks.core.gen.ModelGenerator.HierarchyInfo
+import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.ModelPackage
+import com.avsystem.justworks.core.gen.POLYMORPHIC_FUN
+import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.SUBCLASS_FUN
+import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.PropertySpec
+import kotlin.collections.iterator
 
 /**
  * Generates a `SerializersModule` registration file for all polymorphic sealed hierarchies.
@@ -16,11 +23,11 @@ internal object SerializersModuleGenerator {
     const val FILE_NAME = "SerializersModule"
 
     /**
-     * Generates a [FileSpec] containing the SerializersModule registration.
+     * Generates a [com.squareup.kotlinpoet.FileSpec] containing the SerializersModule registration.
      * Returns null if the hierarchy has no sealed types to register.
      */
 
-    context(hierarchy: HierarchyInfo, modelPackage: ModelPackage)
+    context(hierarchy: ModelGenerator.HierarchyInfo, modelPackage: ModelPackage)
     fun generate(): FileSpec? {
         // anyOf hierarchies without a discriminator use JsonContentPolymorphicSerializer
         // with custom deserialization logic, so they don't need SerializersModule registration.
@@ -29,13 +36,13 @@ internal object SerializersModuleGenerator {
 
         if (discriminatorHierarchies.isEmpty()) return null
 
-        val code = CodeBlock.builder().beginControlFlow("%T", SERIALIZERS_MODULE)
+        val code = CodeBlock.Companion.builder().beginControlFlow("%T", SERIALIZERS_MODULE)
 
         for ((parent, variants) in discriminatorHierarchies) {
-            val parentClass = ClassName(modelPackage, parent)
+            val parentClass = ClassName.Companion(modelPackage, parent)
             code.beginControlFlow("%M(%T::class)", POLYMORPHIC_FUN, parentClass)
             for (variant in variants) {
-                val variantClass = ClassName(modelPackage, variant)
+                val variantClass = ClassName.Companion(modelPackage, variant)
                 code.addStatement("%M(%T::class)", SUBCLASS_FUN, variantClass)
             }
             code.endControlFlow()
@@ -44,12 +51,12 @@ internal object SerializersModuleGenerator {
         code.endControlFlow()
 
         val prop =
-            PropertySpec
+            PropertySpec.Companion
                 .builder(GENERATED_SERIALIZERS_MODULE, SERIALIZERS_MODULE)
                 .initializer(code.build())
                 .build()
 
-        return FileSpec
+        return FileSpec.Companion
             .builder(modelPackage.name, FILE_NAME)
             .addProperty(prop)
             .build()
