@@ -1,5 +1,7 @@
 package com.avsystem.justworks.core.model
 
+import com.squareup.kotlinpoet.ClassName
+
 sealed interface TypeRef {
     data class Primitive(val type: PrimitiveType) : TypeRef
 

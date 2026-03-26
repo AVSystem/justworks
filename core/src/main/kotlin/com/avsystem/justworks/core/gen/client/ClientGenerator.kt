@@ -12,13 +12,13 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.ModelPackage
 import com.avsystem.justworks.core.gen.RAISE
 import com.avsystem.justworks.core.gen.TOKEN
-import com.avsystem.justworks.core.gen.TypeMapping
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
+import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
@@ -117,7 +117,7 @@ internal object ClientGenerator {
         val params = endpoint.parameters.groupBy { it.location }
 
         val pathParams = params[ParameterLocation.PATH].orEmpty().map { param ->
-            ParameterSpec(param.name.toCamelCase(), TypeMapping.toTypeName(param.schema))
+            ParameterSpec(param.name.toCamelCase(), param.schema.toTypeName())
         }
 
         val queryParams = params[ParameterLocation.QUERY].orEmpty().map { param ->
@@ -144,7 +144,7 @@ internal object ClientGenerator {
         .asSequence()
         .filter { it.key.startsWith("2") }
         .firstNotNullOfOrNull { it.value.schema }
-        ?.let { successResponse -> TypeMapping.toTypeName(successResponse) }
+        ?.toTypeName()
         ?: UNIT
 }
 

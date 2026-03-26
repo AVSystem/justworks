@@ -11,7 +11,7 @@ class TypeMappingTest {
     private val pkg = ModelPackage("com.example.model")
 
     private fun map(typeRef: TypeRef): TypeName = context(pkg) {
-        TypeMapping.toTypeName(typeRef)
+        typeRef.toTypeName()
     }
 
     // -- Primitive types --

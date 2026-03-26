@@ -4,10 +4,10 @@ import com.avsystem.justworks.core.gen.BODY
 import com.avsystem.justworks.core.gen.CHANNEL_PROVIDER
 import com.avsystem.justworks.core.gen.CONTENT_TYPE_CLASS
 import com.avsystem.justworks.core.gen.ModelPackage
-import com.avsystem.justworks.core.gen.TypeMapping
 import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.gen.requiredProperties
 import com.avsystem.justworks.core.gen.toCamelCase
+import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.TypeRef
@@ -27,7 +27,7 @@ internal object ParametersGenerator {
                 )
             } else {
                 listOf(
-                    ParameterSpec(name, TypeMapping.toTypeName(prop.type)),
+                    ParameterSpec(name, prop.type.toTypeName()),
                 )
             }
         }
@@ -44,9 +44,7 @@ internal object ParametersGenerator {
         name: String,
         required: Boolean,
     ): ParameterSpec {
-        val baseType = TypeMapping.toTypeName(typeRef)
-
-        val builder = ParameterSpec.builder(name.toCamelCase(), baseType.copy(nullable = !required))
+        val builder = ParameterSpec.builder(name.toCamelCase(), typeRef.toTypeName().copy(nullable = !required))
         if (!required) builder.defaultValue("null")
         return builder.build()
     }

@@ -22,7 +22,6 @@ import com.avsystem.justworks.core.gen.SERIALIZABLE
 import com.avsystem.justworks.core.gen.SERIALIZATION_EXCEPTION
 import com.avsystem.justworks.core.gen.SERIAL_DESCRIPTOR
 import com.avsystem.justworks.core.gen.SERIAL_NAME
-import com.avsystem.justworks.core.gen.TypeMapping
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
 import com.avsystem.justworks.core.gen.UUID_TYPE
 import com.avsystem.justworks.core.gen.invoke
@@ -30,6 +29,7 @@ import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
 import com.avsystem.justworks.core.gen.toInlinedName
+import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.PrimitiveType
@@ -161,9 +161,7 @@ internal object ModelGenerator {
         }
 
         schema.isPrimitiveOnly -> {
-            val targetType = schema.underlyingType
-                ?.let { TypeMapping.toTypeName(it) }
-                ?: STRING
+            val targetType = schema.underlyingType?.toTypeName() ?: STRING
             listOf(generateTypeAlias(schema, targetType))
         }
 
@@ -342,7 +340,7 @@ internal object ModelGenerator {
 
         val constructorBuilder = FunSpec.Companion.constructorBuilder()
         val propertySpecs = sortedProps.map { prop ->
-            val type = TypeMapping.toTypeName(prop.type).copy(nullable = prop.nullable)
+            val type = prop.type.toTypeName().copy(nullable = prop.nullable)
             val kotlinName = prop.name.toCamelCase()
 
             val paramBuilder = ParameterSpec.Companion.builder(kotlinName, type)
