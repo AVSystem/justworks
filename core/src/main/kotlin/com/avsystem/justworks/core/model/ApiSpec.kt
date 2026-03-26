@@ -59,9 +59,16 @@ enum class ParameterLocation {
 
 data class RequestBody(
     val required: Boolean,
-    val contentType: String,
+    val contentType: ContentType,
     val schema: TypeRef,
 )
+
+// the order is important!!!
+enum class ContentType(val value: String) {
+    MULTIPART_FORM_DATA("multipart/form-data"),
+    FORM_URL_ENCODED("application/x-www-form-urlencoded"),
+    JSON_CONTENT_TYPE("application/json"),
+}
 
 data class Response(
     val statusCode: String,

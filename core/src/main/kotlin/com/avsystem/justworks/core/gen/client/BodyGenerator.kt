@@ -29,6 +29,7 @@ import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.gen.requiredProperties
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.Parameter
@@ -47,9 +48,9 @@ internal object BodyGenerator {
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
     ): CodeBlock = when (endpoint.requestBody?.contentType) {
-        MULTIPART_FORM_DATA -> buildMultipartBody(endpoint, params, returnBodyType)
-        FORM_URL_ENCODED -> buildFormUrlEncodedBody(endpoint, params, returnBodyType)
-        else -> buildJsonBody(endpoint, params, returnBodyType)
+        ContentType.MULTIPART_FORM_DATA -> buildMultipartBody(endpoint, params, returnBodyType)
+        ContentType.FORM_URL_ENCODED -> buildFormUrlEncodedBody(endpoint, params, returnBodyType)
+        ContentType.JSON_CONTENT_TYPE, null -> buildJsonBody(endpoint, params, returnBodyType)
     }
 
     private fun buildJsonBody(
@@ -75,8 +76,8 @@ internal object BodyGenerator {
         code.beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
         code.addStatement("${APPLY_AUTH}()")
 
-        addHeaderParams(code, params)
-        addQueryParams(code, params)
+        code.addHeaderParams(params)
+        code.addQueryParams(params)
 
         if (endpoint.requestBody != null) {
             code.optionalGuard(endpoint.requestBody.required, BODY) {
@@ -142,8 +143,8 @@ internal object BodyGenerator {
         code.endControlFlow() // formData
         code.beginControlFlow(")")
         code.addStatement("${APPLY_AUTH}()")
-        addHeaderParams(code, params)
-        addQueryParams(code, params)
+        code.addHeaderParams(params)
+        code.addQueryParams(params)
 
         if (endpoint.method != HttpMethod.POST) {
             code.addStatement("method = %T.%L", HTTP_METHOD_CLASS, endpoint.method.name.toPascalCase())
@@ -197,8 +198,8 @@ internal object BodyGenerator {
         code.endControlFlow() // parameters
         code.beginControlFlow(")")
         code.addStatement("${APPLY_AUTH}()")
-        addHeaderParams(code, params)
-        addQueryParams(code, params)
+        code.addHeaderParams(params)
+        code.addQueryParams(params)
 
         if (endpoint.method != HttpMethod.POST) {
             code.addStatement("method = %T.%L", HTTP_METHOD_CLASS, endpoint.method.name.toPascalCase())
@@ -220,31 +221,31 @@ internal object BodyGenerator {
         return CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
     }
 
-    private fun addHeaderParams(code: CodeBlock.Builder, params: Map<ParameterLocation, List<Parameter>>) {
+    private fun CodeBlock.Builder.addHeaderParams(params: Map<ParameterLocation, List<Parameter>>) {
         val headerParams = params[ParameterLocation.HEADER]
         if (!headerParams.isNullOrEmpty()) {
-            code.beginControlFlow("%M", HEADERS_FUN)
+            beginControlFlow("%M", HEADERS_FUN)
             for (param in headerParams) {
                 val paramName = param.name.toCamelCase()
-                code.optionalGuard(param.required, paramName) {
+                optionalGuard(param.required, paramName) {
                     addStatement("append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
                 }
             }
-            code.endControlFlow()
+            endControlFlow()
         }
     }
 
-    private fun addQueryParams(code: CodeBlock.Builder, params: Map<ParameterLocation, List<Parameter>>) {
+    private fun CodeBlock.Builder.addQueryParams(params: Map<ParameterLocation, List<Parameter>>) {
         val queryParams = params[ParameterLocation.QUERY]
         if (!queryParams.isNullOrEmpty()) {
-            code.beginControlFlow("url")
+            beginControlFlow("url")
             for (param in queryParams) {
                 val paramName = param.name.toCamelCase()
-                code.optionalGuard(param.required, paramName) {
+                optionalGuard(param.required, paramName) {
                     addStatement("this.parameters.append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
                 }
             }
-            code.endControlFlow()
+            endControlFlow()
         }
     }
 }

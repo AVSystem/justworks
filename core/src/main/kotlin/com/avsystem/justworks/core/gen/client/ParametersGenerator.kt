@@ -8,6 +8,7 @@ import com.avsystem.justworks.core.gen.TypeMapping
 import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.gen.requiredProperties
 import com.avsystem.justworks.core.gen.toCamelCase
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ParameterSpec
@@ -52,8 +53,8 @@ internal object ParametersGenerator {
 
     context(_: ModelPackage)
     fun buildBodyParams(requestBody: RequestBody) = when (requestBody.contentType) {
-        MULTIPART_FORM_DATA -> buildMultipartParameters(requestBody)
-        FORM_URL_ENCODED -> buildFormParameters(requestBody)
-        else -> listOf(buildNullableParameter(requestBody.schema, BODY, requestBody.required))
+        ContentType.MULTIPART_FORM_DATA -> buildMultipartParameters(requestBody)
+        ContentType.FORM_URL_ENCODED -> buildFormParameters(requestBody)
+        ContentType.JSON_CONTENT_TYPE -> listOf(buildNullableParameter(requestBody.schema, BODY, requestBody.required))
     }
 }

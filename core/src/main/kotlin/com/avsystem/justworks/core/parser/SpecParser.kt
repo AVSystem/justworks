@@ -9,6 +9,7 @@ import arrow.core.raise.context.ensureNotNull
 import arrow.core.raise.either
 import arrow.core.raise.nullable
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.EnumBackingType
@@ -25,6 +26,7 @@ import com.avsystem.justworks.core.model.TypeRef
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
+import io.swagger.v3.oas.models.media.Content
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
@@ -165,12 +167,7 @@ object SpecParser {
                         val body = operation.requestBody.bind()
                         val content = body.content.bind()
 
-                        // Priority: multipart > form-urlencoded > json
-                        val contentType = sequenceOf(
-                            MULTIPART_FORM_DATA,
-                            FORM_URL_ENCODED,
-                            JSON_CONTENT_TYPE,
-                        ).find { it in content }.bind()
+                        val contentType = ContentType.entries.find { it in content }.bind()
 
                         val mediaType = content[contentType].bind()
 
@@ -192,7 +189,7 @@ object SpecParser {
                                 statusCode = code,
                                 description = resp.description,
                                 schema = resp.content
-                                    ?.get(JSON_CONTENT_TYPE)
+                                    ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
                                     ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                             )
@@ -428,12 +425,13 @@ object SpecParser {
         return method.name.lowercase() + segments
     }
 
+    operator fun Content.get(contentType: ContentType) = this[contentType.value]
+
+    operator fun Content.contains(contentType: ContentType) = contentType.value in this
+
     private fun String.toPascalCase(): String =
         split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
 
-    private const val JSON_CONTENT_TYPE = "application/json"
-    private const val MULTIPART_FORM_DATA = "multipart/form-data"
-    private const val FORM_URL_ENCODED = "application/x-www-form-urlencoded"
     private const val SCHEMA_PREFIX = "#/components/schemas/"
 
     private val STRING_FORMAT_MAP = mapOf(
