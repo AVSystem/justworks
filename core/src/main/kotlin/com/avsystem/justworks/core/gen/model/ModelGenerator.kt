@@ -89,7 +89,7 @@ internal object ModelGenerator {
                 if (it.isNested) generateNestedInlineClass(it) else generateDataClass(it)
             }
 
-            val enumFiles = resolvedSpec.enums.map(::generateEnumClass)
+            val enumFiles = resolvedSpec.enums.map { generateEnumClass(it) }
 
             val serializersModuleFile = SerializersModuleGenerator.generate()
 
