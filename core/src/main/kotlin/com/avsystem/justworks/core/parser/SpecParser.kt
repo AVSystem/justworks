@@ -28,7 +28,7 @@ import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
-import com.avsystem.justworks.core.model.toEnumOrNull
+import com.avsystem.justworks.core.toEnumOrNull
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem

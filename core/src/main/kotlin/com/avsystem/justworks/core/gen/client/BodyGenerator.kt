@@ -24,6 +24,7 @@ import com.avsystem.justworks.core.gen.SUBMIT_FORM_FUN
 import com.avsystem.justworks.core.gen.SUBMIT_FORM_WITH_BINARY_DATA_FUN
 import com.avsystem.justworks.core.gen.TO_EMPTY_RESULT_FUN
 import com.avsystem.justworks.core.gen.TO_RESULT_FUN
+import com.avsystem.justworks.core.gen.isBinaryUpload
 import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.gen.requiredProperties
 import com.avsystem.justworks.core.gen.toCamelCase
@@ -152,7 +153,7 @@ internal object BodyGenerator {
 
         for (prop in properties) {
             val paramName = prop.name.toCamelCase()
-            val isRequired = prop.name in requiredProperties
+            val isRequired = endpoint.requestBody?.required == true && prop.name in requiredProperties
             val isString = prop.type == TypeRef.Primitive(PrimitiveType.STRING)
             val valueExpr = if (isString) paramName else "$paramName.toString()"
 

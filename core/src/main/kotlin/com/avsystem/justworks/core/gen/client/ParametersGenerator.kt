@@ -4,6 +4,7 @@ import com.avsystem.justworks.core.gen.BODY
 import com.avsystem.justworks.core.gen.CHANNEL_PROVIDER
 import com.avsystem.justworks.core.gen.CONTENT_TYPE_CLASS
 import com.avsystem.justworks.core.gen.ModelPackage
+import com.avsystem.justworks.core.gen.isBinaryUpload
 import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.gen.requiredProperties
 import com.avsystem.justworks.core.gen.toCamelCase

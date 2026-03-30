@@ -1,7 +1,5 @@
 package com.avsystem.justworks.core.model
 
-import kotlin.enums.enumEntries
-
 /**
  * Intermediate model representing a fully parsed OpenAPI specification.
  *
@@ -105,5 +103,3 @@ enum class EnumBackingType {
 }
 
 data class Discriminator(val propertyName: String, val mapping: Map<String, String>)
-
-inline fun <reified T : Enum<T>> String.toEnumOrNull(): T? = enumEntries<T>().find { it.name.equals(this, true) }

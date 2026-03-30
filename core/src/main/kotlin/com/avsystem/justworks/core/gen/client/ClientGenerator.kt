@@ -22,8 +22,6 @@ import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
-import com.avsystem.justworks.core.model.PrimitiveType
-import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.ContextParameter
@@ -48,8 +46,8 @@ import com.squareup.kotlinpoet.UNIT
 
 @OptIn(ExperimentalKotlinPoetApi::class)
 internal object ClientGenerator {
-    const val DEFAULT_TAG = "Default"
-    const val API_SUFFIX = "Api"
+    private const val DEFAULT_TAG = "Default"
+    private const val API_SUFFIX = "Api"
 
     context(_: ModelPackage, _: ApiPackage)
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> {
@@ -147,5 +145,3 @@ internal object ClientGenerator {
         ?.toTypeName()
         ?: UNIT
 }
-
-fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY

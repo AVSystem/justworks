@@ -3,7 +3,7 @@ package com.avsystem.justworks.core.gen
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.MemberName
 
-sealed interface Package {
+internal sealed interface Package {
     val name: String
 }
 
