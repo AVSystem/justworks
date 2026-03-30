@@ -102,11 +102,7 @@ data class EnumModel(
 
 enum class EnumBackingType {
     STRING,
-    INTEGER;
-
-    companion object {
-        fun parse(name: String): EnumBackingType? = entries.find { it.name.equals(name, true) }
-    }
+    INTEGER
 }
 
 data class Discriminator(val propertyName: String, val mapping: Map<String, String>)
