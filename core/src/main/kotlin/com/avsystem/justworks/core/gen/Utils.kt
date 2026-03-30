@@ -58,7 +58,7 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
     }
 
     is TypeRef.Inline -> {
-        ClassName(modelPackage, contextHint.toInlinedName())
+        error("TypeRef.Inline should have been resolved by InlineTypeResolver (contextHint=$contextHint)")
     }
 
     is TypeRef.Unknown -> {

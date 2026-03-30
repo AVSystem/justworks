@@ -9,6 +9,34 @@ import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 
 /**
+ * Resolves a single [TypeRef.Inline] to [TypeRef.Reference] using the provided [nameMap].
+ * Non-inline types are returned as-is; containers ([TypeRef.Array], [TypeRef.Map]) are resolved recursively.
+ */
+fun ApiSpec.resolveTypeRef(type: TypeRef, nameMap: Map<InlineSchemaKey, String>): TypeRef = when (type) {
+    is TypeRef.Inline -> {
+        val key = InlineSchemaKey.from(type.properties, type.requiredProperties)
+        val className = nameMap[key]
+            ?: error(
+                "Missing inline schema mapping for key (contextHint=${type.contextHint}). " +
+                    "This indicates a mismatch between inline schema collection and resolution.",
+            )
+        TypeRef.Reference(className)
+    }
+
+    is TypeRef.Array -> {
+        TypeRef.Array(resolveTypeRef(type.items, nameMap))
+    }
+
+    is TypeRef.Map -> {
+        TypeRef.Map(resolveTypeRef(type.valueType, nameMap))
+    }
+
+    else -> {
+        type
+    }
+}
+
+/**
  * Rewrites all [TypeRef.Inline] references in an [ApiSpec] to [TypeRef.Reference],
  * using the provided [nameMap] that maps structural keys to generated class names.
  *
@@ -18,29 +46,7 @@ import com.avsystem.justworks.core.model.TypeRef
 fun ApiSpec.resolveInlineTypes(nameMap: Map<InlineSchemaKey, String>): ApiSpec {
     if (nameMap.isEmpty()) return this
 
-    fun TypeRef.resolve(): TypeRef = when (this) {
-        is TypeRef.Inline -> {
-            val key = InlineSchemaKey.from(properties, requiredProperties)
-            val className = nameMap[key]
-                ?: error(
-                    "Missing inline schema mapping for key (contextHint=$contextHint). " +
-                        "This indicates a mismatch between inline schema collection and resolution.",
-                )
-            TypeRef.Reference(className)
-        }
-
-        is TypeRef.Array -> {
-            TypeRef.Array(items.resolve())
-        }
-
-        is TypeRef.Map -> {
-            TypeRef.Map(valueType.resolve())
-        }
-
-        else -> {
-            this
-        }
-    }
+    fun TypeRef.resolve(): TypeRef = resolveTypeRef(this, nameMap)
 
     fun PropertyModel.resolve() = copy(type = type.resolve())
 

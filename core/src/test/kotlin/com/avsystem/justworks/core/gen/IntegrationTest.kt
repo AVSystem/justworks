@@ -43,6 +43,9 @@ class IntegrationTest {
     private fun generateModel(spec: ApiSpec): List<FileSpec> =
         context(ModelPackage(modelPackage)) { ModelGenerator.generate(spec) }
 
+    private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult =
+        context(ModelPackage(modelPackage)) { ModelGenerator.generateWithResolvedSpec(spec, NameRegistry()) }
+
     private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
         context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
             ClientGenerator.generate(spec, hasPolymorphicTypes)
@@ -110,11 +113,11 @@ class IntegrationTest {
         for (fixture in SPEC_FIXTURES) {
             val spec = parseSpec(fixture).apiSpec
 
-            val modelFiles = generateModel(spec)
+            val (modelFiles, resolvedSpec) = generateModelWithResolvedSpec(spec)
             assertTrue(modelFiles.isNotEmpty(), "$fixture: ModelGenerator should produce files")
 
             if (spec.endpoints.isNotEmpty()) {
-                val clientFiles = generateClient(spec)
+                val clientFiles = generateClient(resolvedSpec)
                 assertTrue(
                     clientFiles.isNotEmpty(),
                     "$fixture: ClientGenerator should produce files for a spec with endpoints",

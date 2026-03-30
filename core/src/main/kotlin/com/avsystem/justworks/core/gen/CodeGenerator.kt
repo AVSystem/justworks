@@ -7,6 +7,7 @@ import com.avsystem.justworks.core.gen.shared.ApiResponseGenerator
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.model.ApiSpec
 import java.io.File
+import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator.FILE_NAME as SERIALIZERS_MODULE_NAME
 
 /**
  * Facade that orchestrates model and client code generation,
@@ -22,10 +23,8 @@ object CodeGenerator {
         outputDir: File,
     ): Result = context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
         val modelRegistry = NameRegistry().apply {
-            spec.schemas.forEach { reserve(it.name) }
-            spec.enums.forEach { reserve(it.name) }
-            reserve("SerializersModule")
-            reserve("UuidSerializer")
+            reserve(SERIALIZERS_MODULE_NAME)
+            reserve(ModelGenerator.UUID_SERIALIZER_NAME)
         }
         val apiRegistry = NameRegistry()
 
