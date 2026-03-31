@@ -10,14 +10,23 @@ import com.avsystem.justworks.core.model.TypeRef
  * Nested [TypeRef.Inline] types are normalized to ignore [TypeRef.Inline.contextHint],
  * ensuring purely structural comparison.
  */
-data class InlineSchemaKey(val properties: Set<PropertyKey>) {
-    data class PropertyKey(
+internal data class InlineSchemaKey(val properties: Set<PropertyKey>) {
+    @ConsistentCopyVisibility
+    data class PropertyKey private constructor(
         val name: String,
         val type: TypeRef,
         val required: Boolean,
         val nullable: Boolean,
-        val defaultValue: Any?,
-    )
+    ) {
+        // do not rely on default value for equality
+        var defaultValue: Any? = null
+            private set
+
+        constructor(name: String, type: TypeRef, required: Boolean, nullable: Boolean, defaultValue: Any?) :
+            this(name, type, required, nullable) {
+            this.defaultValue = defaultValue
+        }
+    }
 
     companion object {
         fun from(properties: List<PropertyModel>, required: Set<String>): InlineSchemaKey {
