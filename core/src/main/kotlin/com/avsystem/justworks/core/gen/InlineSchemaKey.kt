@@ -11,22 +11,13 @@ import com.avsystem.justworks.core.model.TypeRef
  * ensuring purely structural comparison.
  */
 internal data class InlineSchemaKey(val properties: Set<PropertyKey>) {
-    @ConsistentCopyVisibility
-    data class PropertyKey private constructor(
+    data class PropertyKey(
         val name: String,
         val type: TypeRef,
         val required: Boolean,
         val nullable: Boolean,
-    ) {
-        // do not rely on default value for equality
-        var defaultValue: Any? = null
-            private set
-
-        constructor(name: String, type: TypeRef, required: Boolean, nullable: Boolean, defaultValue: Any?) :
-            this(name, type, required, nullable) {
-            this.defaultValue = defaultValue
-        }
-    }
+        val defaultValue: Any?,
+    )
 
     companion object {
         fun from(properties: List<PropertyModel>, required: Set<String>): InlineSchemaKey {
