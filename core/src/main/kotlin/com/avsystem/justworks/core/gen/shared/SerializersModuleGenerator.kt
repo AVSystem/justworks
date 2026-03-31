@@ -20,8 +20,6 @@ import kotlin.collections.iterator
  * that registers each sealed interface with its subclass variants.
  */
 internal object SerializersModuleGenerator {
-    const val FILE_NAME = "SerializersModule"
-
     /**
      * Generates a [com.squareup.kotlinpoet.FileSpec] containing the SerializersModule registration.
      * Returns null if the hierarchy has no sealed types to register.

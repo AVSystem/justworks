@@ -20,9 +20,11 @@ import com.avsystem.justworks.core.gen.PRIMITIVE_KIND
 import com.avsystem.justworks.core.gen.PRIMITIVE_SERIAL_DESCRIPTOR_FUN
 import com.avsystem.justworks.core.gen.SERIALIZABLE
 import com.avsystem.justworks.core.gen.SERIALIZATION_EXCEPTION
+import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE_NAME
 import com.avsystem.justworks.core.gen.SERIAL_DESCRIPTOR
 import com.avsystem.justworks.core.gen.SERIAL_NAME
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
+import com.avsystem.justworks.core.gen.UUID_SERIALIZER_NAME
 import com.avsystem.justworks.core.gen.UUID_TYPE
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.resolveInlineTypes
@@ -53,9 +55,7 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
 import kotlinx.datetime.LocalDate
-import kotlin.sequences.flatMap
 import kotlin.time.Instant
-import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator.FILE_NAME as SERIALIZERS_MODULE_NAME
 
 /**
  * Generates KotlinPoet [com.squareup.kotlinpoet.FileSpec] instances from an [com.avsystem.justworks.core.model.ApiSpec].
@@ -64,8 +64,6 @@ import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator.FILE_NA
  * and one file per [com.avsystem.justworks.core.model.EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 internal object ModelGenerator {
-    const val UUID_SERIALIZER_NAME = "UuidSerializer"
-
     data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
 
     context(_: ModelPackage)

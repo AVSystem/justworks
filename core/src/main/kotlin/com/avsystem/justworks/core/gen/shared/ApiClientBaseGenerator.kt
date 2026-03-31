@@ -3,6 +3,7 @@ package com.avsystem.justworks.core.gen.shared
 import com.avsystem.justworks.core.gen.API_CLIENT_BASE
 import com.avsystem.justworks.core.gen.APPLY_AUTH
 import com.avsystem.justworks.core.gen.BASE_URL
+import com.avsystem.justworks.core.gen.BLOCK
 import com.avsystem.justworks.core.gen.BODY_AS_TEXT_FUN
 import com.avsystem.justworks.core.gen.BODY_FUN
 import com.avsystem.justworks.core.gen.CLIENT
@@ -54,11 +55,6 @@ import com.squareup.kotlinpoet.UNIT
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
 internal object ApiClientBaseGenerator {
-    private const val BLOCK = "block"
-    private const val MAP_TO_RESULT = "mapToResult"
-    private const val SUCCESS_BODY = "successBody"
-    private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
-
     fun generate(): FileSpec {
         val t = TypeVariableName("T").copy(reified = true)
 
