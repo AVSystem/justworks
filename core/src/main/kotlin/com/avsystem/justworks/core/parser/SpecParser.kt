@@ -14,6 +14,7 @@ import arrow.core.toNonEmptyListOrNull
 import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.Warnings
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.EnumBackingType
@@ -27,9 +28,11 @@ import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
+import com.avsystem.justworks.core.toEnumOrNull
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
+import io.swagger.v3.oas.models.media.Content
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
@@ -172,7 +175,7 @@ object SpecParser {
             pathItem
                 .readOperationsMap()
                 .asSequence()
-                .mapNotNull { (method, value) -> HttpMethod.parse(method.name)?.let { it to value } }
+                .mapNotNull { (method, value) -> method.name.toEnumOrNull<HttpMethod>()?.let { it to value } }
                 .map { (method, operation) ->
                     val operationId = operation.operationId ?: generateOperationId(method, path)
 
@@ -183,11 +186,19 @@ object SpecParser {
                     val requestBody = nullable {
                         val body = operation.requestBody.bind()
                         val content = body.content.bind()
-                        val schema = content[JSON_CONTENT_TYPE]?.schema.bind()
+
+                        val contentType = ContentType.entries.find { it in content }.bind()
+
+                        val mediaType = content[contentType].bind()
+
+                        val schema = mediaType.schema
+                            ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request")
+                            .bind()
+
                         RequestBody(
                             required = body.required ?: false,
-                            contentType = JSON_CONTENT_TYPE,
-                            schema = schema.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request"),
+                            contentType = contentType,
+                            schema = schema,
                         )
                     }
 
@@ -198,7 +209,7 @@ object SpecParser {
                                 statusCode = code,
                                 description = resp.description,
                                 schema = resp.content
-                                    ?.get(JSON_CONTENT_TYPE)
+                                    ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
                                     ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                             )
@@ -220,7 +231,7 @@ object SpecParser {
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun SwaggerParameter.toParameter(): Parameter = Parameter(
         name = name ?: "",
-        location = ParameterLocation.parse(`in`) ?: ParameterLocation.QUERY,
+        location = `in`.toEnumOrNull<ParameterLocation>() ?: ParameterLocation.QUERY,
         required = required ?: false,
         schema = schema?.toTypeRef() ?: TypeRef.Primitive(PrimitiveType.STRING),
         description = description,
@@ -283,7 +294,7 @@ object SpecParser {
     private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel = EnumModel(
         name = name,
         description = schema.description,
-        type = EnumBackingType.parse(schema.type) ?: EnumBackingType.STRING,
+        type = schema.type.toEnumOrNull<EnumBackingType>() ?: EnumBackingType.STRING,
         values = schema.enum.map { it.toString() },
     )
 
@@ -434,10 +445,12 @@ object SpecParser {
         return method.name.lowercase() + segments
     }
 
+    operator fun Content.get(contentType: ContentType) = this[contentType.value]
+
+    operator fun Content.contains(contentType: ContentType) = contentType.value in this
+
     private fun String.toPascalCase(): String =
         split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
-
-    private const val JSON_CONTENT_TYPE = "application/json"
 
     private const val SCHEMA_PREFIX = "#/components/schemas/"
 

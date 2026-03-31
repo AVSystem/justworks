@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.EnumModel
@@ -8,6 +9,7 @@ import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
+import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.TypeSpec
 import kotlin.test.Test
@@ -17,7 +19,11 @@ import kotlin.test.assertTrue
 
 class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
-    private val generator = ModelGenerator(modelPackage, NameRegistry())
+
+    private fun generate(spec: ApiSpec) = context(ModelPackage(modelPackage)) {
+        ModelGenerator.generate(spec)
+    }
+
 
     private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
         title = "Test",
@@ -58,6 +64,7 @@ class ModelGeneratorPolymorphicTest {
             }
             return null
         }
+
         for (file in files) {
             val found = searchIn(file.members.filterIsInstance<TypeSpec>())
             if (found != null) return found
@@ -97,7 +104,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("sideLength"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         assertTrue(KModifier.SEALED in shapeType.modifiers, "Expected SEALED modifier on Shape")
@@ -124,7 +131,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("sideLength"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         val nestedNames = shapeType.typeSpecs.map { it.name }
@@ -152,7 +159,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("sideLength"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
 
         // No separate Circle.kt or Square.kt files
         val fileNames = files.map { it.name }
@@ -171,7 +178,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         val annotations = shapeType.annotations.map { it.typeName.toString() }
@@ -194,7 +201,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         // Should use superclass (not superinterfaces) since parent is sealed class
@@ -219,7 +226,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val serialNameAnnotation =
@@ -247,7 +254,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val annotations = circleType.annotations.map { it.typeName.toString() }
@@ -277,7 +284,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         val discriminatorAnnotation =
@@ -310,7 +317,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val serialNameAnnotation =
@@ -338,7 +345,7 @@ class ModelGeneratorPolymorphicTest {
             )
         val circleSchema = schema(name = "Circle")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val shapeFile = findFile(files, "Shape")
 
         val optInAnnotation =
@@ -379,7 +386,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Dog")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
+        val files = generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
         val extendedDogType = findType(files, "ExtendedDog")
         val constructor = assertNotNull(extendedDogType.primaryConstructor, "Expected primary constructor")
 
@@ -414,7 +421,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Dog")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
+        val files = generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
         val extendedDogType = findType(files, "ExtendedDog")
         val constructor = assertNotNull(extendedDogType.primaryConstructor)
 
@@ -462,7 +469,7 @@ class ModelGeneratorPolymorphicTest {
                     ),
             )
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(networkMeshSchema, extenderPropsSchema, ethernetPropsSchema)),
         )
         val networkMeshType = findType(files, "NetworkMeshDevice")
@@ -497,7 +504,7 @@ class ModelGeneratorPolymorphicTest {
                     ),
             )
 
-        val files = generator.generate(spec(schemas = listOf(networkMeshSchema, extenderPropsSchema)))
+        val files = generate(spec(schemas = listOf(networkMeshSchema, extenderPropsSchema)))
         val extenderType = findType(files, "ExtenderDeviceProperties")
 
         val serialNameAnnotation =
@@ -530,7 +537,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val paymentType = findType(files, "Payment")
 
         // anyOf without discriminator still uses sealed interface
@@ -563,7 +570,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val serializerType = findType(files, "PaymentSerializer")
 
         assertEquals(TypeSpec.Kind.OBJECT, serializerType.kind, "PaymentSerializer should be an object")
@@ -591,7 +598,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val serializerType = findType(files, "PaymentSerializer")
         val selectDeserializer = serializerType.funSpecs.find { it.name == "selectDeserializer" }
         assertNotNull(selectDeserializer, "PaymentSerializer should have selectDeserializer function")
@@ -624,7 +631,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("amount"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, typeASchema, typeBSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, typeASchema, typeBSchema)))
         val serializerType = findType(files, "PaymentSerializer")
         val selectDeserializer = serializerType.funSpecs.find { it.name == "selectDeserializer" }
         assertNotNull(selectDeserializer, "PaymentSerializer should have selectDeserializer function")
@@ -653,7 +660,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val creditCardType = findType(files, "CreditCard")
 
         val annotations = creditCardType.annotations.map { it.typeName.toString() }
@@ -676,7 +683,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         // Should be sealed class (not interface) for anyOf with discriminator
@@ -740,7 +747,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("lastSeen"),
         )
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
         )
 
@@ -793,7 +800,7 @@ class ModelGeneratorPolymorphicTest {
             )
         }
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(networkMeshSchema) + variantSchemas),
         )
 
@@ -852,7 +859,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("lastSeen"),
         )
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
         )
 
@@ -889,7 +896,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Pet")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(petSchema, dogSchema)))
+        val files = generate(spec(schemas = listOf(petSchema, dogSchema)))
         val dogType = findType(files, "Dog")
 
         // Dog should extend Pet (sealed class) as superclass
@@ -900,16 +907,18 @@ class ModelGeneratorPolymorphicTest {
         )
     }
 
-    // -- TypeMapping with classNameLookup --
+    // -- toTypeName with classNameLookup --
 
     @Test
-    fun `TypeMapping resolves variant to nested ClassName with lookup`() {
+    fun `toTypeName resolves variant to nested ClassName with lookup`() {
         val lookup = mapOf(
             "Circle" to ClassName(modelPackage, "Shape").nestedClass("Circle"),
             "Square" to ClassName(modelPackage, "Shape").nestedClass("Square"),
         )
 
-        val result = TypeMapping.toTypeName(TypeRef.Reference("Circle"), modelPackage, lookup)
+        val result = context(ModelPackage(modelPackage)) {
+            TypeRef.Reference("Circle").toTypeName(lookup)
+        }
         assertEquals(
             ClassName(modelPackage, "Shape", "Circle"),
             result,
@@ -918,8 +927,10 @@ class ModelGeneratorPolymorphicTest {
     }
 
     @Test
-    fun `TypeMapping falls back to flat ClassName without lookup`() {
-        val result = TypeMapping.toTypeName(TypeRef.Reference("Circle"), modelPackage)
+    fun `toTypeName falls back to flat ClassName without lookup`() {
+        val result = context(ModelPackage(modelPackage)) {
+            TypeRef.Reference("Circle").toTypeName()
+        }
         assertEquals(
             ClassName(modelPackage, "Circle"),
             result,

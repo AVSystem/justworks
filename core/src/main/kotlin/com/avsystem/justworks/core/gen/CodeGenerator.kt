@@ -1,5 +1,10 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.client.ClientGenerator
+import com.avsystem.justworks.core.gen.model.ModelGenerator
+import com.avsystem.justworks.core.gen.shared.ApiClientBaseGenerator
+import com.avsystem.justworks.core.gen.shared.ApiResponseGenerator
+import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.model.ApiSpec
 import java.io.File
 
@@ -14,22 +19,15 @@ object CodeGenerator {
         spec: ApiSpec,
         modelPackage: String,
         apiPackage: String,
-        outputDir: File
-    ): Result {
-        val modelRegistry = NameRegistry().apply {
-            spec.schemas.forEach { reserve(it.name) }
-            spec.enums.forEach { reserve(it.name) }
-        }
-        val apiRegistry = NameRegistry()
-
-        val modelFiles = ModelGenerator(modelPackage, modelRegistry).generate(spec)
+        outputDir: File,
+    ): Result = context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
+        val modelFiles = ModelGenerator.generate(spec)
         modelFiles.forEach { it.writeTo(outputDir) }
 
         val hasPolymorphicTypes = modelFiles.any { it.name == SerializersModuleGenerator.FILE_NAME }
         val classNameLookup = ModelGenerator.buildClassNameLookup(spec, modelPackage)
 
-        val clientFiles = ClientGenerator(apiPackage, modelPackage, apiRegistry, classNameLookup)
-            .generate(spec, hasPolymorphicTypes)
+        val clientFiles = ClientGenerator.generate(spec, hasPolymorphicTypes, classNameLookup)
         clientFiles.forEach { it.writeTo(outputDir) }
 
         return Result(modelFiles.size, clientFiles.size)
