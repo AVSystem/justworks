@@ -14,7 +14,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertFailsWith
 
 class InlineTypeResolverTest {
-
     private fun emptySpec() = ApiSpec(
         title = "test",
         version = "1.0",
@@ -131,7 +130,10 @@ class InlineTypeResolverTest {
 
         val resolved = spec.resolveInlineTypes(nameMap)
 
-        val resolvedResponseType = resolved.endpoints.first().responses["200"]?.schema
+        val resolvedResponseType = resolved.endpoints
+            .first()
+            .responses["200"]
+            ?.schema
         assertEquals(TypeRef.Reference("TestResolved"), resolvedResponseType)
     }
 
@@ -161,7 +163,10 @@ class InlineTypeResolverTest {
 
         val resolved = spec.resolveInlineTypes(nameMap)
 
-        val resolvedRequestType = resolved.endpoints.first().requestBody?.schema
+        val resolvedRequestType = resolved.endpoints
+            .first()
+            .requestBody
+            ?.schema
         assertEquals(TypeRef.Reference("TestResolved"), resolvedRequestType)
     }
 }

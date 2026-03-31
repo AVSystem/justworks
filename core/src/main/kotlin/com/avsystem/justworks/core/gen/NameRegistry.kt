@@ -17,9 +17,9 @@ internal class NameRegistry {
     fun register(desired: String): String {
         require(desired.isNotEmpty()) { "Cannot register an empty name" }
         return desired.takeIf { registered.add(it) }
-        ?: generateSequence(2) { it + 1 }
-            .map { "$desired$it" }
-            .first { registered.add(it) }
+            ?: generateSequence(2) { it + 1 }
+                .map { "$desired$it" }
+                .first { registered.add(it) }
     }
 
     /**
