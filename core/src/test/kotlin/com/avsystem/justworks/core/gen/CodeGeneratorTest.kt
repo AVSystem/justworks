@@ -43,6 +43,10 @@ class CodeGeneratorTest {
 
                 val generatedFiles = outputDir.walkTopDown().filter { it.isFile }.toList()
                 assertTrue(generatedFiles.isNotEmpty(), "$fixture: output directory should contain files")
+
+                val fileNames = generatedFiles.map { it.nameWithoutExtension }
+                val duplicates = fileNames.groupingBy { it }.eachCount().filter { it.value > 1 }
+                assertTrue(duplicates.isEmpty(), "$fixture: duplicate file names found: ${duplicates.keys}")
             } finally {
                 outputDir.deleteRecursively()
             }

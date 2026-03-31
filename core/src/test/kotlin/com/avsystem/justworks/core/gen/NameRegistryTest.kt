@@ -2,6 +2,7 @@ package com.avsystem.justworks.core.gen
 
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class NameRegistryTest {
     @Test
@@ -52,6 +53,14 @@ class NameRegistryTest {
         val registry = NameRegistry()
         assertEquals("Foo", registry.register("Foo"))
         assertEquals("Bar", registry.register("Bar"))
+    }
+
+    @Test
+    fun `register empty name throws`() {
+        val registry = NameRegistry()
+        assertFailsWith<IllegalArgumentException> {
+            registry.register("")
+        }
     }
 
     @Test

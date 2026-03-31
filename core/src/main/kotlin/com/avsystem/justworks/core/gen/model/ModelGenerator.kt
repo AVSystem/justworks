@@ -55,6 +55,7 @@ import com.squareup.kotlinpoet.WildcardTypeName
 import kotlinx.datetime.LocalDate
 import kotlin.sequences.flatMap
 import kotlin.time.Instant
+import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator.FILE_NAME as SERIALIZERS_MODULE_NAME
 
 /**
  * Generates KotlinPoet [com.squareup.kotlinpoet.FileSpec] instances from an [com.avsystem.justworks.core.model.ApiSpec].
@@ -151,6 +152,8 @@ internal object ModelGenerator {
     private fun ensureReserved(spec: ApiSpec, nameRegistry: NameRegistry) {
         spec.schemas.forEach { nameRegistry.reserve(it.name) }
         spec.enums.forEach { nameRegistry.reserve(it.name) }
+        nameRegistry.reserve(UUID_SERIALIZER_NAME)
+        nameRegistry.reserve(SERIALIZERS_MODULE_NAME)
     }
 
     private fun collectAllInlineSchemas(

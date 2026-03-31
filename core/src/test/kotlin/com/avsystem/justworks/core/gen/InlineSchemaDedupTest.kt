@@ -116,6 +116,36 @@ class InlineSchemaDedupTest {
     }
 
     @Test
+    fun `different nullable flags produce different keys`() {
+        val props1 = listOf(
+            PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, nullable = false),
+        )
+        val props2 = listOf(
+            PropertyModel("id", TypeRef.Primitive(PrimitiveType.INT), null, nullable = true),
+        )
+
+        val key1 = InlineSchemaKey.from(props1, setOf("id"))
+        val key2 = InlineSchemaKey.from(props2, setOf("id"))
+
+        assertNotEquals(key1, key2)
+    }
+
+    @Test
+    fun `different defaultValues produce different keys`() {
+        val props1 = listOf(
+            PropertyModel("count", TypeRef.Primitive(PrimitiveType.INT), null, nullable = false, defaultValue = 0),
+        )
+        val props2 = listOf(
+            PropertyModel("count", TypeRef.Primitive(PrimitiveType.INT), null, nullable = false, defaultValue = 10),
+        )
+
+        val key1 = InlineSchemaKey.from(props1, setOf("count"))
+        val key2 = InlineSchemaKey.from(props2, setOf("count"))
+
+        assertNotEquals(key1, key2)
+    }
+
+    @Test
     fun `collision with existing inline schema name uses numeric suffix`() {
         val registry = NameRegistry()
 
