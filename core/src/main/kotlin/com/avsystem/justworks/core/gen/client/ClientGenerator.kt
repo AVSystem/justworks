@@ -53,8 +53,8 @@ internal object ClientGenerator {
     context(_: ModelPackage, _: ApiPackage)
     fun generate(
         spec: ApiSpec,
-        hasPolymorphicTypes: Boolean = false,
-        nameRegistry: NameRegistry = NameRegistry(),
+        hasPolymorphicTypes: Boolean,
+        nameRegistry: NameRegistry,
     ): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
@@ -66,7 +66,7 @@ internal object ClientGenerator {
     private fun generateClientFile(
         tag: String,
         endpoints: List<Endpoint>,
-        hasPolymorphicTypes: Boolean = false,
+        hasPolymorphicTypes: Boolean,
         nameRegistry: NameRegistry,
     ): FileSpec {
         val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
