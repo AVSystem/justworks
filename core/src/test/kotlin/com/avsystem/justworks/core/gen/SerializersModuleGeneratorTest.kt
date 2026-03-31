@@ -1,5 +1,8 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.model.ModelGenerator
+import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
+import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.PropertySpec
 import kotlin.test.Test
 import kotlin.test.assertNotNull
@@ -7,8 +10,7 @@ import kotlin.test.assertNull
 import kotlin.test.assertTrue
 
 class SerializersModuleGeneratorTest {
-    private val modelPackage = "com.example.model"
-    private val generator = SerializersModuleGenerator(modelPackage)
+    private val modelPackage = ModelPackage("com.example.model")
 
     private fun hierarchyInfo(
         sealedHierarchies: Map<String, List<String>>,
@@ -20,10 +22,13 @@ class SerializersModuleGeneratorTest {
         schemas = emptyList(),
     )
 
+    private fun generate(info: ModelGenerator.HierarchyInfo): FileSpec? =
+        context(info, modelPackage) { SerializersModuleGenerator.generate() }
+
     @Test
     fun `generates SerializersModule with polymorphic registration`() {
         val hierarchies = mapOf("Shape" to listOf("Circle", "Square"))
-        val fileSpec = context(hierarchyInfo(hierarchies)) { generator.generate() }
+        val fileSpec = generate(hierarchyInfo(hierarchies))
 
         assertNotNull(fileSpec, "Should generate a FileSpec for non-empty hierarchies")
 
@@ -42,7 +47,7 @@ class SerializersModuleGeneratorTest {
                 "Shape" to listOf("Circle", "Square"),
                 "Animal" to listOf("Cat", "Dog"),
             )
-        val fileSpec = context(hierarchyInfo(hierarchies)) { generator.generate() }
+        val fileSpec = generate(hierarchyInfo(hierarchies))
         assertNotNull(fileSpec)
 
         val initializer =
@@ -61,7 +66,7 @@ class SerializersModuleGeneratorTest {
 
     @Test
     fun `returns null for empty hierarchies`() {
-        val result = context(hierarchyInfo(emptyMap())) { generator.generate() }
+        val result = generate(hierarchyInfo(emptyMap()))
         assertNull(result, "Should return null for empty hierarchies")
     }
 
@@ -72,7 +77,7 @@ class SerializersModuleGeneratorTest {
             "Pet" to listOf("Cat", "Dog"),
         )
         val info = hierarchyInfo(hierarchies, anyOfWithoutDiscriminator = setOf("Pet"))
-        val fileSpec = context(info) { generator.generate() }
+        val fileSpec = generate(info)
 
         assertNotNull(fileSpec)
         val initializer = fileSpec.members
@@ -89,7 +94,7 @@ class SerializersModuleGeneratorTest {
     fun `returns null when all hierarchies are anyOf without discriminator`() {
         val hierarchies = mapOf("Pet" to listOf("Cat", "Dog"))
         val info = hierarchyInfo(hierarchies, anyOfWithoutDiscriminator = setOf("Pet"))
-        val result = context(info) { generator.generate() }
+        val result = generate(info)
 
         assertNull(result, "Should return null when only non-discriminator anyOf hierarchies exist")
     }
