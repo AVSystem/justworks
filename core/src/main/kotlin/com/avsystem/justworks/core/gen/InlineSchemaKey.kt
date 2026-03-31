@@ -6,7 +6,7 @@ import com.avsystem.justworks.core.model.TypeRef
 /**
  * Key for structural equality of inline schemas.
  * Two inline schemas are considered equal if they have the same properties
- * (name, type, required status) regardless of property order.
+ * (name, type, required status, nullable status) regardless of property order.
  * Nested [TypeRef.Inline] types are normalized to ignore [TypeRef.Inline.contextHint],
  * ensuring purely structural comparison.
  */

@@ -66,4 +66,4 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
     }
 }
 
-fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
+internal fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY

@@ -67,7 +67,7 @@ internal object ModelGenerator {
     data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
 
     context(_: ModelPackage)
-    fun generate(spec: ApiSpec, nameRegistry: NameRegistry = NameRegistry()): List<FileSpec> =
+    fun generate(spec: ApiSpec, nameRegistry: NameRegistry): List<FileSpec> =
         generateWithResolvedSpec(spec, nameRegistry).files
 
     context(modelPackage: ModelPackage)

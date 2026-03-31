@@ -12,7 +12,7 @@ import com.avsystem.justworks.core.model.TypeRef
  * Resolves a single [TypeRef.Inline] to [TypeRef.Reference] using the provided [nameMap].
  * Non-inline types are returned as-is; containers ([TypeRef.Array], [TypeRef.Map]) are resolved recursively.
  */
-fun ApiSpec.resolveTypeRef(type: TypeRef, nameMap: Map<InlineSchemaKey, String>): TypeRef = when (type) {
+internal fun ApiSpec.resolveTypeRef(type: TypeRef, nameMap: Map<InlineSchemaKey, String>): TypeRef = when (type) {
     is TypeRef.Inline -> {
         val key = InlineSchemaKey.from(type.properties, type.requiredProperties)
         val className = nameMap[key]
@@ -43,7 +43,7 @@ fun ApiSpec.resolveTypeRef(type: TypeRef, nameMap: Map<InlineSchemaKey, String>)
  * This is applied once after inline schema collection, so downstream generators
  * never encounter [TypeRef.Inline] and need no special handling.
  */
-fun ApiSpec.resolveInlineTypes(nameMap: Map<InlineSchemaKey, String>): ApiSpec {
+internal fun ApiSpec.resolveInlineTypes(nameMap: Map<InlineSchemaKey, String>): ApiSpec {
     if (nameMap.isEmpty()) return this
 
     fun TypeRef.resolve(): TypeRef = resolveTypeRef(this, nameMap)
