@@ -11,7 +11,7 @@ import java.io.File
  * Facade that orchestrates model and client code generation,
  * writing the produced files to the given output directory.
  */
-internal object CodeGenerator {
+object CodeGenerator {
     data class Result(val modelFiles: Int, val clientFiles: Int)
 
     fun generate(
