@@ -3,7 +3,6 @@ package com.avsystem.justworks.core.gen.shared
 import com.avsystem.justworks.core.gen.API_CLIENT_BASE
 import com.avsystem.justworks.core.gen.APPLY_AUTH
 import com.avsystem.justworks.core.gen.BASE_URL
-import com.avsystem.justworks.core.gen.BLOCK
 import com.avsystem.justworks.core.gen.BODY_AS_TEXT_FUN
 import com.avsystem.justworks.core.gen.BODY_FUN
 import com.avsystem.justworks.core.gen.CLIENT
@@ -24,14 +23,10 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.IO_EXCEPTION
 import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_FUN
-import com.avsystem.justworks.core.gen.MAP_TO_RESULT
-import com.avsystem.justworks.core.gen.NETWORK_ERROR
 import com.avsystem.justworks.core.gen.RAISE
 import com.avsystem.justworks.core.gen.RAISE_FUN
 import com.avsystem.justworks.core.gen.SAFE_CALL
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
-import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE_PARAM
-import com.avsystem.justworks.core.gen.SUCCESS_BODY
 import com.avsystem.justworks.core.gen.TOKEN
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.ContextParameter
@@ -58,6 +53,12 @@ import com.squareup.kotlinpoet.UNIT
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
 internal object ApiClientBaseGenerator {
+    private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
+    private const val SUCCESS_BODY = "successBody"
+    private const val MAP_TO_RESULT = "mapToResult"
+    private const val BLOCK = "block"
+    private const val NETWORK_ERROR = "Network error"
+
     fun generate(): FileSpec {
         val t = TypeVariableName("T").copy(reified = true)
 

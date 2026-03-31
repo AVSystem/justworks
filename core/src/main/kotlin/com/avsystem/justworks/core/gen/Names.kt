@@ -110,6 +110,7 @@ val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuild
 val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
 val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
 val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")
+val UUID_SERIALIZER = ClassName("com.avsystem.justworks", "UuidSerializer")
 
 // ============================================================================
 // Shared property / parameter names (used by multiple generators)
@@ -123,10 +124,3 @@ const val APPLY_AUTH = "applyAuth"
 const val SAFE_CALL = "safeCall"
 const val CREATE_HTTP_CLIENT = "createHttpClient"
 const val GENERATED_SERIALIZERS_MODULE = "generatedSerializersModule"
-const val NETWORK_ERROR = "Network error"
-const val UUID_SERIALIZER_NAME = "UuidSerializer"
-const val BLOCK = "block"
-const val MAP_TO_RESULT = "mapToResult"
-const val SUCCESS_BODY = "successBody"
-const val SERIALIZERS_MODULE_PARAM = "serializersModule"
-const val SERIALIZERS_MODULE_NAME = "SerializersModule"

@@ -27,7 +27,7 @@ internal object CodeGenerator {
 
         modelFiles.forEach { it.writeTo(outputDir) }
 
-        val hasPolymorphicTypes = modelFiles.any { it.name == SERIALIZERS_MODULE_NAME }
+        val hasPolymorphicTypes = modelFiles.any { it.name == SERIALIZERS_MODULE.simpleName }
 
         val clientFiles = ClientGenerator.generate(resolvedSpec, hasPolymorphicTypes, apiRegistry)
 

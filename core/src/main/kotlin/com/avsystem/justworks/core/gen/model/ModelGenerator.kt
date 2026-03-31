@@ -20,11 +20,11 @@ import com.avsystem.justworks.core.gen.PRIMITIVE_KIND
 import com.avsystem.justworks.core.gen.PRIMITIVE_SERIAL_DESCRIPTOR_FUN
 import com.avsystem.justworks.core.gen.SERIALIZABLE
 import com.avsystem.justworks.core.gen.SERIALIZATION_EXCEPTION
-import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE_NAME
+import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.SERIAL_DESCRIPTOR
 import com.avsystem.justworks.core.gen.SERIAL_NAME
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
-import com.avsystem.justworks.core.gen.UUID_SERIALIZER_NAME
+import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.resolveInlineTypes
@@ -150,8 +150,8 @@ internal object ModelGenerator {
     private fun ensureReserved(spec: ApiSpec, nameRegistry: NameRegistry) {
         spec.schemas.forEach { nameRegistry.reserve(it.name) }
         spec.enums.forEach { nameRegistry.reserve(it.name) }
-        nameRegistry.reserve(UUID_SERIALIZER_NAME)
-        nameRegistry.reserve(SERIALIZERS_MODULE_NAME)
+        nameRegistry.reserve(UUID_SERIALIZER.simpleName)
+        nameRegistry.reserve(SERIALIZERS_MODULE.simpleName)
     }
 
     private fun collectAllInlineSchemas(
@@ -440,7 +440,7 @@ internal object ModelGenerator {
             fileBuilder.addAnnotation(
                 AnnotationSpec
                     .builder(USE_SERIALIZERS)
-                    .addMember("%T::class", ClassName(modelPackage, UUID_SERIALIZER_NAME))
+                    .addMember("%T::class", UUID_SERIALIZER)
                     .build(),
             )
         }
@@ -593,10 +593,7 @@ internal object ModelGenerator {
         return schemaRefs.plus(endpointRefs).any { it.containsUuid() }
     }
 
-    context(modelPackage: ModelPackage)
     private fun generateUuidSerializer(): FileSpec {
-        val uuidSerializerClass = ClassName(modelPackage, UUID_SERIALIZER_NAME)
-
         val descriptorProp = PropertySpec
             .builder("descriptor", SERIAL_DESCRIPTOR)
             .addModifiers(KModifier.OVERRIDE)
@@ -620,7 +617,7 @@ internal object ModelGenerator {
             .build()
 
         val objectSpec = TypeSpec
-            .objectBuilder(uuidSerializerClass)
+            .objectBuilder(UUID_SERIALIZER)
             .addSuperinterface(K_SERIALIZER.parameterizedBy(UUID_TYPE))
             .addProperty(descriptorProp)
             .addFunction(serializeFun)
@@ -628,7 +625,7 @@ internal object ModelGenerator {
             .build()
 
         return FileSpec
-            .builder(uuidSerializerClass)
+            .builder(UUID_SERIALIZER)
             .addAnnotation(
                 AnnotationSpec
                     .builder(OPT_IN)

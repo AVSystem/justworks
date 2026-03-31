@@ -24,7 +24,7 @@ class ModelGeneratorTest {
     private val modelPackage = "com.example.model"
 
     private fun generate(spec: ApiSpec) = context(ModelPackage(modelPackage)) {
-        ModelGenerator.generate(spec)
+        ModelGenerator.generate(spec, NameRegistry())
     }
 
     private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
