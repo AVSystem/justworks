@@ -4,7 +4,6 @@ import kotlin.test.Test
 import kotlin.test.assertEquals
 
 class ContentTypeTest {
-
     @Test
     fun `ContentType entries are ordered by priority for content negotiation`() {
         assertEquals(
