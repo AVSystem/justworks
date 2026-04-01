@@ -58,7 +58,7 @@ internal fun TypeRef.toTypeName(classNameLookup: Map<String, ClassName> = emptyM
     }
 
     is TypeRef.Inline -> {
-        ClassName(modelPackage, contextHint.toInlinedName())
+        error("TypeRef.Inline should have been resolved by InlineTypeResolver (contextHint=$contextHint)")
     }
 
     is TypeRef.Unknown -> {
@@ -66,4 +66,4 @@ internal fun TypeRef.toTypeName(classNameLookup: Map<String, ClassName> = emptyM
     }
 }
 
-fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
+internal fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY

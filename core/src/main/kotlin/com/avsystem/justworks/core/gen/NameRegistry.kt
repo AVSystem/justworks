@@ -7,7 +7,7 @@ package com.avsystem.justworks.core.gen
  * (e.g. `Foo`, `Foo2`, `Foo3`). Names can be pre-populated via [reserve] to
  * block them from being returned by [register].
  */
-class NameRegistry {
+internal class NameRegistry {
     private val registered = mutableSetOf<String>()
 
     /**
@@ -15,10 +15,11 @@ class NameRegistry {
      * to resolve collisions (e.g. `Foo2`, `Foo3`).
      */
     fun register(desired: String): String {
-        if (registered.add(desired)) return desired
-        var suffix = 2
-        while (!registered.add("$desired$suffix")) suffix++
-        return "$desired$suffix"
+        require(desired.isNotEmpty()) { "Cannot register an empty name" }
+        return desired.takeIf { registered.add(it) }
+            ?: generateSequence(2) { it + 1 }
+                .map { "$desired$it" }
+                .first { registered.add(it) }
     }
 
     /**

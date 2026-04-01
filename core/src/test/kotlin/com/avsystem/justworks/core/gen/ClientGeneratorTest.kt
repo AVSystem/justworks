@@ -27,9 +27,9 @@ class ClientGeneratorTest {
     private val apiPackage = "com.example.api"
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
+    private fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false,): List<FileSpec> =
         context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
-            ClientGenerator.generate(spec, hasPolymorphicTypes)
+            ClientGenerator.generate(spec, hasPolymorphicTypes, NameRegistry())
         }
 
     private fun spec(vararg endpoints: Endpoint) = ApiSpec(
