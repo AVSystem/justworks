@@ -67,14 +67,13 @@ import kotlin.time.Instant
 internal object ModelGenerator {
     data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
 
-    context(hierarchy: Hierarchy)
-    fun generate(spec: ApiSpec, nameRegistry: NameRegistry): List<FileSpec> =
-        generateWithResolvedSpec(spec, nameRegistry).files
+    context(_: Hierarchy, _: NameRegistry)
+    fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
 
-    context(hierarchy: Hierarchy)
-    fun generateWithResolvedSpec(spec: ApiSpec, nameRegistry: NameRegistry): GenerateResult {
+    context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
+    fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
         ensureReserved(spec, nameRegistry)
-        val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec, nameRegistry)
+        val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec)
         val resolvedSpec = spec.resolveInlineTypes(nameMap)
 
         val resolvedInlineSchemas = inlineSchemas.map { schema ->
@@ -124,10 +123,8 @@ internal object ModelGenerator {
         nameRegistry.reserve(SERIALIZERS_MODULE.simpleName)
     }
 
-    private fun collectAllInlineSchemas(
-        spec: ApiSpec,
-        nameRegistry: NameRegistry,
-    ): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> {
+    context(nameRegistry: NameRegistry)
+    private fun collectAllInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> {
         val endpointRefs = spec.endpoints.flatMap { endpoint ->
             val requestRef = endpoint.requestBody?.schema
             val responseRefs = endpoint.responses.values.map { it.schema }
@@ -209,8 +206,8 @@ internal object ModelGenerator {
         }
 
         // Generate nested subtypes
-        val variants = hierarchy.sealedHierarchies[schema.name].orEmpty()
-        for (variantName in variants) {
+        val variants = hierarchy.sealedHierarchies[schema.name]
+        variants?.forEach { variantName ->
             val variantSchema = schemasById[variantName]
             val serialName = resolveSerialName(schema, variantName)
             val nestedType = buildNestedVariant(variantSchema, variantName, className, serialName)
@@ -383,12 +380,11 @@ internal object ModelGenerator {
 
         val notUnique = uniqueFieldsPerVariant.mapNotNull { (variantName, uniqueField) ->
             if (uniqueField != null) {
-                val variantClass = hierarchy.lookup[variantName] ?: ClassName(hierarchy.modelPackage, variantName)
                 builder.addStatement(
                     "%S\u00b7in\u00b7element.%M -> %T.serializer()",
                     uniqueField,
                     JSON_OBJECT_EXT,
-                    variantClass,
+                    hierarchy[variantName],
                 )
                 null
             } else {
@@ -424,13 +420,12 @@ internal object ModelGenerator {
 
         // Only apply superinterfaces for anyOf-without-discriminator variants
         val parentEntries = hierarchy.variantParents[schema.name]
-            .orEmpty()
-            .filterKeys { parentClass ->
+            ?.filterKeys { parentClass ->
                 val parentName = parentClass.simpleName
                 parentName in hierarchy.anyOfWithoutDiscriminator
             }
-        val serialName = parentEntries.values.firstOrNull()
-        val superinterfaces = parentEntries.keys
+        val serialName = parentEntries?.values?.firstOrNull()
+        val superinterfaces = parentEntries?.keys.orEmpty()
 
         val sortedProps = schema.properties.sortedBy { prop ->
             when {
@@ -513,7 +508,7 @@ internal object ModelGenerator {
      * Formats a default value from a PropertyModel for use in KotlinPoet ParameterSpec.defaultValue().
      */
 
-    context(hierachy: Hierarchy)
+    context(hierarchy: Hierarchy)
     private fun formatDefaultValue(prop: PropertyModel): CodeBlock = when (prop.type) {
         is TypeRef.Primitive -> {
             when (prop.type.type) {
@@ -552,7 +547,7 @@ internal object ModelGenerator {
 
         is TypeRef.Reference -> {
             val constantName = prop.defaultValue.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", ClassName(hierachy.modelPackage, prop.type.schemaName), constantName)
+            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, prop.type.schemaName), constantName)
         }
 
         else -> {

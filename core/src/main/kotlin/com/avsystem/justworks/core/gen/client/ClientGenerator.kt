@@ -10,7 +10,6 @@ import com.avsystem.justworks.core.gen.HTTP_CLIENT
 import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
-import com.avsystem.justworks.core.gen.ModelPackage
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.RAISE
 import com.avsystem.justworks.core.gen.TOKEN
@@ -51,24 +50,17 @@ internal object ClientGenerator {
     private const val DEFAULT_TAG = "Default"
     private const val API_SUFFIX = "Api"
 
-    context(hierarchy: Hierarchy, _: ApiPackage)
-    fun generate(
-        spec: ApiSpec,
-        hasPolymorphicTypes: Boolean,
-        nameRegistry: NameRegistry,
-    ): List<FileSpec> {
+    context(_: Hierarchy, _: ApiPackage, _: NameRegistry)
+    fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
-        return grouped.map { (tag, endpoints) ->
-            generateClientFile(tag, endpoints, hasPolymorphicTypes, nameRegistry)
-        }
+        return grouped.map { (tag, endpoints) -> generateClientFile(tag, endpoints, hasPolymorphicTypes) }
     }
 
-    context(hierarchy: Hierarchy, apiPackage: ApiPackage)
+    context(hierarchy: Hierarchy, apiPackage: ApiPackage, nameRegistry: NameRegistry)
     private fun generateClientFile(
         tag: String,
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean,
-        nameRegistry: NameRegistry,
     ): FileSpec {
         val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
 
@@ -101,8 +93,9 @@ internal object ClientGenerator {
             .primaryConstructor(primaryConstructor)
             .addProperty(httpClientProperty)
 
-        val methodRegistry = NameRegistry()
-        classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it, methodRegistry) })
+        context(NameRegistry()) {
+            classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })
+        }
 
         return FileSpec
             .builder(className)
@@ -110,8 +103,8 @@ internal object ClientGenerator {
             .build()
     }
 
-    context(_: Hierarchy)
-    private fun generateEndpointFunction(endpoint: Endpoint, methodRegistry: NameRegistry): FunSpec {
+    context(_: Hierarchy, methodRegistry: NameRegistry)
+    private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
         val returnType = HTTP_SUCCESS.parameterizedBy(returnBodyType)

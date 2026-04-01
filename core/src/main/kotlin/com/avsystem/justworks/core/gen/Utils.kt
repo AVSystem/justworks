@@ -55,7 +55,7 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
     }
 
     is TypeRef.Reference -> {
-        hierarchy.lookup[schemaName] ?: ClassName(hierarchy.modelPackage, schemaName)
+        hierarchy[schemaName]
     }
 
     is TypeRef.Inline -> {
