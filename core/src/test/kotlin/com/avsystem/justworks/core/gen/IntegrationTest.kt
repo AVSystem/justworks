@@ -41,14 +41,18 @@ class IntegrationTest {
     }
 
     private fun generateModel(spec: ApiSpec): List<FileSpec> =
-        context(ModelPackage(modelPackage)) { ModelGenerator.generate(spec, NameRegistry()) }
+        context(Hierarchy(spec.schemas, ModelPackage(modelPackage)), NameRegistry()) {
+            ModelGenerator.generate(spec)
+        }
 
     private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult =
-        context(ModelPackage(modelPackage)) { ModelGenerator.generateWithResolvedSpec(spec, NameRegistry()) }
+        context(Hierarchy(spec.schemas, ModelPackage(modelPackage)), NameRegistry()) {
+            ModelGenerator.generateWithResolvedSpec(spec)
+        }
 
     private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
-        context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
-            ClientGenerator.generate(spec, hasPolymorphicTypes, NameRegistry())
+        context(Hierarchy(spec.schemas, ModelPackage(modelPackage)), ApiPackage(apiPackage), NameRegistry()) {
+            ClientGenerator.generate(spec, hasPolymorphicTypes)
         }
 
     @Test

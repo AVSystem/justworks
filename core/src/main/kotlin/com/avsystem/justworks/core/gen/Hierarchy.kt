@@ -3,10 +3,6 @@ package com.avsystem.justworks.core.gen
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
-import kotlin.collections.component1
-import kotlin.collections.component2
-import kotlin.collections.filter
-import kotlin.to
 
 private fun SchemaModel.variants() = oneOf ?: anyOf ?: emptyList()
 
@@ -14,8 +10,10 @@ internal class Hierarchy private constructor(
     val schemas: List<SchemaModel>,
     val modelPackage: ModelPackage,
     val variantParents: Map<String, Map<ClassName, String>>,
+    /** Parent schema names that are anyOf without discriminator. */
     val anyOfWithoutDiscriminator: Set<String>,
     val sealedHierarchies: Map<String, List<String>>,
+    /** Variant schema names that belong to anyOf-without-discriminator parents. */
     val anyOfWithoutDiscriminatorVariants: Set<String>,
     private val lookup: Map<String, ClassName>,
 ) {
@@ -69,7 +67,7 @@ internal class Hierarchy private constructor(
                 schemas = schemas,
                 modelPackage = modelPackage,
                 variantParents = variantParents,
-                anyOfWithoutDiscriminator = anyOfWithoutDiscriminatorVariants,
+                anyOfWithoutDiscriminator = anyOfWithoutDiscriminator,
                 sealedHierarchies = sealedHierarchies,
                 anyOfWithoutDiscriminatorVariants = anyOfWithoutDiscriminatorVariants,
                 lookup = lookup,

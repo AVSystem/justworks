@@ -20,10 +20,9 @@ import kotlin.test.assertTrue
 class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = context(ModelPackage(modelPackage)) {
-        ModelGenerator.generate(spec, NameRegistry())
+    private fun generate(spec: ApiSpec) = context(Hierarchy(spec.schemas, ModelPackage(modelPackage)), NameRegistry()) {
+        ModelGenerator.generate(spec)
     }
-
 
     private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
         title = "Test",
@@ -907,34 +906,39 @@ class ModelGeneratorPolymorphicTest {
         )
     }
 
-    // -- toTypeName with classNameLookup --
+    // -- toTypeName with Hierarchy --
 
     @Test
-    fun `toTypeName resolves variant to nested ClassName with lookup`() {
-        val lookup = mapOf(
-            "Circle" to ClassName(modelPackage, "Shape").nestedClass("Circle"),
-            "Square" to ClassName(modelPackage, "Shape").nestedClass("Square"),
+    fun `toTypeName resolves variant to nested ClassName via Hierarchy`() {
+        val shapeSchema = schema(
+            name = "Shape",
+            oneOf = listOf(TypeRef.Reference("Circle"), TypeRef.Reference("Square")),
         )
+        val circleSchema = schema(name = "Circle")
+        val squareSchema = schema(name = "Square")
+        val hierarchy = Hierarchy(listOf(shapeSchema, circleSchema, squareSchema), ModelPackage(modelPackage))
 
-        val result = context(ModelPackage(modelPackage)) {
-            TypeRef.Reference("Circle").toTypeName(lookup)
+        val result = context(hierarchy) {
+            TypeRef.Reference("Circle").toTypeName()
         }
         assertEquals(
             ClassName(modelPackage, "Shape", "Circle"),
             result,
-            "Should resolve Circle to Shape.Circle with lookup",
+            "Should resolve Circle to Shape.Circle via Hierarchy",
         )
     }
 
     @Test
-    fun `toTypeName falls back to flat ClassName without lookup`() {
-        val result = context(ModelPackage(modelPackage)) {
+    fun `toTypeName falls back to flat ClassName for non-variant`() {
+        val hierarchy = Hierarchy(emptyList(), ModelPackage(modelPackage))
+
+        val result = context(hierarchy) {
             TypeRef.Reference("Circle").toTypeName()
         }
         assertEquals(
             ClassName(modelPackage, "Circle"),
             result,
-            "Should resolve Circle to flat ClassName without lookup",
+            "Should resolve Circle to flat ClassName without hierarchy entry",
         )
     }
 }
