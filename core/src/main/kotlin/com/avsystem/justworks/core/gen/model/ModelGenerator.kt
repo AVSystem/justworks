@@ -85,11 +85,16 @@ internal object ModelGenerator {
         }
 
         val nestedVariantNames = hierarchy.sealedHierarchies
-            .filterKeys { it !in hierarchy.anyOfWithoutDiscriminator }
-            .values.flatten().toSet()
+            .asSequence()
+            .filterNot { (key, _) -> key in hierarchy.anyOfWithoutDiscriminator }
+            .flatMap { (_, names) -> names }
+            .toSet()
+
         val schemaFiles = resolvedSpec.schemas
-            .filter { it.name !in nestedVariantNames }
+            .asSequence()
+            .filterNot { it.name in nestedVariantNames }
             .flatMap { generateSchemaFiles(it) }
+            .toList()
 
         val inlineSchemaFiles = resolvedInlineSchemas.map {
             if (it.isNested) {
@@ -336,7 +341,8 @@ internal object ModelGenerator {
                 val props = hierarchy.schemasById[ref.schemaName]
                     ?.properties
                     ?.map { it.name }
-                    ?.toSet() ?: emptySet()
+                    ?.toSet()
+                    .orEmpty()
                 ref.schemaName to props
             }
 

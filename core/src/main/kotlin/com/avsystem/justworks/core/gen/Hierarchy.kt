@@ -4,22 +4,18 @@ import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
 
-private fun SchemaModel.variants() = oneOf ?: anyOf ?: emptyList()
-
-internal class Hierarchy(
-    val schemas: List<SchemaModel>,
-    val modelPackage: ModelPackage,
-) {
+internal class Hierarchy(val schemas: List<SchemaModel>, val modelPackage: ModelPackage) {
     val schemasById: Map<String, SchemaModel> by lazy { schemas.associateBy { it.name } }
 
-    private val polymorphicSchemas by lazy { schemas.filter { it.variants().isNotEmpty() } }
+    private val polymorphicSchemas by lazy { schemas.filterNot { it.variants().isNullOrEmpty() } }
 
     val sealedHierarchies: Map<String, List<String>> by lazy {
         polymorphicSchemas.associate { schema ->
             schema.name to schema
                 .variants()
-                .filterIsInstance<TypeRef.Reference>()
-                .map { it.schemaName }
+                ?.filterIsInstance<TypeRef.Reference>()
+                ?.map { it.schemaName }
+                .orEmpty()
         }
     }
 
@@ -45,3 +41,5 @@ internal class Hierarchy(
 
     operator fun get(name: String): ClassName = lookup[name] ?: ClassName(modelPackage, name)
 }
+
+private fun SchemaModel.variants() = oneOf ?: anyOf

@@ -46,8 +46,7 @@ class SerializersModuleGeneratorTest {
         return Hierarchy(schemas, modelPackage)
     }
 
-    private fun generate(hierarchy: Hierarchy): FileSpec? =
-        context(hierarchy) { SerializersModuleGenerator.generate() }
+    private fun generate(hierarchy: Hierarchy): FileSpec? = context(hierarchy) { SerializersModuleGenerator.generate() }
 
     @Test
     fun `generates SerializersModule with polymorphic registration`() {
