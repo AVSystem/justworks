@@ -11,7 +11,6 @@ import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.PropertySpec
-import kotlin.collections.iterator
 
 /**
  * Generates a `SerializersModule` registration file for all polymorphic sealed hierarchies.
@@ -20,8 +19,6 @@ import kotlin.collections.iterator
  * that registers each sealed interface with its subclass variants.
  */
 internal object SerializersModuleGenerator {
-    const val FILE_NAME = "SerializersModule"
-
     /**
      * Generates a [com.squareup.kotlinpoet.FileSpec] containing the SerializersModule registration.
      * Returns null if the hierarchy has no sealed types to register.
@@ -50,14 +47,13 @@ internal object SerializersModuleGenerator {
 
         code.endControlFlow()
 
-        val prop =
-            PropertySpec
-                .builder(GENERATED_SERIALIZERS_MODULE, SERIALIZERS_MODULE)
-                .initializer(code.build())
-                .build()
+        val prop = PropertySpec
+            .builder(GENERATED_SERIALIZERS_MODULE, SERIALIZERS_MODULE)
+            .initializer(code.build())
+            .build()
 
         return FileSpec
-            .builder(modelPackage.name, FILE_NAME)
+            .builder(modelPackage.name, SERIALIZERS_MODULE.simpleName)
             .addProperty(prop)
             .build()
     }

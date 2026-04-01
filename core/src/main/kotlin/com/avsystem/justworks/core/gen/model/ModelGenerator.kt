@@ -6,7 +6,6 @@ import com.avsystem.justworks.core.gen.ENCODER
 import com.avsystem.justworks.core.gen.EXPERIMENTAL_SERIALIZATION_API
 import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
 import com.avsystem.justworks.core.gen.INSTANT
-import com.avsystem.justworks.core.gen.InlineSchemaDeduplicator
 import com.avsystem.justworks.core.gen.InlineSchemaKey
 import com.avsystem.justworks.core.gen.JSON_CLASS_DISCRIMINATOR
 import com.avsystem.justworks.core.gen.JSON_CONTENT_POLYMORPHIC_SERIALIZER
@@ -15,16 +14,21 @@ import com.avsystem.justworks.core.gen.JSON_OBJECT_EXT
 import com.avsystem.justworks.core.gen.K_SERIALIZER
 import com.avsystem.justworks.core.gen.LOCAL_DATE
 import com.avsystem.justworks.core.gen.ModelPackage
+import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.OPT_IN
 import com.avsystem.justworks.core.gen.PRIMITIVE_KIND
 import com.avsystem.justworks.core.gen.PRIMITIVE_SERIAL_DESCRIPTOR_FUN
 import com.avsystem.justworks.core.gen.SERIALIZABLE
 import com.avsystem.justworks.core.gen.SERIALIZATION_EXCEPTION
+import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.SERIAL_DESCRIPTOR
 import com.avsystem.justworks.core.gen.SERIAL_NAME
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
+import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
 import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.resolveInlineTypes
+import com.avsystem.justworks.core.gen.resolveTypeRef
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
@@ -51,7 +55,6 @@ import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
 import kotlinx.datetime.LocalDate
-import kotlin.sequences.flatMap
 import kotlin.time.Instant
 
 /**
@@ -61,24 +64,41 @@ import kotlin.time.Instant
  * and one file per [com.avsystem.justworks.core.model.EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 internal object ModelGenerator {
-    context(_: ModelPackage)
-    fun generate(spec: ApiSpec): List<FileSpec> = context(
-        buildHierarchyInfo(spec.schemas),
-        InlineSchemaDeduplicator(spec.schemas.map { it.name }.toSet()),
-    ) {
-        val schemaFiles = spec.schemas.flatMap { generateSchemaFiles(it) }
+    data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
 
-        val inlineSchemaFiles = collectAllInlineSchemas(spec).map {
-            if (it.isNested) generateNestedInlineClass(it) else generateDataClass(it)
+    context(_: ModelPackage)
+    fun generate(spec: ApiSpec, nameRegistry: NameRegistry): List<FileSpec> =
+        generateWithResolvedSpec(spec, nameRegistry).files
+
+    context(modelPackage: ModelPackage)
+    fun generateWithResolvedSpec(spec: ApiSpec, nameRegistry: NameRegistry): GenerateResult {
+        ensureReserved(spec, nameRegistry)
+        val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec, nameRegistry)
+        val resolvedSpec = spec.resolveInlineTypes(nameMap)
+
+        val resolvedInlineSchemas = inlineSchemas.map { schema ->
+            schema.copy(
+                properties = schema.properties.map { prop ->
+                    prop.copy(type = resolvedSpec.resolveTypeRef(prop.type, nameMap))
+                },
+            )
         }
 
-        val enumFiles = spec.enums.map { generateEnumClass(it) }
+        val files = context(buildHierarchyInfo(resolvedSpec.schemas)) {
+            val schemaFiles = resolvedSpec.schemas.flatMap { generateSchemaFiles(it) }
 
-        val serializersModuleFile = SerializersModuleGenerator.generate()
+            val inlineSchemaFiles = resolvedInlineSchemas.map { generateDataClass(it) }
 
-        val uuidSerializerFile = if (spec.usesUuid()) generateUuidSerializer() else null
+            val enumFiles = resolvedSpec.enums.map { generateEnumClass(it) }
 
-        schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
+            val serializersModuleFile = SerializersModuleGenerator.generate()
+
+            val uuidSerializerFile = if (resolvedSpec.usesUuid()) generateUuidSerializer() else null
+
+            schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
+        }
+
+        return GenerateResult(files, resolvedSpec)
     }
 
     data class HierarchyInfo(
@@ -122,8 +142,22 @@ internal object ModelGenerator {
         return HierarchyInfo(sealedHierarchies, variantParents, anyOfWithoutDiscriminator, schemas)
     }
 
-    context(deduplicator: InlineSchemaDeduplicator)
-    private fun collectAllInlineSchemas(spec: ApiSpec): List<SchemaModel> {
+    /**
+     * Ensures all top-level schema/enum names are reserved in [nameRegistry],
+     * preventing inline schemas from colliding with component types even if
+     * the caller supplied an empty registry.
+     */
+    private fun ensureReserved(spec: ApiSpec, nameRegistry: NameRegistry) {
+        spec.schemas.forEach { nameRegistry.reserve(it.name) }
+        spec.enums.forEach { nameRegistry.reserve(it.name) }
+        nameRegistry.reserve(UUID_SERIALIZER.simpleName)
+        nameRegistry.reserve(SERIALIZERS_MODULE.simpleName)
+    }
+
+    private fun collectAllInlineSchemas(
+        spec: ApiSpec,
+        nameRegistry: NameRegistry,
+    ): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> {
         val endpointRefs = spec.endpoints.flatMap { endpoint ->
             val requestRef = endpoint.requestBody?.schema
             val responseRefs = endpoint.responses.values.map { it.schema }
@@ -132,13 +166,18 @@ internal object ModelGenerator {
 
         val schemaPropertyRefs = spec.schemas.flatMap { schema -> schema.properties.map { it.type } }
 
-        return collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
+        val nameMap = mutableMapOf<InlineSchemaKey, String>()
+
+        val schemas = collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
             .asSequence()
             .sortedBy { it.contextHint }
             .distinctBy { InlineSchemaKey.from(it.properties, it.requiredProperties) }
             .map { ref ->
+                val key = InlineSchemaKey.from(ref.properties, ref.requiredProperties)
+                val generatedName = nameRegistry.register(ref.contextHint.toInlinedName())
+                nameMap[key] = generatedName
                 SchemaModel(
-                    name = deduplicator.getOrGenerateName(ref.properties, ref.requiredProperties, ref.contextHint),
+                    name = generatedName,
                     description = null,
                     properties = ref.properties,
                     requiredProperties = ref.requiredProperties,
@@ -148,6 +187,8 @@ internal object ModelGenerator {
                     discriminator = null,
                 )
             }.toList()
+
+        return schemas to nameMap
     }
 
     context(hierarchy: HierarchyInfo, _: ModelPackage)
@@ -399,7 +440,7 @@ internal object ModelGenerator {
             fileBuilder.addAnnotation(
                 AnnotationSpec
                     .builder(USE_SERIALIZERS)
-                    .addMember("%T::class", ClassName(modelPackage, "UuidSerializer"))
+                    .addMember("%T::class", UUID_SERIALIZER)
                     .build(),
             )
         }
@@ -476,6 +517,7 @@ internal object ModelGenerator {
 
         val typeSpec = TypeSpec.enumBuilder(className).addAnnotation(SERIALIZABLE)
 
+        val enumRegistry = NameRegistry()
         enum.values.forEach { value ->
             val anonymousClass = TypeSpec
                 .anonymousClassBuilder()
@@ -485,7 +527,7 @@ internal object ModelGenerator {
                         .addMember("%S", value)
                         .build(),
                 ).build()
-            typeSpec.addEnumConstant(value.toEnumConstantName(), anonymousClass)
+            typeSpec.addEnumConstant(enumRegistry.register(value.toEnumConstantName()), anonymousClass)
         }
 
         if (enum.description != null) {
@@ -525,10 +567,6 @@ internal object ModelGenerator {
         return visited.toList()
     }
 
-    context(_: HierarchyInfo, _: ModelPackage)
-    private fun generateNestedInlineClass(schema: SchemaModel): FileSpec =
-        generateDataClass(schema.copy(name = schema.name.toInlinedName()))
-
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
 
@@ -555,10 +593,7 @@ internal object ModelGenerator {
         return schemaRefs.plus(endpointRefs).any { it.containsUuid() }
     }
 
-    context(modelPackage: ModelPackage)
     private fun generateUuidSerializer(): FileSpec {
-        val uuidSerializerClass = ClassName(modelPackage, "UuidSerializer")
-
         val descriptorProp = PropertySpec
             .builder("descriptor", SERIAL_DESCRIPTOR)
             .addModifiers(KModifier.OVERRIDE)
@@ -582,7 +617,7 @@ internal object ModelGenerator {
             .build()
 
         val objectSpec = TypeSpec
-            .objectBuilder(uuidSerializerClass)
+            .objectBuilder(UUID_SERIALIZER)
             .addSuperinterface(K_SERIALIZER.parameterizedBy(UUID_TYPE))
             .addProperty(descriptorProp)
             .addFunction(serializeFun)
@@ -590,7 +625,7 @@ internal object ModelGenerator {
             .build()
 
         return FileSpec
-            .builder(uuidSerializerClass)
+            .builder(UUID_SERIALIZER)
             .addAnnotation(
                 AnnotationSpec
                     .builder(OPT_IN)
