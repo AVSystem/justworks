@@ -46,11 +46,11 @@ internal fun TypeRef.toTypeName(classNameLookup: Map<String, ClassName> = emptyM
     }
 
     is TypeRef.Array -> {
-        LIST.parameterizedBy(items.toTypeName())
+        LIST.parameterizedBy(items.toTypeName(classNameLookup))
     }
 
     is TypeRef.Map -> {
-        MAP.parameterizedBy(STRING, valueType.toTypeName())
+        MAP.parameterizedBy(STRING, valueType.toTypeName(classNameLookup))
     }
 
     is TypeRef.Reference -> {
