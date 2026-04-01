@@ -6,72 +6,42 @@ import com.squareup.kotlinpoet.ClassName
 
 private fun SchemaModel.variants() = oneOf ?: anyOf ?: emptyList()
 
-internal class Hierarchy private constructor(
+internal class Hierarchy(
     val schemas: List<SchemaModel>,
     val modelPackage: ModelPackage,
-    val variantParents: Map<String, Map<ClassName, String>>,
-    /** Parent schema names that are anyOf without discriminator. */
-    val anyOfWithoutDiscriminator: Set<String>,
-    val sealedHierarchies: Map<String, List<String>>,
-    /** Variant schema names that belong to anyOf-without-discriminator parents. */
-    val anyOfWithoutDiscriminatorVariants: Set<String>,
-    private val lookup: Map<String, ClassName>,
 ) {
-    operator fun get(name: String): ClassName = lookup[name] ?: ClassName(modelPackage, name)
+    val schemasById: Map<String, SchemaModel> by lazy { schemas.associateBy { it.name } }
 
-    companion object {
-        operator fun invoke(schemas: List<SchemaModel>, modelPackage: ModelPackage): Hierarchy {
-            val polymorphicSchemas = schemas.filter { it.variants().isNotEmpty() }
+    private val polymorphicSchemas by lazy { schemas.filter { it.variants().isNotEmpty() } }
 
-            val variantParents: Map<String, Map<ClassName, String>> = polymorphicSchemas
-                .asSequence()
-                .flatMap { schema ->
-                    val parentClass = ClassName(modelPackage, schema.name)
-                    schema.variants().filterIsInstance<TypeRef.Reference>().map { ref ->
-                        ref.schemaName to (parentClass to schema.resolveSerialName(ref.schemaName))
-                    }
-                }.groupBy({ it.first }, { it.second })
-                .mapValues { (_, entries) -> entries.toMap() }
-
-            val anyOfWithoutDiscriminator = polymorphicSchemas
-                .asSequence()
-                .filter { !it.anyOf.isNullOrEmpty() && it.discriminator == null }
-                .map { it.name }
-                .toSet()
-
-            val sealedHierarchies = polymorphicSchemas.associate { schema ->
-                schema.name to schema
-                    .variants()
-                    .asSequence()
-                    .filterIsInstance<TypeRef.Reference>()
-                    .map { it.schemaName }
-                    .toList()
-            }
-
-            val anyOfWithoutDiscriminatorVariants = sealedHierarchies
-                .asSequence()
-                .filter { (key, _) -> key in anyOfWithoutDiscriminator }
-                .flatMap { (_, value) -> value }
-                .toSet()
-
-            val lookup = sealedHierarchies
-                .asSequence()
-                .filterNot { (parent, _) -> parent in anyOfWithoutDiscriminator }
-                .flatMap { (parent, variants) ->
-                    val parentClass = ClassName(modelPackage, parent)
-                    variants.map { variant -> variant to parentClass.nestedClass(variant) } +
-                        (parent to parentClass)
-                }.toMap()
-
-            return Hierarchy(
-                schemas = schemas,
-                modelPackage = modelPackage,
-                variantParents = variantParents,
-                anyOfWithoutDiscriminator = anyOfWithoutDiscriminator,
-                sealedHierarchies = sealedHierarchies,
-                anyOfWithoutDiscriminatorVariants = anyOfWithoutDiscriminatorVariants,
-                lookup = lookup,
-            )
+    val sealedHierarchies: Map<String, List<String>> by lazy {
+        polymorphicSchemas.associate { schema ->
+            schema.name to schema
+                .variants()
+                .filterIsInstance<TypeRef.Reference>()
+                .map { it.schemaName }
         }
     }
+
+    /** Parent schema names that are anyOf without discriminator. */
+    val anyOfWithoutDiscriminator: Set<String> by lazy {
+        polymorphicSchemas
+            .asSequence()
+            .filter { !it.anyOf.isNullOrEmpty() && it.discriminator == null }
+            .map { it.name }
+            .toSet()
+    }
+
+    private val lookup: Map<String, ClassName> by lazy {
+        sealedHierarchies
+            .asSequence()
+            .filterNot { (parent, _) -> parent in anyOfWithoutDiscriminator }
+            .flatMap { (parent, variants) ->
+                val parentClass = ClassName(modelPackage, parent)
+                variants.map { variant -> variant to parentClass.nestedClass(variant) } +
+                    (parent to parentClass)
+            }.toMap()
+    }
+
+    operator fun get(name: String): ClassName = lookup[name] ?: ClassName(modelPackage, name)
 }

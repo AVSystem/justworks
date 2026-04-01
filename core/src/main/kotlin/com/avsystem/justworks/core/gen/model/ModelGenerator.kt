@@ -84,11 +84,11 @@ internal object ModelGenerator {
             )
         }
 
-        val variantNames = hierarchy.sealedHierarchies.values
-            .flatten()
-            .toSet()
+        val nestedVariantNames = hierarchy.sealedHierarchies
+            .filterKeys { it !in hierarchy.anyOfWithoutDiscriminator }
+            .values.flatten().toSet()
         val schemaFiles = resolvedSpec.schemas
-            .filter { it.name !in variantNames || it.name in hierarchy.anyOfWithoutDiscriminatorVariants }
+            .filter { it.name !in nestedVariantNames }
             .flatMap { generateSchemaFiles(it) }
 
         val inlineSchemaFiles = resolvedInlineSchemas.map {
@@ -187,7 +187,6 @@ internal object ModelGenerator {
     context(hierarchy: Hierarchy)
     private fun generateSealedHierarchy(schema: SchemaModel): FileSpec {
         val className = ClassName(hierarchy.modelPackage, schema.name)
-        val schemasById = hierarchy.schemas.associateBy { it.name }
 
         val parentBuilder = TypeSpec.classBuilder(className).addModifiers(KModifier.SEALED)
         parentBuilder.addAnnotation(SERIALIZABLE)
@@ -208,7 +207,7 @@ internal object ModelGenerator {
         // Generate nested subtypes
         val variants = hierarchy.sealedHierarchies[schema.name]
         variants?.forEach { variantName ->
-            val variantSchema = schemasById[variantName]
+            val variantSchema = hierarchy.schemasById[variantName]
             val serialName = schema.resolveSerialName(variantName)
             val nestedType = buildNestedVariant(variantSchema, variantName, className, serialName)
             parentBuilder.addType(nestedType)
@@ -241,49 +240,59 @@ internal object ModelGenerator {
         val variantClassName = parentClassName.nestedClass(variantName)
         val builder = TypeSpec.classBuilder(variantClassName).addModifiers(KModifier.DATA)
         builder.superclass(parentClassName)
+        // sealed class has no constructor params, but KotlinPoet requires this call to emit `Shape()`
         builder.addSuperclassConstructorParameter("")
         builder.addAnnotation(SERIALIZABLE)
         builder.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
 
         if (variantSchema != null) {
-            val sortedProps = variantSchema.properties.sortedBy { prop ->
-                when {
-                    prop.name in variantSchema.requiredProperties && prop.defaultValue == null -> 1
-                    prop.defaultValue != null -> 2
-                    else -> 3
-                }
-            }
-
-            val constructorBuilder = FunSpec.constructorBuilder()
-            val propertySpecs = sortedProps.map { prop ->
-                val type = prop.type.toTypeName().copy(nullable = prop.nullable)
-                val kotlinName = prop.name.toCamelCase()
-
-                val paramBuilder = ParameterSpec.builder(kotlinName, type)
-                when {
-                    prop.nullable -> paramBuilder.defaultValue(CodeBlock.of("null"))
-                    prop.defaultValue != null -> paramBuilder.defaultValue(formatDefaultValue(prop))
-                }
-                constructorBuilder.addParameter(paramBuilder.build())
-
-                PropertySpec
-                    .builder(kotlinName, type)
-                    .initializer(kotlinName)
-                    .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
-                    .build()
-            }
-            builder.primaryConstructor(constructorBuilder.build())
-            builder.addProperties(propertySpecs)
-
-            if (variantSchema.description != null) {
-                builder.addKdoc("%L", variantSchema.description)
-            }
+            buildConstructorAndProperties(variantSchema, builder)
         } else {
-            // Empty variant with no properties — still need a constructor for data class
             builder.primaryConstructor(FunSpec.constructorBuilder().build())
         }
 
         return builder.build()
+    }
+
+    /**
+     * Builds primary constructor and data class properties from a schema's property list.
+     * Shared by [generateDataClass] and [buildNestedVariant].
+     */
+    context(_: Hierarchy)
+    private fun buildConstructorAndProperties(schema: SchemaModel, builder: TypeSpec.Builder) {
+        val sortedProps = schema.properties.sortedBy { prop ->
+            when {
+                prop.name in schema.requiredProperties && prop.defaultValue == null -> 1
+                prop.defaultValue != null -> 2
+                else -> 3
+            }
+        }
+
+        val constructorBuilder = FunSpec.constructorBuilder()
+        val propertySpecs = sortedProps.map { prop ->
+            val type = prop.type.toTypeName().copy(nullable = prop.nullable)
+            val kotlinName = prop.name.toCamelCase()
+
+            val paramBuilder = ParameterSpec.builder(kotlinName, type)
+            when {
+                prop.nullable -> paramBuilder.defaultValue(CodeBlock.of("null"))
+                prop.defaultValue != null -> paramBuilder.defaultValue(formatDefaultValue(prop))
+            }
+            constructorBuilder.addParameter(paramBuilder.build())
+
+            PropertySpec
+                .builder(kotlinName, type)
+                .initializer(kotlinName)
+                .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
+                .build()
+        }
+
+        builder.primaryConstructor(constructorBuilder.build())
+        builder.addProperties(propertySpecs)
+
+        if (schema.description != null) {
+            builder.addKdoc("%L", schema.description)
+        }
     }
 
     /**
@@ -319,15 +328,16 @@ internal object ModelGenerator {
         val sealedClassName = ClassName(hierarchy.modelPackage, schema.name)
         val serializerClassName = ClassName(hierarchy.modelPackage, "${schema.name}Serializer")
 
-        val schemasById = hierarchy.schemas.associateBy { it.name }
-
         val variantProperties = schema.anyOf
             .orEmpty()
             .asSequence()
             .filterIsInstance<TypeRef.Reference>()
             .associate { ref ->
-                val propNames = schemasById[ref.schemaName]?.properties?.map { it.name }?.toSet() ?: emptySet()
-                ref.schemaName to propNames
+                val props = hierarchy.schemasById[ref.schemaName]
+                    ?.properties
+                    ?.map { it.name }
+                    ?.toSet() ?: emptySet()
+                ref.schemaName to props
             }
 
         val allFields = variantProperties.values
@@ -418,55 +428,19 @@ internal object ModelGenerator {
     private fun generateDataClass(schema: SchemaModel): FileSpec {
         val className = ClassName(hierarchy.modelPackage, schema.name)
 
-        // Only apply superinterfaces for anyOf-without-discriminator variants
-        val parentEntries = hierarchy.variantParents[schema.name]
-            ?.filterKeys { parentClass ->
-                val parentName = parentClass.simpleName
-                parentName in hierarchy.anyOfWithoutDiscriminator
-            }
-        val serialName = parentEntries?.values?.firstOrNull()
-        val superinterfaces = parentEntries?.keys.orEmpty()
-
-        val sortedProps = schema.properties.sortedBy { prop ->
-            when {
-                prop.name in schema.requiredProperties && prop.defaultValue == null -> 1
-                prop.defaultValue != null -> 2
-                else -> 3
-            }
-        }
-
-        val constructorBuilder = FunSpec.constructorBuilder()
-        val propertySpecs = sortedProps.map { prop ->
-            val type = prop.type.toTypeName().copy(nullable = prop.nullable)
-            val kotlinName = prop.name.toCamelCase()
-
-            val paramBuilder = ParameterSpec.builder(kotlinName, type)
-
-            when {
-                prop.nullable -> paramBuilder.defaultValue(CodeBlock.of("null"))
-                prop.defaultValue != null -> paramBuilder.defaultValue(formatDefaultValue(prop))
-            }
-
-            constructorBuilder.addParameter(paramBuilder.build())
-
-            val propBuilder = PropertySpec
-                .builder(kotlinName, type)
-                .initializer(kotlinName)
-                .addAnnotation(
-                    AnnotationSpec
-                        .builder(SERIAL_NAME)
-                        .addMember("%S", prop.name)
-                        .build(),
-                )
-
-            propBuilder.build()
+        // For anyOf-without-discriminator variants: find parent interfaces and serialName
+        val parentNames = hierarchy.sealedHierarchies
+            .filter { (parent, variants) ->
+                parent in hierarchy.anyOfWithoutDiscriminator && schema.name in variants
+            }.keys
+        val superinterfaces = parentNames.map { ClassName(hierarchy.modelPackage, it) }
+        val serialName = parentNames.firstOrNull()?.let { parentName ->
+            hierarchy.schemasById[parentName]?.resolveSerialName(schema.name)
         }
 
         val typeSpec = TypeSpec
             .classBuilder(className)
             .addModifiers(KModifier.DATA)
-            .primaryConstructor(constructorBuilder.build())
-            .addProperties(propertySpecs)
             .addAnnotation(SERIALIZABLE)
             .addSuperinterfaces(superinterfaces)
 
@@ -479,9 +453,7 @@ internal object ModelGenerator {
             )
         }
 
-        if (schema.description != null) {
-            typeSpec.addKdoc("%L", schema.description)
-        }
+        buildConstructorAndProperties(schema, typeSpec)
 
         val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
 
