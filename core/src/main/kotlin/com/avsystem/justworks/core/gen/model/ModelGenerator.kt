@@ -209,7 +209,7 @@ internal object ModelGenerator {
         val variants = hierarchy.sealedHierarchies[schema.name]
         variants?.forEach { variantName ->
             val variantSchema = schemasById[variantName]
-            val serialName = resolveSerialName(schema, variantName)
+            val serialName = schema.resolveSerialName(variantName)
             val nestedType = buildNestedVariant(variantSchema, variantName, className, serialName)
             parentBuilder.addType(nestedType)
         }

@@ -30,7 +30,7 @@ internal class Hierarchy private constructor(
                 .flatMap { schema ->
                     val parentClass = ClassName(modelPackage, schema.name)
                     schema.variants().filterIsInstance<TypeRef.Reference>().map { ref ->
-                        ref.schemaName to (parentClass to resolveSerialName(schema, ref.schemaName))
+                        ref.schemaName to (parentClass to schema.resolveSerialName(ref.schemaName))
                     }
                 }.groupBy({ it.first }, { it.second })
                 .mapValues { (_, entries) -> entries.toMap() }

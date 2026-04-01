@@ -1,12 +1,12 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.SCHEMA_PREFIX
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.BOOLEAN
 import com.squareup.kotlinpoet.BYTE_ARRAY
-import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.DOUBLE
 import com.squareup.kotlinpoet.FLOAT
 import com.squareup.kotlinpoet.INT
@@ -72,10 +72,9 @@ internal fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && th
 /**
  * Resolves the @SerialName value for a variant within a oneOf schema.
  */
-internal fun resolveSerialName(parentSchema: SchemaModel, variantSchemaName: String): String =
-    parentSchema.discriminator
-        ?.mapping
-        ?.firstNotNullOfOrNull { (serialName, refPath) ->
-            serialName.takeIf { refPath.removePrefix("#/components/schemas/") == variantSchemaName }
-        }
-        ?: variantSchemaName
+internal fun SchemaModel.resolveSerialName(variantSchemaName: String): String = discriminator
+    ?.mapping
+    ?.firstNotNullOfOrNull { (serialName, refPath) ->
+        serialName.takeIf { refPath.removePrefix(SCHEMA_PREFIX) == variantSchemaName }
+    }
+    ?: variantSchemaName
