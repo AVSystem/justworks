@@ -9,6 +9,7 @@ import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
 import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
+import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.ModelPackage
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.RAISE
@@ -50,31 +51,29 @@ internal object ClientGenerator {
     private const val DEFAULT_TAG = "Default"
     private const val API_SUFFIX = "Api"
 
-    context(_: ModelPackage, _: ApiPackage)
+    context(hierarchy: Hierarchy, _: ApiPackage)
     fun generate(
         spec: ApiSpec,
         hasPolymorphicTypes: Boolean,
         nameRegistry: NameRegistry,
-        classNameLookup: Map<String, ClassName> = emptyMap(),
     ): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
-            generateClientFile(tag, endpoints, hasPolymorphicTypes, nameRegistry, classNameLookup)
+            generateClientFile(tag, endpoints, hasPolymorphicTypes, nameRegistry)
         }
     }
 
-    context(modelPackage: ModelPackage, apiPackage: ApiPackage)
+    context(hierarchy: Hierarchy, apiPackage: ApiPackage)
     private fun generateClientFile(
         tag: String,
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean,
         nameRegistry: NameRegistry,
-        classNameLookup: Map<String, ClassName>,
     ): FileSpec {
         val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
 
         val clientInitializer = if (hasPolymorphicTypes) {
-            val generatedSerializersModule = MemberName(modelPackage, GENERATED_SERIALIZERS_MODULE)
+            val generatedSerializersModule = MemberName(hierarchy.modelPackage, GENERATED_SERIALIZERS_MODULE)
             CodeBlock.of("${CREATE_HTTP_CLIENT}(%M)", generatedSerializersModule)
         } else {
             CodeBlock.of("${CREATE_HTTP_CLIENT}()")
@@ -103,7 +102,7 @@ internal object ClientGenerator {
             .addProperty(httpClientProperty)
 
         val methodRegistry = NameRegistry()
-        classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it, methodRegistry, classNameLookup) })
+        classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it, methodRegistry) })
 
         return FileSpec
             .builder(className)
@@ -111,10 +110,10 @@ internal object ClientGenerator {
             .build()
     }
 
-    context(_: ModelPackage)
-    private fun generateEndpointFunction(endpoint: Endpoint, methodRegistry: NameRegistry, classNameLookup: Map<String, ClassName>): FunSpec {
+    context(_: Hierarchy)
+    private fun generateEndpointFunction(endpoint: Endpoint, methodRegistry: NameRegistry): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
-        val returnBodyType = resolveReturnType(endpoint, classNameLookup)
+        val returnBodyType = resolveReturnType(endpoint)
         val returnType = HTTP_SUCCESS.parameterizedBy(returnBodyType)
 
         val funBuilder = FunSpec
@@ -126,7 +125,7 @@ internal object ClientGenerator {
         val params = endpoint.parameters.groupBy { it.location }
 
         val pathParams = params[ParameterLocation.PATH].orEmpty().map { param ->
-            ParameterSpec(param.name.toCamelCase(), param.schema.toTypeName(classNameLookup))
+            ParameterSpec(param.name.toCamelCase(), param.schema.toTypeName())
         }
 
         val queryParams = params[ParameterLocation.QUERY].orEmpty().map { param ->
@@ -148,12 +147,11 @@ internal object ClientGenerator {
         return funBuilder.build()
     }
 
-    context(_: ModelPackage)
-    private fun resolveReturnType(endpoint: Endpoint, classNameLookup: Map<String, ClassName>): TypeName =
-        endpoint.responses.entries
-            .asSequence()
-            .filter { it.key.startsWith("2") }
-            .firstNotNullOfOrNull { it.value.schema }
-            ?.toTypeName(classNameLookup)
-            ?: UNIT
+    context(_: Hierarchy)
+    private fun resolveReturnType(endpoint: Endpoint): TypeName = endpoint.responses.entries
+        .asSequence()
+        .filter { it.key.startsWith("2") }
+        .firstNotNullOfOrNull { it.value.schema }
+        ?.toTypeName()
+        ?: UNIT
 }

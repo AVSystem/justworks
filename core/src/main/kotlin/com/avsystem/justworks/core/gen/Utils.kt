@@ -2,6 +2,7 @@ package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
+import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.BOOLEAN
 import com.squareup.kotlinpoet.BYTE_ARRAY
@@ -28,8 +29,8 @@ internal val TypeRef.requiredProperties: Set<String>
         is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptySet()
     }
 
-context(modelPackage: ModelPackage)
-internal fun TypeRef.toTypeName(classNameLookup: Map<String, ClassName> = emptyMap()): TypeName = when (this) {
+context(hierarchy: Hierarchy)
+internal fun TypeRef.toTypeName(): TypeName = when (this) {
     is TypeRef.Primitive -> {
         when (type) {
             PrimitiveType.STRING -> STRING
@@ -46,15 +47,15 @@ internal fun TypeRef.toTypeName(classNameLookup: Map<String, ClassName> = emptyM
     }
 
     is TypeRef.Array -> {
-        LIST.parameterizedBy(items.toTypeName(classNameLookup))
+        LIST.parameterizedBy(items.toTypeName())
     }
 
     is TypeRef.Map -> {
-        MAP.parameterizedBy(STRING, valueType.toTypeName(classNameLookup))
+        MAP.parameterizedBy(STRING, valueType.toTypeName())
     }
 
     is TypeRef.Reference -> {
-        classNameLookup[schemaName] ?: ClassName(modelPackage, schemaName)
+        hierarchy.lookup[schemaName] ?: ClassName(hierarchy.modelPackage, schemaName)
     }
 
     is TypeRef.Inline -> {
@@ -67,3 +68,14 @@ internal fun TypeRef.toTypeName(classNameLookup: Map<String, ClassName> = emptyM
 }
 
 internal fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
+
+/**
+ * Resolves the @SerialName value for a variant within a oneOf schema.
+ */
+internal fun resolveSerialName(parentSchema: SchemaModel, variantSchemaName: String): String =
+    parentSchema.discriminator
+        ?.mapping
+        ?.firstNotNullOfOrNull { (serialName, refPath) ->
+            serialName.takeIf { refPath.removePrefix("#/components/schemas/") == variantSchemaName }
+        }
+        ?: variantSchemaName

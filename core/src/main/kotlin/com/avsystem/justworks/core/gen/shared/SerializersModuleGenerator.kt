@@ -1,6 +1,7 @@
 package com.avsystem.justworks.core.gen.shared
 
 import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.ModelPackage
 import com.avsystem.justworks.core.gen.POLYMORPHIC_FUN
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
@@ -24,7 +25,7 @@ internal object SerializersModuleGenerator {
      * Returns null if the hierarchy has no sealed types to register.
      */
 
-    context(hierarchy: ModelGenerator.HierarchyInfo, modelPackage: ModelPackage)
+    context(hierarchy: Hierarchy)
     fun generate(): FileSpec? {
         // anyOf hierarchies without a discriminator use JsonContentPolymorphicSerializer
         // with custom deserialization logic, so they don't need SerializersModule registration.
@@ -36,7 +37,7 @@ internal object SerializersModuleGenerator {
         val code = CodeBlock.builder().beginControlFlow("%T", SERIALIZERS_MODULE)
 
         for ((parent, variants) in discriminatorHierarchies) {
-            val parentClass = ClassName(modelPackage, parent)
+            val parentClass = ClassName(hierarchy.modelPackage, parent)
             code.beginControlFlow("%M(%T::class)", POLYMORPHIC_FUN, parentClass)
             for (variant in variants) {
                 val variantClass = parentClass.nestedClass(variant)
@@ -53,7 +54,7 @@ internal object SerializersModuleGenerator {
             .build()
 
         return FileSpec
-            .builder(modelPackage.name, SERIALIZERS_MODULE.simpleName)
+            .builder(hierarchy.modelPackage.name, SERIALIZERS_MODULE.simpleName)
             .addProperty(prop)
             .build()
     }
