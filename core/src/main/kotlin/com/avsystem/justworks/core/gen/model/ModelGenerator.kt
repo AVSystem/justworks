@@ -65,7 +65,7 @@ import kotlin.time.Instant
  * and one file per [EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 internal object ModelGenerator {
-    data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
+    data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec,)
 
     context(_: Hierarchy, _: NameRegistry)
     fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
@@ -83,6 +83,8 @@ internal object ModelGenerator {
                 },
             )
         }
+
+        hierarchy.add(resolvedSpec.schemas + resolvedInlineSchemas)
 
         val nestedVariantNames = hierarchy.sealedHierarchies
             .asSequence()

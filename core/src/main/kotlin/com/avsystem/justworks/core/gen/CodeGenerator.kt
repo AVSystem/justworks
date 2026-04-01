@@ -19,8 +19,11 @@ object CodeGenerator {
         modelPackage: String,
         apiPackage: String,
         outputDir: File,
-    ): Result = context(Hierarchy(spec.schemas, ModelPackage(modelPackage)), ApiPackage(apiPackage)) {
-        val (modelFiles, resolvedSpec) = context(NameRegistry()) {
+    ): Result {
+        val hierarchy = Hierarchy(ModelPackage(modelPackage))
+        hierarchy.add(spec.schemas)
+
+        val (modelFiles, resolvedSpec) = context(hierarchy, NameRegistry()) {
             ModelGenerator.generateWithResolvedSpec(spec)
         }
 
@@ -28,13 +31,13 @@ object CodeGenerator {
 
         val hasPolymorphicTypes = modelFiles.any { it.name == SERIALIZERS_MODULE.simpleName }
 
-        val clientFiles = context(NameRegistry()) {
+        val clientFiles = context(hierarchy, ApiPackage(apiPackage), NameRegistry()) {
             ClientGenerator.generate(resolvedSpec, hasPolymorphicTypes)
         }
 
         clientFiles.forEach { it.writeTo(outputDir) }
 
-        Result(modelFiles.size, clientFiles.size)
+        return Result(modelFiles.size, clientFiles.size)
     }
 
     fun generateSharedTypes(outputDir: File): Int {
