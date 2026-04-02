@@ -44,6 +44,7 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeSpec
+import com.squareup.kotlinpoet.TypeSpec.Companion.classBuilder
 import com.squareup.kotlinpoet.TypeVariableName
 import com.squareup.kotlinpoet.UNIT
 
@@ -144,18 +145,23 @@ internal object ApiClientBaseGenerator {
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
 
-        val propertySpecs = mutableListOf<PropertySpec>()
+        val classBuilder = TypeSpec
+            .classBuilder(API_CLIENT_BASE)
+            .addModifiers(KModifier.ABSTRACT)
+            .addSuperinterface(CLOSEABLE)
+            .primaryConstructor(constructorBuilder.build())
 
         val baseUrlProp = PropertySpec
             .builder(BASE_URL, STRING)
             .initializer(BASE_URL)
             .addModifiers(KModifier.PROTECTED)
             .build()
-        propertySpecs.add(baseUrlProp)
+
+        classBuilder.addProperty(baseUrlProp)
 
         for ((paramName, _) in authParams) {
             constructorBuilder.addParameter(paramName, tokenType)
-            propertySpecs.add(
+            classBuilder.addProperty(
                 PropertySpec
                     .builder(paramName, tokenType)
                     .initializer(paramName)
@@ -174,16 +180,6 @@ internal object ApiClientBaseGenerator {
             .addModifiers(KModifier.OVERRIDE)
             .addStatement("$CLIENT.close()")
             .build()
-
-        val classBuilder = TypeSpec
-            .classBuilder(API_CLIENT_BASE)
-            .addModifiers(KModifier.ABSTRACT)
-            .addSuperinterface(CLOSEABLE)
-            .primaryConstructor(constructorBuilder.build())
-
-        for (prop in propertySpecs) {
-            classBuilder.addProperty(prop)
-        }
 
         return classBuilder
             .addProperty(clientProp)
@@ -251,7 +247,7 @@ internal object ApiClientBaseGenerator {
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
-                            CodeBlock.of("Bearer \${$paramName()}"),
+                            CodeBlock.of($$"Bearer ${$$paramName()}"),
                         )
                     }
 
@@ -262,7 +258,7 @@ internal object ApiClientBaseGenerator {
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
                             CodeBlock.of(
-                                "Basic \${%T.getEncoder().encodeToString(\"${'$'}{$usernameParam()}:${'$'}{$passwordParam()}\".toByteArray())}",
+                                $$"Basic ${%T.getEncoder().encodeToString(\"${$$usernameParam()}:${$$passwordParam()}\".toByteArray())}",
                                 BASE64_CLASS,
                             ),
                         )

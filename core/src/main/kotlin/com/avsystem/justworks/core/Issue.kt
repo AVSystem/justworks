@@ -16,9 +16,3 @@ object Issue {
 }
 
 typealias Warnings = IorRaise<Nel<Issue.Warning>>
-
-context(warnings: Warnings)
-fun warn(message: String): Nothing? {
-    warnings.accumulate(nonEmptyListOf(Issue.Warning(message)))
-    return null
-}

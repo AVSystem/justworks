@@ -5,6 +5,7 @@ import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.raise.ExperimentalRaiseAccumulateApi
 import arrow.core.raise.Raise
+import arrow.core.raise.context.accumulate
 import arrow.core.raise.context.either
 import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
@@ -13,6 +14,8 @@ import arrow.core.raise.nullable
 import arrow.core.toNonEmptyListOrNull
 import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.Warnings
+import com.avsystem.justworks.core.accumulate
+import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.ContentType
@@ -31,7 +34,6 @@ import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import com.avsystem.justworks.core.toEnumOrNull
-import com.avsystem.justworks.core.warn
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
@@ -181,7 +183,6 @@ object SpecParser {
         }
     }
 
-    @OptIn(ExperimentalRaiseAccumulateApi::class)
     context(_: Warnings)
     private fun extractSecuritySchemes(
         definitions: Map<String, SwaggerSecurityScheme>,
@@ -189,8 +190,11 @@ object SpecParser {
     ): List<SecurityScheme> {
         val referencedNames = requirements.flatMap { it.keys }.toSet()
         return referencedNames.mapNotNull { name ->
-            definitions[name]?.toSecurityScheme(name)
-                ?: warn("Security requirement references undefined scheme '$name'")
+            definitions[name]?.toSecurityScheme(name).also {
+                ensureNotNullOrAccumulate(it) {
+                    Issue.Warning("Security requirement references undefined scheme '$name'")
+                }
+            }
         }
     }
 
@@ -200,7 +204,7 @@ object SpecParser {
             when (scheme?.lowercase()) {
                 "bearer" -> SecurityScheme.Bearer(name)
                 "basic" -> SecurityScheme.Basic(name)
-                else -> warn("Unsupported HTTP auth scheme '$scheme' for '$name'")
+                else -> accumulate(Issue.Warning("Unsupported HTTP auth scheme '$scheme' for '$name'"))
             }
         }
 
@@ -208,12 +212,12 @@ object SpecParser {
             when (`in`) {
                 SwaggerSecurityScheme.In.HEADER -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.HEADER)
                 SwaggerSecurityScheme.In.QUERY -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.QUERY)
-                else -> warn("Unsupported API key location '${`in`}' for '$name'")
+                else -> accumulate(Issue.Warning("Unsupported API key location '${`in`}' for '$name'"))
             }
         }
 
         else -> {
-            warn("Unsupported security scheme type '$type' for '$name'")
+            accumulate(Issue.Warning("Unsupported security scheme type '$type' for '$name'"))
         }
     }
 
