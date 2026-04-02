@@ -437,10 +437,7 @@ internal object ModelGenerator {
         val className = ClassName(hierarchy.modelPackage, schema.name)
 
         // For anyOf-without-discriminator variants: find parent interfaces and serialName
-        val parentNames = hierarchy.sealedHierarchies
-            .filter { (parent, variants) ->
-                parent in hierarchy.anyOfWithoutDiscriminator && schema.name in variants
-            }.keys
+        val parentNames = hierarchy.anyOfParents[schema.name].orEmpty()
         val superinterfaces = parentNames.map { ClassName(hierarchy.modelPackage, it) }
         val serialName = parentNames.firstOrNull()?.let { parentName ->
             hierarchy.schemasById[parentName]?.resolveSerialName(schema.name)

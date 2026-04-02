@@ -2,12 +2,10 @@ package com.avsystem.justworks.core.gen.shared
 
 import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.Hierarchy
-import com.avsystem.justworks.core.gen.ModelPackage
 import com.avsystem.justworks.core.gen.POLYMORPHIC_FUN
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.SUBCLASS_FUN
 import com.avsystem.justworks.core.gen.invoke
-import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec

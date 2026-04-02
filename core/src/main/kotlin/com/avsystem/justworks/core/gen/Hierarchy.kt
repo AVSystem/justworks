@@ -16,18 +16,21 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
     private val memoScope = MemoScope()
 
     fun addSchemas(newSchemas: List<SchemaModel>) {
-        memoScope.reset()
         schemas += newSchemas
+        memoScope.reset()
     }
 
+    /** All schemas indexed by name for quick lookup. */
     val schemasById: Map<String, SchemaModel> by memoized(memoScope) {
         schemas.associateBy { it.name }
     }
 
+    /** Schemas that define polymorphic variants via oneOf or anyOf. */
     private val polymorphicSchemas: List<SchemaModel> by memoized(memoScope) {
         schemas.filterNot { it.variants().isNullOrEmpty() }
     }
 
+    /** Maps parent schema name to its variant schema names (for both oneOf and anyOf). */
     val sealedHierarchies: Map<String, List<String>> by memoized(memoScope) {
         polymorphicSchemas
             .associate { schema ->
@@ -39,7 +42,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
             }
     }
 
-    /** Parent schema names that are anyOf without discriminator. */
+    /** Parent schema names that use anyOf without a discriminator (JsonContentPolymorphicSerializer pattern). */
     val anyOfWithoutDiscriminator: Set<String> by memoized(memoScope) {
         polymorphicSchemas
             .asSequence()
@@ -48,6 +51,17 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
             .toSet()
     }
 
+    /** Inverse of [sealedHierarchies] for anyOf-without-discriminator: variant name to its parent names. */
+    val anyOfParents: Map<String, Set<String>> by memoized(memoScope) {
+        sealedHierarchies
+            .asSequence()
+            .filter { (parent, _) -> parent in anyOfWithoutDiscriminator }
+            .flatMap { (parent, variants) -> variants.map { it to parent } }
+            .groupBy({ it.first }, { it.second })
+            .mapValues { (_, parents) -> parents.toSet() }
+    }
+
+    /** Maps schema name to its [ClassName], using nested class for discriminated hierarchy variants. */
     private val lookup: Map<String, ClassName> by memoized(memoScope) {
         sealedHierarchies
             .asSequence()
@@ -59,6 +73,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
             }.toMap()
     }
 
+    /** Resolves a schema name to its [ClassName], falling back to a flat top-level class. */
     operator fun get(name: String): ClassName = lookup[name] ?: ClassName(modelPackage, name)
 }
 
