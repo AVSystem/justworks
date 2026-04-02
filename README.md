@@ -221,16 +221,22 @@ Here is how to use them.
 
 ### Dependencies
 
-Add the required runtime dependencies to your consuming project:
+Add the required runtime dependencies and enable the experimental context parameters compiler flag:
 
 ```kotlin
+kotlin {
+    compilerOptions {
+        freeCompilerArgs.add("-Xcontext-parameters")
+    }
+}
+
 dependencies {
     implementation("io.ktor:ktor-client-core:3.1.1")
     implementation("io.ktor:ktor-client-cio:3.1.1")       // or another engine (OkHttp, Apache, etc.)
     implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-    implementation("io.arrow-kt:arrow-core:2.1.2")
+    implementation("io.arrow-kt:arrow-core:2.2.1.1")
 }
 ```
 
