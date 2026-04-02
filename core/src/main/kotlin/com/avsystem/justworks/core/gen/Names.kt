@@ -26,6 +26,19 @@ val DELETE_FUN = MemberName("io.ktor.client.request", "delete")
 val PATCH_FUN = MemberName("io.ktor.client.request", "patch")
 
 // ============================================================================
+// Ktor Forms & Multipart
+// ============================================================================
+
+val SUBMIT_FORM_FUN = MemberName("io.ktor.client.request.forms", "submitForm")
+val SUBMIT_FORM_WITH_BINARY_DATA_FUN = MemberName("io.ktor.client.request.forms", "submitFormWithBinaryData")
+val FORM_DATA_FUN = MemberName("io.ktor.client.request.forms", "formData")
+val CHANNEL_PROVIDER = ClassName("io.ktor.client.request.forms", "ChannelProvider")
+val PARAMETERS_FUN = MemberName("io.ktor.http", "parameters")
+val CONTENT_TYPE_CLASS = ClassName("io.ktor.http", "ContentType")
+val HEADERS_CLASS = ClassName("io.ktor.http", "Headers")
+val HTTP_METHOD_CLASS = ClassName("io.ktor.http", "HttpMethod")
+
+// ============================================================================
 // kotlinx.serialization
 // ============================================================================
 
@@ -98,6 +111,7 @@ val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuild
 val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
 val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
 val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")
+val UUID_SERIALIZER = ClassName("com.avsystem.justworks", "UuidSerializer")
 
 // ============================================================================
 // Shared property / parameter names (used by multiple generators)
@@ -111,4 +125,3 @@ const val APPLY_AUTH = "applyAuth"
 const val SAFE_CALL = "safeCall"
 const val CREATE_HTTP_CLIENT = "createHttpClient"
 const val GENERATED_SERIALIZERS_MODULE = "generatedSerializersModule"
-const val NETWORK_ERROR = "Network error"

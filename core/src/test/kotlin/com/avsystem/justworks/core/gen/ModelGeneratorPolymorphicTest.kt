@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.EnumModel
@@ -16,9 +17,12 @@ import kotlin.test.assertTrue
 
 class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
-    private val generator = ModelGenerator(modelPackage)
 
-    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList(),) = ApiSpec(
+    private fun generate(spec: ApiSpec) = context(ModelPackage(modelPackage)) {
+        ModelGenerator.generate(spec, NameRegistry())
+    }
+
+    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
         title = "Test",
         version = "1.0",
         endpoints = emptyList(),
@@ -46,7 +50,7 @@ class ModelGeneratorPolymorphicTest {
         discriminator = discriminator,
     )
 
-    private fun findType(files: List<com.squareup.kotlinpoet.FileSpec>, name: String,): TypeSpec {
+    private fun findType(files: List<com.squareup.kotlinpoet.FileSpec>, name: String): TypeSpec {
         for (file in files) {
             val found = file.members.filterIsInstance<TypeSpec>().find { it.name == name }
             if (found != null) return found
@@ -86,7 +90,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("sideLength"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         assertTrue(KModifier.SEALED in shapeType.modifiers, "Expected SEALED modifier on Shape")
@@ -103,7 +107,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         val annotations = shapeType.annotations.map { it.typeName.toString() }
@@ -126,7 +130,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val superinterfaces = circleType.superinterfaces.keys.map { it.toString() }
@@ -150,7 +154,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val serialNameAnnotation =
@@ -184,7 +188,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         val discriminatorAnnotation =
@@ -217,7 +221,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val serialNameAnnotation =
@@ -245,7 +249,7 @@ class ModelGeneratorPolymorphicTest {
             )
         val circleSchema = schema(name = "Circle")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val shapeFile = findFile(files, "Shape")
 
         val optInAnnotation =
@@ -288,7 +292,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Dog")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
+        val files = generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
         val extendedDogType = findType(files, "ExtendedDog")
         val constructor = assertNotNull(extendedDogType.primaryConstructor, "Expected primary constructor")
 
@@ -324,7 +328,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Dog")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
+        val files = generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
         val extendedDogType = findType(files, "ExtendedDog")
         val constructor = assertNotNull(extendedDogType.primaryConstructor)
 
@@ -375,7 +379,7 @@ class ModelGeneratorPolymorphicTest {
                     ),
             )
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(networkMeshSchema, extenderPropsSchema, ethernetPropsSchema)),
         )
         val networkMeshType = findType(files, "NetworkMeshDevice")
@@ -411,7 +415,7 @@ class ModelGeneratorPolymorphicTest {
                     ),
             )
 
-        val files = generator.generate(spec(schemas = listOf(networkMeshSchema, extenderPropsSchema)))
+        val files = generate(spec(schemas = listOf(networkMeshSchema, extenderPropsSchema)))
         val extenderType = findType(files, "ExtenderDeviceProperties")
 
         // Verify @SerialName uses wrapper property name
@@ -445,7 +449,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val paymentType = findType(files, "Payment")
 
         val serializableAnnotation = paymentType.annotations.find {
@@ -475,7 +479,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val serializerType = findType(files, "PaymentSerializer")
 
         assertEquals(TypeSpec.Kind.OBJECT, serializerType.kind, "PaymentSerializer should be an object")
@@ -503,7 +507,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val serializerType = findType(files, "PaymentSerializer")
         val selectDeserializer = serializerType.funSpecs.find { it.name == "selectDeserializer" }
         assertNotNull(selectDeserializer, "PaymentSerializer should have selectDeserializer function")
@@ -537,7 +541,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("amount"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, typeASchema, typeBSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, typeASchema, typeBSchema)))
         val serializerType = findType(files, "PaymentSerializer")
         val selectDeserializer = serializerType.funSpecs.find { it.name == "selectDeserializer" }
         assertNotNull(selectDeserializer, "PaymentSerializer should have selectDeserializer function")
@@ -566,7 +570,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val creditCardType = findType(files, "CreditCard")
 
         val annotations = creditCardType.annotations.map { it.typeName.toString() }
@@ -590,7 +594,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         // Should have plain @Serializable, NOT @Serializable(with = ...)
@@ -646,7 +650,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("lastSeen"),
         )
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
         )
 
@@ -699,7 +703,7 @@ class ModelGeneratorPolymorphicTest {
             )
         }
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(networkMeshSchema) + variantSchemas),
         )
 
@@ -760,7 +764,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("lastSeen"),
         )
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
         )
 
@@ -797,7 +801,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Pet")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(petSchema, dogSchema)))
+        val files = generate(spec(schemas = listOf(petSchema, dogSchema)))
         val dogType = findType(files, "Dog")
 
         val superinterfaces = dogType.superinterfaces.keys.map { it.toString() }

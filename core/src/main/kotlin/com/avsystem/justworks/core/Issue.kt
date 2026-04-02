@@ -6,7 +6,6 @@ import arrow.core.Nel
 import arrow.core.nonEmptyListOf
 import arrow.core.raise.ExperimentalRaiseAccumulateApi
 import arrow.core.raise.IorRaise
-import arrow.core.raise.RaiseAccumulate
 import kotlin.contracts.ExperimentalContracts
 
 object Issue {

@@ -1,5 +1,9 @@
-package com.avsystem.justworks.core.gen
+package com.avsystem.justworks.core.gen.shared
 
+import com.avsystem.justworks.core.gen.BODY
+import com.avsystem.justworks.core.gen.HTTP_ERROR
+import com.avsystem.justworks.core.gen.HTTP_ERROR_TYPE
+import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.INT
@@ -10,12 +14,12 @@ import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeVariableName
 
 /**
- * Generates [FileSpec]s containing:
+ * Generates [com.squareup.kotlinpoet.FileSpec]s containing:
  * - `HttpErrorType` enum class with Client, Server, Network values
  * - `HttpError` data class with code, message, type fields
  * - `HttpSuccess<T>` data class wrapping successful responses
  */
-object ApiResponseGenerator {
+internal object ApiResponseGenerator {
     private const val CODE = "code"
     private const val MESSAGE = "message"
     private const val TYPE = "type"
@@ -42,10 +46,22 @@ object ApiResponseGenerator {
             .classBuilder(HTTP_ERROR)
             .addModifiers(KModifier.DATA)
             .primaryConstructor(primaryConstructor)
-            .addProperty(PropertySpec.builder(CODE, INT).initializer(CODE).build())
-            .addProperty(PropertySpec.builder(MESSAGE, STRING).initializer(MESSAGE).build())
-            .addProperty(PropertySpec.builder(TYPE, HTTP_ERROR_TYPE).initializer(TYPE).build())
-            .build()
+            .addProperty(
+                PropertySpec
+                    .builder(CODE, INT)
+                    .initializer(CODE)
+                    .build(),
+            ).addProperty(
+                PropertySpec
+                    .builder(MESSAGE, STRING)
+                    .initializer(MESSAGE)
+                    .build(),
+            ).addProperty(
+                PropertySpec
+                    .builder(TYPE, HTTP_ERROR_TYPE)
+                    .initializer(TYPE)
+                    .build(),
+            ).build()
 
         return FileSpec
             .builder(HTTP_ERROR)

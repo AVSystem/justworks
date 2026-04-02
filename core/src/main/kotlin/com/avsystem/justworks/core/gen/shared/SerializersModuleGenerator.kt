@@ -1,6 +1,12 @@
-package com.avsystem.justworks.core.gen
+package com.avsystem.justworks.core.gen.shared
 
-import com.avsystem.justworks.core.gen.ModelGenerator.HierarchyInfo
+import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.ModelPackage
+import com.avsystem.justworks.core.gen.POLYMORPHIC_FUN
+import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.SUBCLASS_FUN
+import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -12,17 +18,13 @@ import com.squareup.kotlinpoet.PropertySpec
  * Produces a top-level `val generatedSerializersModule: SerializersModule` property
  * that registers each sealed interface with its subclass variants.
  */
-class SerializersModuleGenerator(private val modelPackage: String) {
-    companion object {
-        const val FILE_NAME = "SerializersModule"
-    }
-
+internal object SerializersModuleGenerator {
     /**
-     * Generates a [FileSpec] containing the SerializersModule registration.
+     * Generates a [com.squareup.kotlinpoet.FileSpec] containing the SerializersModule registration.
      * Returns null if the hierarchy has no sealed types to register.
      */
 
-    context(hierarchy: HierarchyInfo)
+    context(hierarchy: ModelGenerator.HierarchyInfo, modelPackage: ModelPackage)
     fun generate(): FileSpec? {
         // anyOf hierarchies without a discriminator use JsonContentPolymorphicSerializer
         // with custom deserialization logic, so they don't need SerializersModule registration.
@@ -45,14 +47,13 @@ class SerializersModuleGenerator(private val modelPackage: String) {
 
         code.endControlFlow()
 
-        val prop =
-            PropertySpec
-                .builder(GENERATED_SERIALIZERS_MODULE, SERIALIZERS_MODULE)
-                .initializer(code.build())
-                .build()
+        val prop = PropertySpec
+            .builder(GENERATED_SERIALIZERS_MODULE, SERIALIZERS_MODULE)
+            .initializer(code.build())
+            .build()
 
         return FileSpec
-            .builder(modelPackage, FILE_NAME)
+            .builder(modelPackage.name, SERIALIZERS_MODULE.simpleName)
             .addProperty(prop)
             .build()
     }
