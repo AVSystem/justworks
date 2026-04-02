@@ -45,49 +45,50 @@ Each spec gets its own Gradle task (`justworksGenerate<Name>`) and output direct
 ./gradlew justworksGenerateAll
 ```
 
-Generated sources are automatically wired into Kotlin source sets, so `compileKotlin` depends on code generation -- no extra configuration needed.
+Generated sources are automatically wired into Kotlin source sets, so `compileKotlin` depends on code generation -- no
+extra configuration needed.
 
 ### Configuration options
 
-| Property       | Required | Default                  | Description                          |
-|----------------|----------|--------------------------|--------------------------------------|
-| `specFile`     | Yes      | --                       | Path to the OpenAPI spec (.yaml/.json) |
-| `packageName`  | Yes      | --                       | Base package for generated code      |
-| `apiPackage`   | No       | `$packageName.api`       | Package for API client classes       |
-| `modelPackage` | No       | `$packageName.model`     | Package for model/data classes       |
+| Property       | Required | Default              | Description                            |
+|----------------|----------|----------------------|----------------------------------------|
+| `specFile`     | Yes      | --                   | Path to the OpenAPI spec (.yaml/.json) |
+| `packageName`  | Yes      | --                   | Base package for generated code        |
+| `apiPackage`   | No       | `$packageName.api`   | Package for API client classes         |
+| `modelPackage` | No       | `$packageName.model` | Package for model/data classes         |
 
 ## Supported OpenAPI Features
 
 ### Schema Types
 
-| OpenAPI type   | Format       | Kotlin type       |
-|----------------|--------------|-------------------|
-| `string`       | *(default)*  | `String`          |
-| `string`       | `date`       | `LocalDate`       |
-| `string`       | `date-time`  | `Instant`         |
-| `string`       | `uuid`       | `Uuid`            |
-| `string`       | `byte`       | `ByteArray`       |
-| `string`       | `binary`     | `ByteArray`       |
-| `integer`      | `int32`      | `Int`             |
-| `integer`      | `int64`      | `Long`            |
-| `number`       | `float`      | `Float`           |
-| `number`       | `double`     | `Double`          |
-| `boolean`      | --           | `Boolean`         |
-| `array`        | --           | `List<T>`         |
-| `object`       | --           | data class        |
-| `additionalProperties` | --   | `Map<String, T>`  |
+| OpenAPI type           | Format      | Kotlin type      |
+|------------------------|-------------|------------------|
+| `string`               | *(default)* | `String`         |
+| `string`               | `date`      | `LocalDate`      |
+| `string`               | `date-time` | `Instant`        |
+| `string`               | `uuid`      | `Uuid`           |
+| `string`               | `byte`      | `ByteArray`      |
+| `string`               | `binary`    | `ByteArray`      |
+| `integer`              | `int32`     | `Int`            |
+| `integer`              | `int64`     | `Long`           |
+| `number`               | `float`     | `Float`          |
+| `number`               | `double`    | `Double`         |
+| `boolean`              | --          | `Boolean`        |
+| `array`                | --          | `List<T>`        |
+| `object`               | --          | data class       |
+| `additionalProperties` | --          | `Map<String, T>` |
 
 Other string formats (`email`, `uri`, `hostname`, etc.) are kept as `String`.
 
 ### Composition & Polymorphism
 
-| Feature | Support | Generated Kotlin |
-|---------|---------|-----------------|
-| `allOf` | Full | Merged data class (properties from all schemas) |
-| `oneOf` with discriminator | Full | `sealed interface` + variant data classes with `@JsonClassDiscriminator` |
-| `anyOf` with discriminator | Full | Same as `oneOf` |
+| Feature                       | Support | Generated Kotlin                                                                   |
+|-------------------------------|---------|------------------------------------------------------------------------------------|
+| `allOf`                       | Full    | Merged data class (properties from all schemas)                                    |
+| `oneOf` with discriminator    | Full    | `sealed interface` + variant data classes with `@JsonClassDiscriminator`           |
+| `anyOf` with discriminator    | Full    | Same as `oneOf`                                                                    |
 | `anyOf` without discriminator | Partial | `sealed interface` + `JsonContentPolymorphicSerializer` (field-presence heuristic) |
-| Discriminator mapping | Full | `@SerialName` on variants |
+| Discriminator mapping         | Full    | `@SerialName` on variants                                                          |
 
 A `SerializersModule` is auto-generated when discriminated polymorphic types are present.
 
@@ -101,22 +102,24 @@ A `SerializersModule` is auto-generated when discriminated polymorphic types are
 
 ### Parameters & Request Bodies
 
-| Feature | Status |
-|---------|--------|
-| Path parameters | Supported |
-| Query parameters | Supported |
-| Header parameters | Supported |
-| Cookie parameters | Not yet supported |
-| `application/json` request body | Supported |
-| Form data / multipart | Not supported |
+| Feature                         | Status            |
+|---------------------------------|-------------------|
+| Path parameters                 | Supported         |
+| Query parameters                | Supported         |
+| Header parameters               | Supported         |
+| Cookie parameters               | Not yet supported |
+| `application/json` request body | Supported         |
+| Form data / multipart           | Not supported     |
 
 ### Not Supported
 
-Callbacks, links, webhooks, XML content types, and OpenAPI vendor extensions (`x-*`) are not processed. The plugin logs warnings for callbacks and links found in a spec.
+Callbacks, links, webhooks, XML content types, and OpenAPI vendor extensions (`x-*`) are not processed. The plugin logs
+warnings for callbacks and links found in a spec.
 
 ## Generated Code Structure
 
-The plugin produces two categories of output: **shared types** (generated once) and **per-spec types** (generated per registered spec).
+The plugin produces two categories of output: **shared types** (generated once) and **per-spec types** (generated per
+registered spec).
 
 ### Output Layout
 
@@ -128,7 +131,7 @@ build/generated/justworks/
 │       ├── HttpError.kt              # HttpErrorType enum + HttpError data class
 │       └── HttpSuccess.kt            # HttpSuccess<T> data class
 │
-└── {specName}/
+└── specName/
     └── com/example/
         ├── model/
         │   ├── Pet.kt                # @Serializable data class
@@ -146,7 +149,8 @@ build/generated/justworks/
 - **Data classes** -- one per named schema. Properties annotated with `@SerialName`, sorted required-first.
 - **Enums** -- constants in `UPPER_SNAKE_CASE` with `@SerialName` for the wire value.
 - **Sealed interfaces** -- for `oneOf`/`anyOf` schemas. Variants are separate data classes implementing the interface.
-- **SerializersModule** -- top-level `val generatedSerializersModule` registering all polymorphic hierarchies. Only generated when needed.
+- **SerializersModule** -- top-level `val generatedSerializersModule` registering all polymorphic hierarchies. Only
+  generated when needed.
 
 ### API Package
 
@@ -156,11 +160,11 @@ Each endpoint becomes a `suspend` function with `context(Raise<HttpError>)` that
 
 ### Gradle Tasks
 
-| Task | Description |
-|------|-------------|
-| `justworksSharedTypes` | Generates shared types (once per build) |
+| Task                      | Description                                           |
+|---------------------------|-------------------------------------------------------|
+| `justworksSharedTypes`    | Generates shared types (once per build)               |
 | `justworksGenerate<Name>` | Generates code for one spec (depends on shared types) |
-| `justworksGenerateAll` | Aggregate -- triggers all spec tasks |
+| `justworksGenerateAll`    | Aggregate -- triggers all spec tasks                  |
 
 `compileKotlin` depends on `justworksGenerateAll`, so generation runs automatically.
 
@@ -185,7 +189,8 @@ justworks {
 
 ### Ktor Engine
 
-The generated `HttpClient` is created without an explicit engine, so Ktor uses whichever engine is on the classpath. Switch engines by changing your dependency:
+The generated `HttpClient` is created without an explicit engine, so Ktor uses whichever engine is on the classpath.
+Switch engines by changing your dependency:
 
 ```kotlin
 dependencies {
@@ -198,7 +203,9 @@ dependencies {
 
 ### JSON Configuration
 
-The internal `Json` instance uses default settings (`ignoreUnknownKeys = false`, `isLenient = false`). If you need a custom `Json` for use outside the client, configure it yourself and include the generated `SerializersModule` when your spec has polymorphic types:
+The internal `Json` instance uses default settings (`ignoreUnknownKeys = false`, `isLenient = false`). If you need a
+custom `Json` for use outside the client, configure it yourself and include the generated `SerializersModule` when your
+spec has polymorphic types:
 
 ```kotlin
 val json = Json {
@@ -232,7 +239,8 @@ dependencies {
 Each generated client extends `ApiClientBase` and creates its own pre-configured `HttpClient` internally.
 You only need to provide the base URL and authentication credentials.
 
-Class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). Untagged endpoints go to `DefaultApi`.
+Class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). Untagged endpoints go
+to `DefaultApi`.
 
 ```kotlin
 val client = PetsApi(
@@ -241,7 +249,8 @@ val client = PetsApi(
 )
 ```
 
-The `token` parameter is a `() -> String` lambda called on every request and sent as a `Bearer` token in the `Authorization` header. This lets you supply a provider that refreshes automatically:
+The `token` parameter is a `() -> String` lambda called on every request and sent as a `Bearer` token in the
+`Authorization` header. This lets you supply a provider that refreshes automatically:
 
 ```kotlin
 val client = PetsApi(
@@ -254,7 +263,9 @@ The client implements `Closeable` -- call `client.close()` when done to release 
 
 ### Making Requests
 
-Every endpoint becomes a `suspend` function on the client. Functions use Arrow's [Raise](https://arrow-kt.io/docs/typed-errors/) for structured error handling -- they require a `context(Raise<HttpError>)` and return `HttpSuccess<T>` on success:
+Every endpoint becomes a `suspend` function on the client. Functions use
+Arrow's [Raise](https://arrow-kt.io/docs/typed-errors/) for structured error handling -- they require a
+`context(Raise<HttpError>)` and return `HttpSuccess<T>` on success:
 
 ```kotlin
 // Inside a Raise<HttpError> context (e.g., within either { ... })
@@ -271,7 +282,8 @@ val result = client.findPets(status = "available", limit = 20)
 
 ### Error Handling
 
-Generated endpoints use [Arrow's Raise](https://arrow-kt.io/docs/typed-errors/) -- errors are raised, not returned as `Either`. Use Arrow's `either { ... }` block to obtain an `Either<HttpError, HttpSuccess<T>>`:
+Generated endpoints use [Arrow's Raise](https://arrow-kt.io/docs/typed-errors/) -- errors are raised, not returned as
+`Either`. Use Arrow's `either { ... }` block to obtain an `Either<HttpError, HttpSuccess<T>>`:
 
 ```kotlin
 val result: Either<HttpError, HttpSuccess<Pet>> = either {
@@ -295,26 +307,29 @@ result.fold(
 
 `HttpError` is a data class with the following fields:
 
-| Field     | Type            | Description                              |
-|-----------|-----------------|------------------------------------------|
+| Field     | Type            | Description                                  |
+|-----------|-----------------|----------------------------------------------|
 | `code`    | `Int`           | HTTP status code (or `0` for network errors) |
-| `message` | `String`        | Response body text or exception message  |
-| `type`    | `HttpErrorType` | Category of the error                    |
+| `message` | `String`        | Response body text or exception message      |
+| `type`    | `HttpErrorType` | Category of the error                        |
 
 `HttpErrorType` categorizes errors:
 
 | `HttpErrorType` value | Covered statuses / scenario        |
-|-----------------------|-------------------------------------|
+|-----------------------|------------------------------------|
 | `Client`              | HTTP 4xx client errors             |
 | `Server`              | HTTP 5xx server errors             |
 | `Redirect`            | HTTP 3xx redirect responses        |
 | `Network`             | I/O failures, timeouts, DNS issues |
 
-Network errors (connection timeouts, DNS failures) are caught and reported as `HttpError(code = 0, ..., type = HttpErrorType.Network)` instead of propagating exceptions.
+Network errors (connection timeouts, DNS failures) are caught and reported as
+`HttpError(code = 0, ..., type = HttpErrorType.Network)` instead of propagating exceptions.
 
 ## Publishing
 
-Releases are published to [Maven Central](https://central.sonatype.com/) automatically when a version tag (`v*`) is pushed. The CD pipeline runs CI checks first, then publishes signed artifacts via the [vanniktech maven-publish](https://github.com/vanniktech/gradle-maven-publish-plugin) plugin.
+Releases are published to [Maven Central](https://central.sonatype.com/) automatically when a version tag (`v*`) is
+pushed. The CD pipeline runs CI checks first, then publishes signed artifacts via
+the [vanniktech maven-publish](https://github.com/vanniktech/gradle-maven-publish-plugin) plugin.
 
 To trigger a release:
 
