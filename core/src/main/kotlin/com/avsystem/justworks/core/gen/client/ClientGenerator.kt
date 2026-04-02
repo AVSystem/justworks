@@ -12,7 +12,6 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.ModelPackage
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.RAISE
-import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
@@ -93,7 +92,7 @@ internal object ClientGenerator {
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
 
-        for ((paramName, _) in authParams) {
+        for (paramName in authParams) {
             constructorBuilder.addParameter(paramName, tokenType)
             classBuilder.addSuperclassConstructorParameter(paramName)
         }

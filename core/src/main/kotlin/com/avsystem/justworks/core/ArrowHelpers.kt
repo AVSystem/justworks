@@ -18,13 +18,15 @@ inline fun <Error> ensureOrAccumulate(condition: Boolean, error: () -> Error) {
 
 @OptIn(ExperimentalContracts::class)
 context(iorRaise: IorRaise<Nel<Error>>)
-inline fun <Error, B : Any> ensureNotNullOrAccumulate(value: B?, error: () -> Error) {
+inline fun <Error, B : Any> ensureNotNullOrAccumulate(value: B?, error: () -> Error): B? {
     contract { callsInPlace(error, AT_MOST_ONCE) }
     if (value == null) {
         iorRaise.accumulate(nonEmptyListOf(error()))
     }
+    return value
 }
 
+/** Accumulates a single error and returns `null`, for use in `when` branches that must yield a nullable result. */
 context(iorRaise: IorRaise<Nel<Error>>)
 fun <Error> accumulate(error: Error): Nothing? {
     iorRaise.accumulate(nonEmptyListOf(error))

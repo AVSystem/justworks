@@ -50,13 +50,15 @@ abstract class JustworksSharedTypesTask : DefaultTask() {
         }
 
         specs
-            .asSequence()
             .flatMap { it.securitySchemes }
-            .groupingBy { it.name }
-            .eachCount()
+            .groupBy { it.name }
             .forEach { (name, schemes) ->
-                if (schemes > 1) {
-                    logger.warn("Security scheme '$name' defined with conflicting types — using first occurrence")
+                if (schemes.size > 1) {
+                    val types = schemes.map { it::class.simpleName }
+                    logger.warn(
+                        "Security scheme '$name' defined ${schemes.size} times with types $types — " +
+                            "using first occurrence (${types.first()})",
+                    )
                 }
             }
 

@@ -5,7 +5,6 @@ import arrow.core.getOrElse
 import arrow.core.left
 import arrow.core.raise.ExperimentalRaiseAccumulateApi
 import arrow.core.raise.Raise
-import arrow.core.raise.context.accumulate
 import arrow.core.raise.context.either
 import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
@@ -188,11 +187,9 @@ object SpecParser {
     ): List<SecurityScheme> {
         val referencedNames = requirements.flatMap { it.keys }.toSet()
         return referencedNames.mapNotNull { name ->
-            definitions[name]?.toSecurityScheme(name).also {
-                ensureNotNullOrAccumulate(it) {
-                    Issue.Warning("Security requirement references undefined scheme '$name'")
-                }
-            }
+            ensureNotNullOrAccumulate(definitions[name]) {
+                Issue.Warning("Security requirement references undefined scheme '$name'")
+            }?.toSecurityScheme(name)
         }
     }
 
