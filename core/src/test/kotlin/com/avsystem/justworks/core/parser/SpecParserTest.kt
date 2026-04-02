@@ -221,7 +221,7 @@ class SpecParserTest : SpecParserTestBase() {
         // The $ref parameter (LimitParam) should be resolved to an actual parameter
         val limitParam =
             listOrders.parameters.find { it.name == "limit" }
-                ?: fail("limit parameter not found -- \$ref parameter not resolved")
+                ?: fail($$"limit parameter not found -- $ref parameter not resolved")
         assertEquals(ParameterLocation.QUERY, limitParam.location)
     }
 
@@ -311,7 +311,7 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `property with allOf reference resolves to referenced type`() {
         val spec =
-            """
+            $$"""
             openapi: 3.0.0
             info:
               title: Test
@@ -331,7 +331,7 @@ class SpecParserTest : SpecParserTestBase() {
                       type: string
                     config:
                       allOf:
-                        - ${'$'}ref: '#/components/schemas/TaskConfig'
+                        - $ref: '#/components/schemas/TaskConfig'
                   required:
                     - name
             """.trimIndent()
@@ -425,7 +425,7 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `ref wrapper schema has underlyingType Reference`() {
         val spec = parseSpec(
-            """
+            $$"""
             openapi: 3.0.0
             info:
               title: Test
@@ -439,7 +439,7 @@ class SpecParserTest : SpecParserTestBase() {
                     name:
                       type: string
                 PetAlias:
-                  ${'$'}ref: '#/components/schemas/Pet'
+                  $ref: '#/components/schemas/Pet'
             """.trimIndent().toTempFile(),
         )
 
@@ -477,7 +477,7 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `schema with allOf has no underlyingType`() {
         val spec = parseSpec(
-            """
+            $$"""
             openapi: 3.0.0
             info:
               title: Test
@@ -492,7 +492,7 @@ class SpecParserTest : SpecParserTestBase() {
                       type: integer
                 Extended:
                   allOf:
-                    - ${'$'}ref: '#/components/schemas/Base'
+                    - $ref: '#/components/schemas/Base'
                   type: object
                   properties:
                     name:

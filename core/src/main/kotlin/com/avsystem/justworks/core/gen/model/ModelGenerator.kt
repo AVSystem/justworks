@@ -245,7 +245,7 @@ internal object ModelGenerator {
         }
 
         if (schema.description != null) {
-            typeSpec.addKdoc("%L", schema.description)
+            typeSpec.addKdoc("%L", schema.description.sanitizeKdoc())
         }
 
         val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
@@ -425,7 +425,7 @@ internal object ModelGenerator {
         }
 
         if (schema.description != null) {
-            typeSpec.addKdoc("%L", schema.description)
+            typeSpec.addKdoc("%L", schema.description.sanitizeKdoc())
         }
 
         val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
@@ -644,7 +644,7 @@ internal object ModelGenerator {
         val typeAlias = TypeAliasSpec.builder(schema.name, primitiveType)
 
         if (schema.description != null) {
-            typeAlias.addKdoc("%L", schema.description)
+            typeAlias.addKdoc("%L", schema.description.sanitizeKdoc())
         }
 
         return FileSpec
