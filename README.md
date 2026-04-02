@@ -79,9 +79,9 @@ dependencies {
 ### Creating the Client
 
 Each generated client extends `ApiClientBase` and creates its own pre-configured `HttpClient` internally.
-You only need to provide the base URL and authentication credentials:
+You only need to provide the base URL and authentication credentials.
 
-Generated client class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). If the spec has no tags, the class is named `DefaultApi`.
+Class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). Untagged endpoints go to `DefaultApi`.
 
 ```kotlin
 val client = PetsApi(
@@ -90,7 +90,7 @@ val client = PetsApi(
 )
 ```
 
-Auth parameters are lambdas (`() -> String`), so you can supply a token provider that refreshes automatically:
+The `token` parameter is a `() -> String` lambda called on every request and sent as a `Bearer` token in the `Authorization` header. This lets you supply a provider that refreshes automatically:
 
 ```kotlin
 val client = PetsApi(
@@ -100,17 +100,6 @@ val client = PetsApi(
 ```
 
 The client implements `Closeable` -- call `client.close()` when done to release HTTP resources.
-
-### Authentication
-
-The generated constructor always takes a `baseUrl: String` and a `token: () -> String` parameter. The `token` lambda is called on each request and its value is sent as a `Bearer` token in the `Authorization` header:
-
-```kotlin
-val client = PetsApi(
-    baseUrl = "https://api.example.com",
-    token = { "your-bearer-token" },
-)
-```
 
 ### Making Requests
 
@@ -195,30 +184,6 @@ val json = Json {
     serializersModule = com.example.petstore.model.generatedSerializersModule
 }
 ```
-
-### Multi-Spec Configuration
-
-When your project consumes multiple APIs, register each spec separately.
-The plugin generates independent client classes per spec:
-
-```kotlin
-justworks {
-    specs {
-        register("petstore") {
-            specFile = file("api/petstore.yaml")
-            packageName = "com.example.petstore"
-        }
-        register("payments") {
-            specFile = file("api/payments.yaml")
-            packageName = "com.example.payments"
-            apiPackage = "com.example.payments.client"
-            modelPackage = "com.example.payments.dto"
-        }
-    }
-}
-```
-
-Each spec gets its own Gradle task (`justworksGenerate<Name>`) and output directory. The generated clients are independent and can be used side by side.
 
 ## Publishing
 
