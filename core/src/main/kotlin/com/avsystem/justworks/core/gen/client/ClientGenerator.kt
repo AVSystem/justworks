@@ -17,6 +17,7 @@ import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.sanitizeKdoc
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
@@ -139,6 +140,25 @@ internal object ClientGenerator {
 
         if (endpoint.requestBody != null) {
             funBuilder.addParameters(buildBodyParams(endpoint.requestBody))
+        }
+
+        val kdocParts = mutableListOf<String>()
+        endpoint.summary?.let { kdocParts.add(it.sanitizeKdoc()) }
+        endpoint.description?.let {
+            if (kdocParts.isNotEmpty()) kdocParts.add("")
+            kdocParts.add(it.sanitizeKdoc())
+        }
+        val paramDocs = endpoint.parameters.filter { it.description != null }
+        if (paramDocs.isNotEmpty() && kdocParts.isNotEmpty()) kdocParts.add("")
+        paramDocs.forEach { param ->
+            kdocParts.add("@param ${param.name.toCamelCase()} ${param.description?.sanitizeKdoc()}")
+        }
+        if (kdocParts.isNotEmpty()) {
+            funBuilder.addKdoc("%L", kdocParts.joinToString("\n"))
+        }
+        if (returnBodyType != UNIT) {
+            if (kdocParts.isNotEmpty()) funBuilder.addKdoc("\n\n")
+            funBuilder.addKdoc("@return [%T] containing [%T] on success", HTTP_SUCCESS, returnBodyType)
         }
 
         funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))

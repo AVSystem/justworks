@@ -124,6 +124,7 @@ class InlineTypeResolverTest {
                     parameters = emptyList(),
                     requestBody = null,
                     responses = mapOf("200" to Response("200", null, inline)),
+                    description = null,
                 ),
             ),
         )
@@ -157,6 +158,7 @@ class InlineTypeResolverTest {
                     parameters = emptyList(),
                     requestBody = RequestBody(true, ContentType.JSON_CONTENT_TYPE, inline),
                     responses = emptyMap(),
+                    description = null,
                 ),
             ),
         )

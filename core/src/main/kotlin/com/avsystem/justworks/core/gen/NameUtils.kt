@@ -43,6 +43,13 @@ fun String.toEnumConstantName(): String {
 fun String.toInlinedName(): String = replace(".", "_")
 
 /**
+ * Sanitizes a string for safe inclusion in KDoc.
+ * Escapes comment terminators that would break generated Kotlin source.
+ */
+fun String.sanitizeKdoc(): String = replace("*/", "&#42;/")
+    .replace("/*", "/&#42;")
+
+/**
  * Generates a PascalCase operation name from HTTP method and path.
  * Path parameters like {id} become "ById", {userId} becomes "ByUserId".
  * Handles hyphens, underscores, and dots in path segments.
