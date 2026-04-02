@@ -6,6 +6,7 @@ import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.TypeName
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 
 class TypeMappingTest {
     private val pkg = ModelPackage("com.example.model")
@@ -115,14 +116,13 @@ class TypeMappingTest {
     // -- Inline --
 
     @Test
-    fun `maps Inline to ClassName using contextHint`() {
+    fun `Inline throws error because it should be resolved before type mapping`() {
         val ref = TypeRef.Inline(
             properties = listOf(PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
             requiredProperties = setOf("name"),
             contextHint = "Pet.Address",
         )
-        val result = map(ref)
-        assertEquals("com.example.model.Pet_Address", result.toString())
+        assertFailsWith<IllegalStateException> { map(ref) }
     }
 
     // -- SCHM-07: Instant mapping verification --

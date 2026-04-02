@@ -4,7 +4,6 @@ import com.avsystem.justworks.core.gen.client.ClientGenerator
 import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.gen.shared.ApiClientBaseGenerator
 import com.avsystem.justworks.core.gen.shared.ApiResponseGenerator
-import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.model.ApiSpec
 import java.io.File
 
@@ -21,12 +20,17 @@ object CodeGenerator {
         apiPackage: String,
         outputDir: File,
     ): Result = context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
-        val modelFiles = ModelGenerator.generate(spec)
+        val modelRegistry = NameRegistry()
+        val apiRegistry = NameRegistry()
+
+        val (modelFiles, resolvedSpec) = ModelGenerator.generateWithResolvedSpec(spec, modelRegistry)
+
         modelFiles.forEach { it.writeTo(outputDir) }
 
-        val hasPolymorphicTypes = modelFiles.any { it.name == SerializersModuleGenerator.FILE_NAME }
+        val hasPolymorphicTypes = modelFiles.any { it.name == SERIALIZERS_MODULE.simpleName }
 
-        val clientFiles = ClientGenerator.generate(spec, hasPolymorphicTypes)
+        val clientFiles = ClientGenerator.generate(resolvedSpec, hasPolymorphicTypes, apiRegistry)
+
         clientFiles.forEach { it.writeTo(outputDir) }
 
         return Result(modelFiles.size, clientFiles.size)

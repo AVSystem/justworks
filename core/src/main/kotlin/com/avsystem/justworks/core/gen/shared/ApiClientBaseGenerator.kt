@@ -23,7 +23,6 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.IO_EXCEPTION
 import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_FUN
-import com.avsystem.justworks.core.gen.NETWORK_ERROR
 import com.avsystem.justworks.core.gen.RAISE
 import com.avsystem.justworks.core.gen.RAISE_FUN
 import com.avsystem.justworks.core.gen.SAFE_CALL
@@ -54,10 +53,11 @@ import com.squareup.kotlinpoet.UNIT
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
 internal object ApiClientBaseGenerator {
-    private const val BLOCK = "block"
-    private const val MAP_TO_RESULT = "mapToResult"
-    private const val SUCCESS_BODY = "successBody"
     private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
+    private const val SUCCESS_BODY = "successBody"
+    private const val MAP_TO_RESULT = "mapToResult"
+    private const val BLOCK = "block"
+    private const val NETWORK_ERROR = "Network error"
 
     fun generate(): FileSpec {
         val t = TypeVariableName("T").copy(reified = true)

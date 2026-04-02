@@ -19,7 +19,7 @@ import com.squareup.kotlinpoet.TypeVariableName
  * - `HttpError` data class with code, message, type fields
  * - `HttpSuccess<T>` data class wrapping successful responses
  */
-object ApiResponseGenerator {
+internal object ApiResponseGenerator {
     private const val CODE = "code"
     private const val MESSAGE = "message"
     private const val TYPE = "type"
