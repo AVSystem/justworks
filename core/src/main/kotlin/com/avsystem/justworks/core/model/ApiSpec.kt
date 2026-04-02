@@ -20,7 +20,7 @@ data class Endpoint(
     val method: HttpMethod,
     val operationId: String,
     val summary: String?,
-    val description: String? = null,
+    val description: String?,
     val tags: List<String>,
     val parameters: List<Parameter>,
     val requestBody: RequestBody?,

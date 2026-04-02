@@ -505,6 +505,77 @@ class SpecParserTest : SpecParserTestBase() {
         assertEquals(null, extended.underlyingType, "allOf schema should not have underlyingType")
     }
 
+    // -- x-enum-descriptions --
+
+    @Test
+    fun `enum with x-enum-descriptions as list populates value descriptions`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Color:
+                  type: string
+                  enum:
+                    - red
+                    - green
+                    - blue
+                  x-enum-descriptions:
+                    - The color red
+                    - The color green
+                    - The color blue
+            """.trimIndent().toTempFile(),
+        )
+
+        val color = spec.enums.find { it.name == "Color" } ?: fail("Color enum not found")
+        assertEquals(
+            listOf(
+                EnumModel.Value("red", "The color red"),
+                EnumModel.Value("green", "The color green"),
+                EnumModel.Value("blue", "The color blue"),
+            ),
+            color.values,
+        )
+    }
+
+    @Test
+    fun `enum with x-enum-descriptions as map populates value descriptions`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Priority:
+                  type: string
+                  enum:
+                    - low
+                    - medium
+                    - high
+                  x-enum-descriptions:
+                    low: Low priority
+                    high: High priority
+            """.trimIndent().toTempFile(),
+        )
+
+        val priority = spec.enums.find { it.name == "Priority" } ?: fail("Priority enum not found")
+        assertEquals(
+            listOf(
+                EnumModel.Value("low", "Low priority"),
+                EnumModel.Value("medium", null),
+                EnumModel.Value("high", "High priority"),
+            ),
+            priority.values,
+        )
+    }
+
     // -- SCHM-03/04/05: Extended format type mapping --
 
     @Test
