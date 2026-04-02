@@ -281,7 +281,7 @@ object SpecParser {
                 }
         }.toList()
 
-    context (_: ComponentSchemaIdentity, _: ComponentSchemas)
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun SwaggerParameter.toParameter(): Parameter = Parameter(
         name = name ?: "",
         location = `in`.toEnumOrNull<ParameterLocation>() ?: ParameterLocation.QUERY,
@@ -292,7 +292,7 @@ object SpecParser {
 
 // --- Schema extraction ---
 
-    context (_: Raise<Issue.Error>, _: ComponentSchemaIdentity, _: ComponentSchemas)
+    context(_: Raise<Issue.Error>, _: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
@@ -353,7 +353,7 @@ object SpecParser {
 
 // --- allOf property merging ---
 
-    context (_: ComponentSchemaIdentity, _: ComponentSchemas)
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractAllOfProperties(parentName: String, schema: Schema<*>): Pair<List<PropertyModel>, Set<String>> {
         val topRequired = schema.required.orEmpty().toSet()
         val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
@@ -373,7 +373,7 @@ object SpecParser {
         return finalProperties to required
     }
 
-    context (_: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
+    context(_: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
     private fun Schema<*>.resolveSubSchema(): Schema<*> = resolveName()?.let { componentSchemas[it] } ?: this
 
     /**
@@ -389,7 +389,7 @@ object SpecParser {
      *
      * Returns: Pair of (unwrapped oneOf refs, synthetic discriminator) or null if pattern not matched.
      */
-    context (componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
+    context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
     private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Discriminator>? = nullable {
         ensure(!schema.oneOf.isNullOrEmpty() && schema.discriminator == null)
 
@@ -422,14 +422,14 @@ object SpecParser {
         unwrapped.values.toList() to Discriminator(propertyName = "type", mapping = mapping)
     }
 
-    context (_: ComponentSchemaIdentity, _: ComponentSchemas)
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
         ?: (resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
         ?: TypeRef.Unknown.takeIf { (allOf?.size ?: 0) > 1 }
         ?: resolveByType(contextName)
 
     /** Resolves a [TypeRef] based on the schema's structural type/format, ignoring component identity. */
-    context (_: ComponentSchemaIdentity, _: ComponentSchemas)
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.resolveByType(contextName: String? = null): TypeRef = when (type) {
         "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 
@@ -450,7 +450,7 @@ object SpecParser {
         else -> TypeRef.Unknown
     }
 
-    context (_: ComponentSchemaIdentity, _: ComponentSchemas)
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? = takeIf { isInlineObject }?.let {
         val required = required.orEmpty().toSet()
         TypeRef.Inline(
@@ -460,10 +460,10 @@ object SpecParser {
         )
     }
 
-    context (componentSchemaIdentity: ComponentSchemaIdentity)
+    context(componentSchemaIdentity: ComponentSchemaIdentity)
     private fun Schema<*>.resolveName(): String? = `$ref`?.removePrefix(SCHEMA_PREFIX) ?: componentSchemaIdentity[this]
 
-    context (componentSchemaIdentity: ComponentSchemaIdentity)
+    context(componentSchemaIdentity: ComponentSchemaIdentity)
     private val Schema<*>.isInlineObject
         get(): Boolean = `$ref` == null &&
             this !in componentSchemaIdentity && type == "object" && !properties.isNullOrEmpty()

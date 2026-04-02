@@ -37,7 +37,7 @@ object CodeGenerator {
     }
 
     fun generateSharedTypes(outputDir: File, specs: List<ApiSpec>): Int {
-        val securitySchemes = specs.flatMap { it.securitySchemes }
+        val securitySchemes = specs.flatMap { it.securitySchemes }.distinctBy { it.name }
 
         val files = ApiResponseGenerator.generate() + ApiClientBaseGenerator.generate(securitySchemes)
         files.forEach { it.writeTo(outputDir) }

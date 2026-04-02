@@ -44,7 +44,6 @@ import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeSpec
-import com.squareup.kotlinpoet.TypeSpec.Companion.classBuilder
 import com.squareup.kotlinpoet.TypeVariableName
 import com.squareup.kotlinpoet.UNIT
 
@@ -149,7 +148,6 @@ internal object ApiClientBaseGenerator {
             .classBuilder(API_CLIENT_BASE)
             .addModifiers(KModifier.ABSTRACT)
             .addSuperinterface(CLOSEABLE)
-            .primaryConstructor(constructorBuilder.build())
 
         val baseUrlProp = PropertySpec
             .builder(BASE_URL, STRING)
@@ -182,6 +180,7 @@ internal object ApiClientBaseGenerator {
             .build()
 
         return classBuilder
+            .primaryConstructor(constructorBuilder.build())
             .addProperty(clientProp)
             .addFunction(closeFun)
             .addFunction(buildApplyAuth(securitySchemes))
@@ -194,29 +193,26 @@ internal object ApiClientBaseGenerator {
      * Builds the list of auth-related constructor parameter names based on security schemes.
      * Returns pairs of (paramName, schemeType) for each scheme.
      */
-    internal fun buildAuthConstructorParams(securitySchemes: List<SecurityScheme>): List<Pair<String, SecurityScheme>> =
-        securitySchemes.flatMap { scheme ->
+    internal fun buildAuthConstructorParams(securitySchemes: List<SecurityScheme>): List<Pair<String, SecurityScheme>> {
+        val isSingleBearer = securitySchemes.size == 1 && securitySchemes.first() is SecurityScheme.Bearer
+
+        return securitySchemes.flatMap { scheme ->
             when (scheme) {
-                is SecurityScheme.Bearer -> {
-                    val isSingleBearer =
-                        securitySchemes.size == 1 && securitySchemes.first() is SecurityScheme.Bearer
+                is SecurityScheme.Bearer -> listOf(
+                    (if (isSingleBearer) TOKEN else "${scheme.name.toCamelCase()}Token") to scheme,
+                )
 
-                    val paramName = if (isSingleBearer) TOKEN else "${scheme.name.toCamelCase()}Token"
-                    listOf(paramName to scheme)
-                }
+                is SecurityScheme.ApiKey -> listOf(
+                    "${scheme.name.toCamelCase()}Key" to scheme,
+                )
 
-                is SecurityScheme.ApiKey -> {
-                    listOf("${scheme.name.toCamelCase()}Key" to scheme)
-                }
-
-                is SecurityScheme.Basic -> {
-                    listOf(
-                        "${scheme.name.toCamelCase()}Username" to scheme,
-                        "${scheme.name.toCamelCase()}Password" to scheme,
-                    )
-                }
+                is SecurityScheme.Basic -> listOf(
+                    "${scheme.name.toCamelCase()}Username" to scheme,
+                    "${scheme.name.toCamelCase()}Password" to scheme,
+                )
             }
         }
+    }
 
     private fun buildApplyAuth(securitySchemes: List<SecurityScheme>): FunSpec {
         val builder = FunSpec
@@ -226,23 +222,22 @@ internal object ApiClientBaseGenerator {
 
         if (securitySchemes.isEmpty()) return builder.build()
 
-        val headerSchemes = securitySchemes.filter {
-            it is SecurityScheme.Bearer ||
-                it is SecurityScheme.Basic ||
-                (it is SecurityScheme.ApiKey && it.location == ApiKeyLocation.HEADER)
+        val headerSchemes = securitySchemes.filter { scheme ->
+            scheme is SecurityScheme.Bearer ||
+                scheme is SecurityScheme.Basic ||
+                (scheme is SecurityScheme.ApiKey && scheme.location == ApiKeyLocation.HEADER)
         }
         val querySchemes = securitySchemes
             .filterIsInstance<SecurityScheme.ApiKey>()
             .filter { it.location == ApiKeyLocation.QUERY }
 
         if (headerSchemes.isNotEmpty()) {
+            val isSingleBearer = securitySchemes.size == 1 && securitySchemes.first() is SecurityScheme.Bearer
+
             builder.beginControlFlow("%M", HEADERS_FUN)
             for (scheme in headerSchemes) {
                 when (scheme) {
                     is SecurityScheme.Bearer -> {
-                        val isSingleBearer =
-                            securitySchemes.size == 1 && securitySchemes.first() is SecurityScheme.Bearer
-
                         val paramName = if (isSingleBearer) TOKEN else "${scheme.name.toCamelCase()}Token"
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
