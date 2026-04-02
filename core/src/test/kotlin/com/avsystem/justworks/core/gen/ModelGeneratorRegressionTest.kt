@@ -11,7 +11,12 @@ import kotlin.test.Test
 class ModelGeneratorRegressionTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = context(Hierarchy(spec.schemas, ModelPackage(modelPackage)), NameRegistry()) {
+    private fun generate(spec: ApiSpec) = context(
+        Hierarchy(ModelPackage(modelPackage)).apply {
+            addSchemas(spec.schemas)
+        },
+        NameRegistry(),
+    ) {
         ModelGenerator.generate(spec)
     }
 

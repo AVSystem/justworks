@@ -9,7 +9,6 @@ import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
-import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.TypeSpec
 import kotlin.test.Test
@@ -20,7 +19,12 @@ import kotlin.test.assertTrue
 class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = context(Hierarchy(spec.schemas, ModelPackage(modelPackage)), NameRegistry()) {
+    private fun generate(spec: ApiSpec) = context(
+        Hierarchy(ModelPackage(modelPackage)).apply {
+            addSchemas(spec.schemas)
+        },
+        NameRegistry(),
+    ) {
         ModelGenerator.generate(spec)
     }
 
@@ -916,7 +920,9 @@ class ModelGeneratorPolymorphicTest {
         )
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
-        val hierarchy = Hierarchy(listOf(shapeSchema, circleSchema, squareSchema), ModelPackage(modelPackage))
+        val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
+            addSchemas(listOf(shapeSchema, circleSchema, squareSchema))
+        }
 
         val result = context(hierarchy) {
             TypeRef.Reference("Circle").toTypeName()
@@ -930,7 +936,7 @@ class ModelGeneratorPolymorphicTest {
 
     @Test
     fun `toTypeName falls back to flat ClassName for non-variant`() {
-        val hierarchy = Hierarchy(emptyList(), ModelPackage(modelPackage))
+        val hierarchy = Hierarchy(ModelPackage(modelPackage))
 
         val result = context(hierarchy) {
             TypeRef.Reference("Circle").toTypeName()

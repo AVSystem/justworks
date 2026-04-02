@@ -84,7 +84,7 @@ internal object ModelGenerator {
             )
         }
 
-        hierarchy.add(resolvedSpec.schemas + resolvedInlineSchemas)
+        hierarchy.addSchemas(resolvedSpec.schemas + resolvedInlineSchemas)
 
         val nestedVariantNames = hierarchy.sealedHierarchies
             .asSequence()

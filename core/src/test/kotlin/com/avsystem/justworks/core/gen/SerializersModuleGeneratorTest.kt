@@ -43,7 +43,7 @@ class SerializersModuleGeneratorTest {
             }
             listOf(parentSchema) + variantSchemas
         }
-        return Hierarchy(schemas, modelPackage)
+        return Hierarchy(modelPackage).apply { addSchemas(schemas) }
     }
 
     private fun generate(hierarchy: Hierarchy): FileSpec? = context(hierarchy) { SerializersModuleGenerator.generate() }

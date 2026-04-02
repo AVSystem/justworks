@@ -10,7 +10,7 @@ import kotlin.test.assertFailsWith
 
 class TypeMappingTest {
     private val pkg = ModelPackage("com.example.model")
-    private val hierarchy = Hierarchy(schemas = emptyList(), modelPackage = pkg)
+    private val hierarchy = Hierarchy(modelPackage = pkg)
 
     private fun map(typeRef: TypeRef): TypeName = context(hierarchy) {
         typeRef.toTypeName()

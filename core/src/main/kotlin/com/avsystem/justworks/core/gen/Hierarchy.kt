@@ -1,35 +1,34 @@
 package com.avsystem.justworks.core.gen
 
-import com.avsystem.justworks.core.CacheGroup
+import com.avsystem.justworks.core.MemoScope
 import com.avsystem.justworks.core.memoized
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
 
 internal class Hierarchy(val modelPackage: ModelPackage) {
-    var schemas: List<SchemaModel> = emptyList()
-        private set
+    private val schemas = mutableSetOf<SchemaModel>()
 
     /**
      * Updates the underlying schemas and invalidates all cached derived views.
      * This is necessary when schemas are updated (e.g., after inlining types).
      */
-    private val cacheGroup = CacheGroup()
+    private val memoScope = MemoScope()
 
-    fun add(newSchemas: List<SchemaModel>) {
-        cacheGroup.reset()
+    fun addSchemas(newSchemas: List<SchemaModel>) {
+        memoScope.reset()
         schemas += newSchemas
     }
 
-    val schemasById: Map<String, SchemaModel> by memoized(cacheGroup) {
+    val schemasById: Map<String, SchemaModel> by memoized(memoScope) {
         schemas.associateBy { it.name }
     }
 
-    private val polymorphicSchemas: List<SchemaModel> by memoized(cacheGroup) {
+    private val polymorphicSchemas: List<SchemaModel> by memoized(memoScope) {
         schemas.filterNot { it.variants().isNullOrEmpty() }
     }
 
-    val sealedHierarchies: Map<String, List<String>> by memoized(cacheGroup) {
+    val sealedHierarchies: Map<String, List<String>> by memoized(memoScope) {
         polymorphicSchemas
             .associate { schema ->
                 schema.name to schema
@@ -41,7 +40,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
     }
 
     /** Parent schema names that are anyOf without discriminator. */
-    val anyOfWithoutDiscriminator: Set<String> by memoized(cacheGroup) {
+    val anyOfWithoutDiscriminator: Set<String> by memoized(memoScope) {
         polymorphicSchemas
             .asSequence()
             .filter { !it.anyOf.isNullOrEmpty() && it.discriminator == null }
@@ -49,7 +48,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
             .toSet()
     }
 
-    private val lookup: Map<String, ClassName> by memoized(cacheGroup) {
+    private val lookup: Map<String, ClassName> by memoized(memoScope) {
         sealedHierarchies
             .asSequence()
             .filterNot { (parent, _) -> parent in anyOfWithoutDiscriminator }
