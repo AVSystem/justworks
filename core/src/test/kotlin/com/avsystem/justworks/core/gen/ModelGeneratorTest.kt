@@ -191,7 +191,7 @@ class ModelGeneratorTest {
             name = "PetStatus",
             description = null,
             type = EnumBackingType.STRING,
-            values = listOf("available", "pending", "sold"),
+            values = listOf(EnumModel.Value("available"), EnumModel.Value("pending"), EnumModel.Value("sold")),
         )
 
     @Test
@@ -252,7 +252,7 @@ class ModelGeneratorTest {
                 name = "Priority",
                 description = null,
                 type = EnumBackingType.INTEGER,
-                values = listOf("1", "2", "3"),
+                values = listOf(EnumModel.Value("1"), EnumModel.Value("2"), EnumModel.Value("3")),
             )
         val files = generate(spec(enums = listOf(intEnum)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
@@ -461,7 +461,13 @@ class ModelGeneratorTest {
                 description = null,
                 properties =
                     listOf(
-                        PropertyModel("active", TypeRef.Primitive(PrimitiveType.BOOLEAN), null, false, true),
+                        PropertyModel(
+                            "active",
+                            TypeRef.Primitive(PrimitiveType.BOOLEAN),
+                            null,
+                            nullable = false,
+                            defaultValue = true,
+                        ),
                     ),
                 requiredProperties = setOf("active"),
                 allOf = null,
@@ -597,7 +603,7 @@ class ModelGeneratorTest {
                 name = "Status",
                 description = null,
                 type = EnumBackingType.STRING,
-                values = listOf("active", "pending", "closed"),
+                values = listOf(EnumModel.Value("active"), EnumModel.Value("pending"), EnumModel.Value("closed")),
             )
         val schema =
             SchemaModel(
@@ -828,7 +834,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `property named 'class' generates backtick-escaped name with SerialName`() {
-        // KotlinPoet auto-escapes hard keywords — 'class' should become `class` in generated source
+        // KotlinPoet auto-escapes hard keywords — 'class' should become `class` in a generated source
         val schema = SchemaModel(
             name = "Reserved",
             description = null,
@@ -854,7 +860,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `property named 'object' generates backtick-escaped name with SerialName`() {
-        // KotlinPoet auto-escapes hard keywords — 'object' should become `object` in generated source
+        // KotlinPoet auto-escapes hard keywords — 'object' should become `object` in a generated source
         val schema = SchemaModel(
             name = "Item",
             description = null,
@@ -1134,7 +1140,7 @@ class ModelGeneratorTest {
         val typeSpec = files
             .first()
             .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .filterIsInstance<TypeSpec>()
             .first()
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "response" }
@@ -1159,7 +1165,7 @@ class ModelGeneratorTest {
         val typeSpec = files
             .first()
             .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .filterIsInstance<TypeSpec>()
             .first()
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "response" }
@@ -1186,7 +1192,7 @@ class ModelGeneratorTest {
         val typeSpec = files
             .first()
             .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .filterIsInstance<TypeSpec>()
             .first()
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "healthChecks" }
@@ -1370,6 +1376,7 @@ class ModelGeneratorTest {
             ),
             requestBody = null,
             responses = emptyMap(),
+            description = null,
         )
         val apiSpec = ApiSpec(
             title = "Test",
@@ -1406,5 +1413,111 @@ class ModelGeneratorTest {
         val idParam = constructor.parameters.first { it.name == "id" }
         assertTrue(!idParam.type.isNullable, "Required property should be non-nullable")
         assertEquals(null, idParam.defaultValue, "Required property should have no default")
+    }
+
+    // -- Property KDoc tests (DOCS-03) --
+
+    @Test
+    fun `property with description generates KDoc`() {
+        val schema = SchemaModel(
+            name = "Pet",
+            description = null,
+            properties = listOf(
+                PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), "The pet's name", false),
+            ),
+            requiredProperties = setOf("name"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+        val prop = typeSpec.propertySpecs.first { it.name == "name" }
+        assertTrue(
+            prop.kdoc.toString().contains("The pet's name"),
+            "Expected KDoc with description, got: ${prop.kdoc}",
+        )
+    }
+
+    @Test
+    fun `property without description generates no KDoc`() {
+        val schema = SchemaModel(
+            name = "Pet",
+            description = null,
+            properties = listOf(
+                PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("name"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+        val prop = typeSpec.propertySpecs.first { it.name == "name" }
+        assertTrue(
+            prop.kdoc.toString().isEmpty(),
+            "Expected no KDoc when description is null, got: ${prop.kdoc}",
+        )
+    }
+
+    @Test
+    fun `enum with valueDescriptions generates constant KDoc`() {
+        val enum = EnumModel(
+            name = "Status",
+            description = null,
+            type = EnumBackingType.STRING,
+            values = listOf(EnumModel.Value("active", "Currently active"), EnumModel.Value("inactive", "Not active")),
+        )
+        val files = generate(spec(enums = listOf(enum)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+        val activeConstant = typeSpec.enumConstants["ACTIVE"]
+        assertNotNull(activeConstant, "Expected ACTIVE enum constant")
+        assertTrue(
+            activeConstant.kdoc.toString().contains("Currently active"),
+            "Expected KDoc 'Currently active' on ACTIVE, got: ${activeConstant.kdoc}",
+        )
+        val inactiveConstant = typeSpec.enumConstants["INACTIVE"]
+        assertNotNull(inactiveConstant, "Expected INACTIVE enum constant")
+        assertTrue(
+            inactiveConstant.kdoc.toString().contains("Not active"),
+            "Expected KDoc 'Not active' on INACTIVE, got: ${inactiveConstant.kdoc}",
+        )
+    }
+
+    @Test
+    fun `enum without valueDescriptions generates no constant KDoc`() {
+        val enum = EnumModel(
+            name = "Status",
+            description = null,
+            type = EnumBackingType.STRING,
+            values = listOf(EnumModel.Value("active"), EnumModel.Value("inactive")),
+        )
+        val files = generate(spec(enums = listOf(enum)))
+        val typeSpec = files
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+        val activeConstant = typeSpec.enumConstants["ACTIVE"]
+        assertNotNull(activeConstant, "Expected ACTIVE enum constant")
+        assertTrue(
+            activeConstant.kdoc.toString().isEmpty(),
+            "Expected no KDoc on ACTIVE when no valueDescriptions, got: ${activeConstant.kdoc}",
+        )
     }
 }

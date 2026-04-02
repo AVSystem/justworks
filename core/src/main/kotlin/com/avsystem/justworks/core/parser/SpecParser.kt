@@ -38,6 +38,7 @@ import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
 import java.util.IdentityHashMap
+import kotlin.collections.emptyMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
 /**
@@ -221,6 +222,7 @@ object SpecParser {
                         method = method,
                         operationId = operationId,
                         summary = operation.summary,
+                        description = operation.description,
                         tags = operation.tags.orEmpty(),
                         parameters = mergedParams,
                         requestBody = requestBody,
@@ -292,12 +294,21 @@ object SpecParser {
         )
     }
 
-    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel = EnumModel(
-        name = name,
-        description = schema.description,
-        type = schema.type.toEnumOrNull<EnumBackingType>() ?: EnumBackingType.STRING,
-        values = schema.enum.map { it.toString() },
-    )
+    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel {
+        val enumValues = schema.enum.map { it.toString() }
+        val valueDescriptions = when (val ext = schema.extensions?.get("x-enum-descriptions")) {
+            is List<*> if ext.size == enumValues.size -> enumValues.zip(ext).toMap()
+            is Map<*, *> -> ext
+            else -> emptyMap()
+        }.mapNotNull { (k, v) -> if (k is String && v is String) k to v else null }.toMap()
+
+        return EnumModel(
+            name = name,
+            description = schema.description,
+            type = schema.type.toEnumOrNull<EnumBackingType>() ?: EnumBackingType.STRING,
+            values = enumValues.map { EnumModel.Value(it, valueDescriptions[it]) },
+        )
+    }
 
 // --- allOf property merging ---
 

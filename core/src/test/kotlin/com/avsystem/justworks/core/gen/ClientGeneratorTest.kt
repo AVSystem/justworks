@@ -49,6 +49,8 @@ class ClientGeneratorTest {
         path: String = "/pets",
         method: HttpMethod = HttpMethod.GET,
         operationId: String = "listPets",
+        summary: String? = null,
+        description: String? = null,
         tags: List<String> = listOf("Pets"),
         parameters: List<Parameter> = emptyList(),
         requestBody: RequestBody? = null,
@@ -60,7 +62,8 @@ class ClientGeneratorTest {
         path = path,
         method = method,
         operationId = operationId,
-        summary = null,
+        summary = summary,
+        description = description,
         tags = tags,
         parameters = parameters,
         requestBody = requestBody,
@@ -650,5 +653,75 @@ class ClientGeneratorTest {
         val funSpec = cls.funSpecs.first { it.name == "deletePet" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("toEmptyResult"), "Expected toEmptyResult call")
+    }
+
+    // -- DOCS-03: Endpoint KDoc generation --
+
+    @Test
+    fun `endpoint with summary generates KDoc`() {
+        val ep = endpoint(summary = "List all pets")
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        assertTrue(
+            funSpec.kdoc.toString().contains("List all pets"),
+            "Expected KDoc with summary, got: ${funSpec.kdoc}",
+        )
+    }
+
+    @Test
+    fun `endpoint with summary and description generates KDoc with both`() {
+        val ep = endpoint(summary = "List pets", description = "Returns a paginated list of pets")
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val kdoc = funSpec.kdoc.toString()
+        assertTrue(kdoc.contains("List pets"), "Expected summary in KDoc, got: $kdoc")
+        assertTrue(kdoc.contains("Returns a paginated list of pets"), "Expected description in KDoc, got: $kdoc")
+    }
+
+    @Test
+    fun `endpoint with parameter descriptions generates param KDoc`() {
+        val ep = endpoint(
+            parameters = listOf(
+                Parameter(
+                    "limit",
+                    ParameterLocation.QUERY,
+                    false,
+                    TypeRef.Primitive(PrimitiveType.INT),
+                    "Max items to return",
+                ),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val kdoc = funSpec.kdoc.toString()
+        assertTrue(kdoc.contains("@param"), "Expected @param in KDoc, got: $kdoc")
+        assertTrue(kdoc.contains("Max items to return"), "Expected param description in KDoc, got: $kdoc")
+    }
+
+    @Test
+    fun `endpoint with non-Unit return generates return KDoc`() {
+        val ep = endpoint(
+            responses = mapOf("200" to Response("200", "OK", TypeRef.Reference("Pet"))),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val kdoc = funSpec.kdoc.toString()
+        assertTrue(kdoc.contains("@return"), "Expected @return in KDoc, got: $kdoc")
+    }
+
+    @Test
+    fun `endpoint without descriptions generates no KDoc`() {
+        val ep = endpoint(
+            summary = null,
+            description = null,
+            parameters = emptyList(),
+            responses = mapOf("204" to Response("204", "No content", null)),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        assertTrue(
+            funSpec.kdoc.toString().isEmpty(),
+            "Expected no KDoc when no descriptions, got: ${funSpec.kdoc}",
+        )
     }
 }
