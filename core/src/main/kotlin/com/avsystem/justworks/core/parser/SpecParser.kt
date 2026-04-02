@@ -10,7 +10,6 @@ import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
 import arrow.core.raise.iorNel
 import arrow.core.raise.nullable
-import arrow.core.toNonEmptyListOrNull
 import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.Warnings
 import com.avsystem.justworks.core.accumulate
@@ -32,6 +31,7 @@ import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
+import com.avsystem.justworks.core.parser.SpecParser.parse
 import com.avsystem.justworks.core.toEnumOrNull
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
@@ -51,8 +51,8 @@ import io.swagger.v3.oas.models.security.SecurityScheme as SwaggerSecurityScheme
  * Use pattern matching to handle both outcomes:
  * ```kotlin
  * when (val result = SpecParser.parse(file)) {
- *     is ParseResult.Success -> result.apiSpec
- *     is ParseResult.Failure -> handleErrors(result.errors)
+ *     is ParseResult.Success -> result.value
+ *     is ParseResult.Failure -> handleErrors(result.error)
  * }
  * ```
  *
@@ -60,12 +60,12 @@ import io.swagger.v3.oas.models.security.SecurityScheme as SwaggerSecurityScheme
  * encountered during parsing or validation.
  */
 
-sealed interface ParseResult {
+sealed interface ParseResult<out T> {
     val warnings: List<Issue.Warning>
 
-    data class Success(val apiSpec: ApiSpec, override val warnings: List<Issue.Warning>) : ParseResult
+    data class Success<out T>(val value: T, override val warnings: List<Issue.Warning>) : ParseResult<T>
 
-    data class Failure(val error: Issue.Error, override val warnings: List<Issue.Warning>) : ParseResult
+    data class Failure(val error: Issue.Error, override val warnings: List<Issue.Warning>) : ParseResult<Nothing>
 }
 
 object SpecParser {
@@ -83,41 +83,69 @@ object SpecParser {
      * @return [ParseResult.Success] with the parsed model and any warnings, or
      *         [ParseResult.Failure] with a non-empty list of error messages
      */
-    @OptIn(ExperimentalRaiseAccumulateApi::class)
-    fun parse(specFile: File): ParseResult {
-        val parseOptions = ParseOptions().apply {
-            isResolve = true
-            isResolveFully = true
-            isResolveCombinators = false
+    fun parse(specFile: File): ParseResult<ApiSpec> = parseSpec(specFile, resolveFully = true) { openApi ->
+        SpecValidator.validate(openApi)
+        openApi.toApiSpec()
+    }
+
+    /**
+     * Lightweight extraction of security schemes from an OpenAPI spec file.
+     *
+     * Parses only the `components/securitySchemes` and `security` sections,
+     * skipping the expensive endpoint and schema extraction performed by [parse].
+     */
+    fun parseSecuritySchemes(specFile: File): ParseResult<List<SecurityScheme>> =
+        parseSpec(specFile, resolveFully = false) { openApi ->
+            extractSecuritySchemes(
+                openApi.components?.securitySchemes.orEmpty(),
+                openApi.security.orEmpty(),
+            )
         }
 
+    @OptIn(ExperimentalRaiseAccumulateApi::class)
+    private inline fun <T> parseSpec(
+        specFile: File,
+        resolveFully: Boolean,
+        extract: context(Raise<Issue.Error>, Warnings) (OpenAPI) -> T,
+    ): ParseResult<T> {
         val result = iorNel {
             either {
-                val swaggerResult = OpenAPIParser().readLocation(specFile.absolutePath, null, parseOptions)
-
-                swaggerResult
-                    ?.messages
-                    ?.map(Issue::Warning)
-                    ?.toNonEmptyListOrNull()
-                    ?.let(::accumulate)
-
-                val openApi = swaggerResult?.openAPI
+                val openApi = loadOpenApi(specFile, resolveFully)
 
                 ensureNotNull(openApi) {
                     Issue.Error("Failed to parse spec: ${specFile.name}")
                 }
 
-                SpecValidator.validate(openApi)
-                openApi.toApiSpec()
+                extract(openApi)
             }
         }
         val warnings = result.leftOrNull().orEmpty()
         val either = result.getOrElse { Issue.Error("Failed to parse spec: ${specFile.name}").left() }
 
         return either.fold(
-            ifLeft = { ParseResult.Failure(it, warnings) },
-            ifRight = { ParseResult.Success(it, warnings) },
+            { ParseResult.Failure(it, warnings) },
+            { ParseResult.Success(it, warnings) },
         )
+    }
+
+    /**
+     * Loads and parses an OpenAPI spec file into a Swagger [OpenAPI] model.
+     * Accumulates parser messages as warnings.
+     */
+    @OptIn(ExperimentalRaiseAccumulateApi::class)
+    context(_: Warnings)
+    private fun loadOpenApi(specFile: File, resolveFully: Boolean): OpenAPI? {
+        val parseOptions = ParseOptions().apply {
+            isResolve = true
+            isResolveFully = resolveFully
+            isResolveCombinators = false
+        }
+
+        val swaggerResult = OpenAPIParser().readLocation(specFile.absolutePath, null, parseOptions)
+
+        swaggerResult?.messages?.forEach { accumulate(Issue.Warning(it)) }
+
+        return swaggerResult?.openAPI
     }
 
     private typealias ComponentSchemaIdentity = IdentityHashMap<Schema<*>, String>

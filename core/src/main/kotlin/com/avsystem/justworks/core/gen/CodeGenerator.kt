@@ -5,6 +5,7 @@ import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.gen.shared.ApiClientBaseGenerator
 import com.avsystem.justworks.core.gen.shared.ApiResponseGenerator
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.SecurityScheme
 import java.io.File
 
 /**
@@ -36,9 +37,7 @@ object CodeGenerator {
         return Result(modelFiles.size, clientFiles.size)
     }
 
-    fun generateSharedTypes(outputDir: File, specs: List<ApiSpec>): Int {
-        val securitySchemes = specs.flatMap { it.securitySchemes }.distinctBy { it.name }
-
+    fun generateSharedTypes(outputDir: File, securitySchemes: List<SecurityScheme>): Int {
         val files = ApiResponseGenerator.generate() + ApiClientBaseGenerator.generate(securitySchemes)
         files.forEach { it.writeTo(outputDir) }
         return files.size

@@ -30,7 +30,7 @@ class IntegrationTest {
         )
     }
 
-    private fun parseSpec(resourcePath: String): ParseResult.Success {
+    private fun parseSpec(resourcePath: String): ParseResult.Success<ApiSpec> {
         val specUrl = javaClass.getResource(resourcePath)
             ?: fail("Spec fixture not found: $resourcePath")
         val specFile = File(specUrl.toURI())
@@ -54,7 +54,7 @@ class IntegrationTest {
     @Test
     fun `real-world specs generate compilable enum code without class body conflicts`() {
         for (fixture in SPEC_FIXTURES) {
-            val spec = parseSpec(fixture).apiSpec
+            val spec = parseSpec(fixture).value
             if (spec.enums.isEmpty()) continue
 
             val files = generateModel(spec)
@@ -90,7 +90,7 @@ class IntegrationTest {
     @Test
     fun `real-world specs generate ApiClientBase when endpoints exist`() {
         for (fixture in SPEC_FIXTURES) {
-            val spec = parseSpec(fixture).apiSpec
+            val spec = parseSpec(fixture).value
             if (spec.endpoints.isEmpty()) continue
 
             val apiClientBaseFile = ApiClientBaseGenerator.generate(spec.securitySchemes)
@@ -111,7 +111,7 @@ class IntegrationTest {
     @Test
     fun `real-world specs full pipeline generates client code without exceptions`() {
         for (fixture in SPEC_FIXTURES) {
-            val spec = parseSpec(fixture).apiSpec
+            val spec = parseSpec(fixture).value
 
             val (modelFiles, resolvedSpec) = generateModelWithResolvedSpec(spec)
             assertTrue(modelFiles.isNotEmpty(), "$fixture: ModelGenerator should produce files")
@@ -134,7 +134,7 @@ class IntegrationTest {
     @Test
     fun `format mappings produce correct types in generated output`() {
         for (fixture in SPEC_FIXTURES) {
-            val spec = parseSpec(fixture).apiSpec
+            val spec = parseSpec(fixture).value
 
             val files = generateModel(spec)
             assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
@@ -164,7 +164,7 @@ class IntegrationTest {
     @Test
     fun `all generated files are syntactically valid Kotlin`() {
         for (fixture in SPEC_FIXTURES) {
-            val spec = parseSpec(fixture).apiSpec
+            val spec = parseSpec(fixture).value
 
             val files = generateModel(spec)
             assertTrue(files.isNotEmpty(), "$fixture: ModelGenerator should produce output files")
