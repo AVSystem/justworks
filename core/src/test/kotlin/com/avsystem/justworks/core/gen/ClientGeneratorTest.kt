@@ -821,6 +821,7 @@ class ClientGeneratorTest {
         )
     }
 
+
     @Test
     fun `single Bearer scheme uses token param name as shorthand`() {
         val cls = clientClass(

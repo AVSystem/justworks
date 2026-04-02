@@ -194,6 +194,7 @@ internal object ApiResponseGenerator {
                 ).build(),
         ).build()
 
+
     fun generateHttpSuccess(): FileSpec {
         val t = TypeVariableName("T")
 
