@@ -456,7 +456,13 @@ class ModelGeneratorTest {
                 description = null,
                 properties =
                     listOf(
-                        PropertyModel("active", TypeRef.Primitive(PrimitiveType.BOOLEAN), null, false, true),
+                        PropertyModel(
+                            "active",
+                            TypeRef.Primitive(PrimitiveType.BOOLEAN),
+                            null,
+                            nullable = false,
+                            defaultValue = true,
+                        ),
                     ),
                 requiredProperties = setOf("active"),
                 allOf = null,
@@ -823,7 +829,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `property named 'class' generates backtick-escaped name with SerialName`() {
-        // KotlinPoet auto-escapes hard keywords — 'class' should become `class` in generated source
+        // KotlinPoet auto-escapes hard keywords — 'class' should become `class` in a generated source
         val schema = SchemaModel(
             name = "Reserved",
             description = null,
@@ -849,7 +855,7 @@ class ModelGeneratorTest {
 
     @Test
     fun `property named 'object' generates backtick-escaped name with SerialName`() {
-        // KotlinPoet auto-escapes hard keywords — 'object' should become `object` in generated source
+        // KotlinPoet auto-escapes hard keywords — 'object' should become `object` in a generated source
         val schema = SchemaModel(
             name = "Item",
             description = null,
@@ -1129,7 +1135,7 @@ class ModelGeneratorTest {
         val typeSpec = files
             .first()
             .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .filterIsInstance<TypeSpec>()
             .first()
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "response" }
@@ -1154,7 +1160,7 @@ class ModelGeneratorTest {
         val typeSpec = files
             .first()
             .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .filterIsInstance<TypeSpec>()
             .first()
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "response" }
@@ -1181,7 +1187,7 @@ class ModelGeneratorTest {
         val typeSpec = files
             .first()
             .members
-            .filterIsInstance<com.squareup.kotlinpoet.TypeSpec>()
+            .filterIsInstance<TypeSpec>()
             .first()
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "healthChecks" }
@@ -1365,6 +1371,7 @@ class ModelGeneratorTest {
             ),
             requestBody = null,
             responses = emptyMap(),
+            description = null,
         )
         val apiSpec = ApiSpec(
             title = "Test",

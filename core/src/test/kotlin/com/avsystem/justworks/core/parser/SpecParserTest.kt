@@ -200,10 +200,9 @@ class SpecParserTest : SpecParserTestBase() {
         val order =
             spec.schemas.find { it.name == "Order" }
                 ?: fail("Order schema not found")
-        val itemProp =
-            order.properties.find { it.name == "item" }
-                ?: fail("item property not found on Order")
-
+        assert(order.properties.any { it.name == "item" }) {
+            "item property not found on Order"
+        }
         // After resolveFully, the item property may be inlined or a reference
         // Either way, ItemDetails should exist as a named schema
         val itemDetails = spec.schemas.find { it.name == "ItemDetails" }
