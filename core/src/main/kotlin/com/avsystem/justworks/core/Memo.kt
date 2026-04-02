@@ -17,13 +17,12 @@ value class MemoScope private constructor(private val memos: Atomic<Set<Memo<*>>
 }
 
 class Memo<T>(private val compute: () -> T) {
-    @Volatile
-    private var holder = lazy(compute)
+    private val holder = Atomic(lazy(compute))
 
-    operator fun getValue(thisRef: Any?, property: Any?): T = holder.value
+    operator fun getValue(thisRef: Any?, property: Any?): T = holder.get().value
 
     fun reset() {
-        holder = lazy(compute)
+        holder.set(lazy(compute))
     }
 }
 

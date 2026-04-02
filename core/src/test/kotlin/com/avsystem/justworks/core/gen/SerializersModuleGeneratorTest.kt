@@ -13,34 +13,33 @@ import kotlin.test.assertTrue
 class SerializersModuleGeneratorTest {
     private val modelPackage = ModelPackage("com.example.model")
 
+    private fun emptySchema(
+        name: String,
+        oneOf: List<TypeRef>? = null,
+        anyOf: List<TypeRef>? = null,
+    ) = SchemaModel(
+        name = name,
+        description = null,
+        properties = emptyList(),
+        requiredProperties = emptySet(),
+        oneOf = oneOf,
+        anyOf = anyOf,
+        allOf = null,
+        discriminator = null,
+    )
+
     private fun buildHierarchy(
         sealedHierarchies: Map<String, List<String>>,
         anyOfWithoutDiscriminator: Set<String> = emptySet(),
     ): Hierarchy {
         val schemas = sealedHierarchies.flatMap { (parent, variants) ->
-            val oneOf = variants.map { TypeRef.Reference(it) }
-            val parentSchema = SchemaModel(
+            val refs = variants.map { TypeRef.Reference(it) }
+            val parentSchema = emptySchema(
                 name = parent,
-                description = null,
-                properties = emptyList(),
-                requiredProperties = emptySet(),
-                oneOf = if (parent !in anyOfWithoutDiscriminator) oneOf else null,
-                anyOf = if (parent in anyOfWithoutDiscriminator) oneOf else null,
-                allOf = null,
-                discriminator = null,
+                oneOf = if (parent !in anyOfWithoutDiscriminator) refs else null,
+                anyOf = if (parent in anyOfWithoutDiscriminator) refs else null,
             )
-            val variantSchemas = variants.map { variant ->
-                SchemaModel(
-                    name = variant,
-                    description = null,
-                    properties = emptyList(),
-                    requiredProperties = emptySet(),
-                    oneOf = null,
-                    anyOf = null,
-                    allOf = null,
-                    discriminator = null,
-                )
-            }
+            val variantSchemas = variants.map { emptySchema(it) }
             listOf(parentSchema) + variantSchemas
         }
         return Hierarchy(modelPackage).apply { addSchemas(schemas) }

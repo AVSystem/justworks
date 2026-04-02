@@ -65,7 +65,7 @@ import kotlin.time.Instant
  * and one file per [EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 internal object ModelGenerator {
-    data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec,)
+    data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
 
     context(_: Hierarchy, _: NameRegistry)
     fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
@@ -399,7 +399,7 @@ internal object ModelGenerator {
         val notUnique = uniqueFieldsPerVariant.mapNotNull { (variantName, uniqueField) ->
             if (uniqueField != null) {
                 builder.addStatement(
-                    "%S\u00b7in\u00b7element.%M -> %T.serializer()",
+                    "%S·in·element.%M -> %T.serializer()",
                     uniqueField,
                     JSON_OBJECT_EXT,
                     hierarchy[variantName],
@@ -591,9 +591,20 @@ internal object ModelGenerator {
         return visited.toList()
     }
 
-    context(_: Hierarchy)
-    private fun generateNestedInlineClass(schema: SchemaModel): FileSpec =
-        generateDataClass(schema.copy(name = schema.name.toInlinedName()))
+    context(hierarchy: Hierarchy)
+    private fun generateNestedInlineClass(schema: SchemaModel): FileSpec {
+        val flatName = schema.name.toInlinedName()
+        val className = ClassName(hierarchy.modelPackage, flatName)
+
+        val typeSpec = TypeSpec
+            .classBuilder(className)
+            .addModifiers(KModifier.DATA)
+            .addAnnotation(SERIALIZABLE)
+
+        buildConstructorAndProperties(schema, typeSpec)
+
+        return FileSpec.builder(className).addType(typeSpec.build()).build()
+    }
 
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
