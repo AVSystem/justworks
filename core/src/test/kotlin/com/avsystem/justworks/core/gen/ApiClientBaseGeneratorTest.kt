@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.shared.ApiClientBaseGenerator
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
@@ -14,7 +15,7 @@ import kotlin.test.assertTrue
 
 @OptIn(ExperimentalKotlinPoetApi::class)
 class ApiClientBaseGeneratorTest {
-    private val file = ApiClientBaseGenerator.generate()
+    private val file = ApiClientBaseGenerator.generate(emptyList())
 
     private val classSpec: TypeSpec
         get() = file.members.filterIsInstance<TypeSpec>().first { it.name == "ApiClientBase" }
@@ -53,13 +54,10 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has constructor with baseUrl and token provider`() {
+    fun `ApiClientBase has constructor with only baseUrl when no schemes`() {
         val constructor = assertNotNull(classSpec.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
-        assertTrue("baseUrl" in paramNames)
-        assertTrue("token" in paramNames)
-        val tokenParam = constructor.parameters.first { it.name == "token" }
-        assertEquals("() -> kotlin.String", tokenParam.type.toString(), "token should be a () -> String lambda")
+        assertEquals(listOf("baseUrl"), paramNames)
     }
 
     @Test
@@ -78,14 +76,12 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has applyAuth function`() {
+    fun `ApiClientBase has empty applyAuth when no schemes`() {
         val applyAuth = classSpec.funSpecs.first { it.name == "applyAuth" }
         assertTrue(KModifier.PROTECTED in applyAuth.modifiers)
         assertNotNull(applyAuth.receiverType, "Expected HttpRequestBuilder receiver")
         val body = applyAuth.body.toString()
-        assertTrue(body.contains("Authorization"), "Expected Authorization header")
-        assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
-        assertTrue(body.contains("token()"), "Expected token() invocation")
+        assertTrue(!body.contains("Authorization"), "Expected no Authorization header for empty schemes")
     }
 
     @Test
@@ -201,7 +197,7 @@ class ApiClientBaseGeneratorTest {
     fun `single Bearer scheme uses token param name for backward compat`() {
         val params = constructorParamNames(listOf(SecurityScheme.Bearer("BearerAuth")))
         assertTrue("baseUrl" in params, "Expected baseUrl param")
-        assertTrue("token" in params, "Expected token param (backward compat)")
+        assertTrue("token" in params, "Expected token param (single-bearer shorthand)")
     }
 
     @Test

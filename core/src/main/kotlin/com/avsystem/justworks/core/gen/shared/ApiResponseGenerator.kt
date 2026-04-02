@@ -1,5 +1,10 @@
-package com.avsystem.justworks.core.gen
+package com.avsystem.justworks.core.gen.shared
 
+import com.avsystem.justworks.core.gen.BODY
+import com.avsystem.justworks.core.gen.EITHER
+import com.avsystem.justworks.core.gen.HTTP_ERROR
+import com.avsystem.justworks.core.gen.HTTP_RESULT
+import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.INT
@@ -19,7 +24,7 @@ import com.squareup.kotlinpoet.TypeVariableName
  * - `HttpResult<E, T>` typealias as `Either<HttpError<E>, HttpSuccess<T>>`
  * - `HttpSuccess<T>` data class wrapping successful responses
  */
-object ApiResponseGenerator {
+internal object ApiResponseGenerator {
     private const val CODE = "code"
 
     private val HTTP_ERROR_SUBTYPES = listOf(

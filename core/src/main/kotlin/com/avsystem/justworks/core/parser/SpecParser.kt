@@ -1,14 +1,22 @@
 package com.avsystem.justworks.core.parser
 
 import arrow.core.fold
-import arrow.core.merge
-import arrow.core.raise.context.Raise
+import arrow.core.getOrElse
+import arrow.core.left
+import arrow.core.raise.ExperimentalRaiseAccumulateApi
+import arrow.core.raise.Raise
+import arrow.core.raise.context.either
 import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
-import arrow.core.raise.either
+import arrow.core.raise.iorNel
 import arrow.core.raise.nullable
+import com.avsystem.justworks.core.Issue
+import com.avsystem.justworks.core.Warnings
+import com.avsystem.justworks.core.accumulate
+import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.EnumBackingType
@@ -23,14 +31,20 @@ import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
+import com.avsystem.justworks.core.parser.SpecParser.parse
+import com.avsystem.justworks.core.toEnumOrNull
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
+import io.swagger.v3.oas.models.media.Content
 import io.swagger.v3.oas.models.media.Schema
+import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
 import java.util.IdentityHashMap
+import kotlin.collections.emptyMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
+import io.swagger.v3.oas.models.security.SecurityScheme as SwaggerSecurityScheme
 
 /**
  * Result of parsing an OpenAPI specification file.
@@ -38,18 +52,21 @@ import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
  * Use pattern matching to handle both outcomes:
  * ```kotlin
  * when (val result = SpecParser.parse(file)) {
- *     is ParseResult.Success -> result.apiSpec
- *     is ParseResult.Failure -> handleErrors(result.errors)
+ *     is ParseResult.Success -> result.value
+ *     is ParseResult.Failure -> handleErrors(result.error)
  * }
  * ```
  *
  * Both [Success] and [Failure] may carry [warnings] about non-fatal issues
  * encountered during parsing or validation.
  */
-sealed interface ParseResult {
-    data class Success(val apiSpec: ApiSpec, val warnings: List<String> = emptyList()) : ParseResult
 
-    data class Failure(val errors: List<String>, val warnings: List<String> = emptyList()) : ParseResult
+sealed interface ParseResult<out T> {
+    val warnings: List<Issue.Warning>
+
+    data class Success<out T>(val value: T, override val warnings: List<Issue.Warning>) : ParseResult<T>
+
+    data class Failure(val error: Issue.Error, override val warnings: List<Issue.Warning>) : ParseResult<Nothing>
 }
 
 object SpecParser {
@@ -67,36 +84,75 @@ object SpecParser {
      * @return [ParseResult.Success] with the parsed model and any warnings, or
      *         [ParseResult.Failure] with a non-empty list of error messages
      */
-    fun parse(specFile: File): ParseResult = either {
+    fun parse(specFile: File): ParseResult<ApiSpec> = parseSpec(specFile, resolveFully = true) { openApi ->
+        SpecValidator.validate(openApi)
+        openApi.toApiSpec()
+    }
+
+    /**
+     * Lightweight extraction of security schemes from an OpenAPI spec file.
+     *
+     * Parses only the `components/securitySchemes` and `security` sections,
+     * skipping the expensive endpoint and schema extraction performed by [parse].
+     */
+    fun parseSecuritySchemes(specFile: File): ParseResult<List<SecurityScheme>> =
+        parseSpec(specFile, resolveFully = false) { openApi ->
+            extractSecuritySchemes(
+                openApi.components?.securitySchemes.orEmpty(),
+                openApi.security.orEmpty(),
+            )
+        }
+
+    @OptIn(ExperimentalRaiseAccumulateApi::class)
+    private inline fun <T> parseSpec(
+        specFile: File,
+        resolveFully: Boolean,
+        extract: context(Raise<Issue.Error>, Warnings) (OpenAPI) -> T,
+    ): ParseResult<T> {
+        val result = iorNel {
+            either {
+                val openApi = loadOpenApi(specFile, resolveFully)
+
+                ensureNotNull(openApi) {
+                    Issue.Error("Failed to parse spec: ${specFile.name}")
+                }
+
+                extract(openApi)
+            }
+        }
+        val warnings = result.leftOrNull().orEmpty()
+        val either = result.getOrElse { Issue.Error("Failed to parse spec: ${specFile.name}").left() }
+
+        return either.fold(
+            { ParseResult.Failure(it, warnings) },
+            { ParseResult.Success(it, warnings) },
+        )
+    }
+
+    /**
+     * Loads and parses an OpenAPI spec file into a Swagger [OpenAPI] model.
+     * Accumulates parser messages as warnings.
+     */
+    @OptIn(ExperimentalRaiseAccumulateApi::class)
+    context(_: Warnings)
+    private fun loadOpenApi(specFile: File, resolveFully: Boolean): OpenAPI? {
         val parseOptions = ParseOptions().apply {
             isResolve = true
-            isResolveFully = true
+            isResolveFully = resolveFully
             isResolveCombinators = false
         }
 
         val swaggerResult = OpenAPIParser().readLocation(specFile.absolutePath, null, parseOptions)
-        val openApi = swaggerResult.openAPI
-        val swaggerMessages = swaggerResult.messages.orEmpty()
 
-        ensureNotNull(openApi) {
-            ParseResult.Failure(swaggerMessages.ifEmpty { listOf("Failed to parse spec: ${specFile.name}") })
-        }
+        swaggerResult?.messages?.forEach { accumulate(Issue.Warning(it)) }
 
-        val validationIssues = SpecValidator.validate(openApi)
-        val (errors, warnings) = validationIssues.partition { it is SpecValidator.ValidationIssue.Error }
-        val allWarnings = warnings.map { it.message } + swaggerMessages
-
-        ensure(errors.isEmpty()) {
-            ParseResult.Failure(errors.map { it.message }, allWarnings)
-        }
-
-        ParseResult.Success(openApi.toApiSpec(), warnings = allWarnings)
-    }.merge()
+        return swaggerResult?.openAPI
+    }
 
     private typealias ComponentSchemaIdentity = IdentityHashMap<Schema<*>, String>
     private typealias ComponentSchemas = MutableMap<String, Schema<*>>
 
-    context(_: Raise<ParseResult.Failure>)
+    context(_: Raise<Issue.Error>, _: Warnings)
     private fun OpenAPI.toApiSpec(): ApiSpec {
         val allSchemas = components?.schemas.orEmpty()
 
@@ -124,46 +180,68 @@ object SpecParser {
                 }
             }
 
+            // Pick up synthetic schemas added by detectAndUnwrapOneOfWrappers.
+            // Iterate until stable, since processing a synthetic schema could register more.
+            tailrec fun collectModels(processed: Set<String>, acc: List<SchemaModel>): List<SchemaModel> {
+                val currentKeys = componentSchemas.keys - allSchemas.keys - processed
+                return if (currentKeys.isEmpty()) {
+                    acc
+                } else {
+                    val newModels = currentKeys
+                        .asSequence()
+                        .mapNotNull { name -> componentSchemas[name]?.let { name to it } }
+                        .filterNot { (_, schema) -> schema.isEnumSchema }
+                        .map { (name, schema) -> extractSchemaModel(name, schema) }
+
+                    collectModels(processed + currentKeys, acc + newModels)
+                }
+            }
+
+            val syntheticModels = collectModels(emptySet(), emptyList())
             return ApiSpec(
                 title = info?.title ?: "Untitled",
                 version = info?.version ?: "0.0.0",
                 endpoints = endpoints,
-                schemas = schemaModels,
+                schemas = schemaModels + syntheticModels,
                 enums = enumModels,
                 securitySchemes = securitySchemes,
             )
         }
     }
 
+    context(_: Warnings)
     private fun extractSecuritySchemes(
-        definitions: Map<String, io.swagger.v3.oas.models.security.SecurityScheme>,
-        requirements: List<io.swagger.v3.oas.models.security.SecurityRequirement>,
+        definitions: Map<String, SwaggerSecurityScheme>,
+        requirements: List<SecurityRequirement>,
     ): List<SecurityScheme> {
         val referencedNames = requirements.flatMap { it.keys }.toSet()
         return referencedNames.mapNotNull { name ->
-            val scheme = definitions[name] ?: return@mapNotNull null
-            when (scheme.type) {
-                io.swagger.v3.oas.models.security.SecurityScheme.Type.HTTP -> {
-                    when (scheme.scheme?.lowercase()) {
-                        "bearer" -> SecurityScheme.Bearer(name)
-                        "basic" -> SecurityScheme.Basic(name)
-                        else -> null
-                    }
-                }
+            ensureNotNullOrAccumulate(definitions[name]) {
+                Issue.Warning("Security requirement references undefined scheme '$name'")
+            }?.toSecurityScheme(name)
+        }
+    }
 
-                io.swagger.v3.oas.models.security.SecurityScheme.Type.APIKEY -> {
-                    val location = when (scheme.`in`) {
-                        io.swagger.v3.oas.models.security.SecurityScheme.In.HEADER -> ApiKeyLocation.HEADER
-                        io.swagger.v3.oas.models.security.SecurityScheme.In.QUERY -> ApiKeyLocation.QUERY
-                        else -> null
-                    } ?: return@mapNotNull null
-                    SecurityScheme.ApiKey(name, scheme.name, location)
-                }
-
-                else -> {
-                    null
-                }
+    context(_: Warnings)
+    private fun SwaggerSecurityScheme.toSecurityScheme(name: String): SecurityScheme? = when (type) {
+        SwaggerSecurityScheme.Type.HTTP -> {
+            when (scheme?.lowercase()) {
+                "bearer" -> SecurityScheme.Bearer(name)
+                "basic" -> SecurityScheme.Basic(name)
+                else -> accumulate(Issue.Warning("Unsupported HTTP auth scheme '$scheme' for '$name'"))
             }
+        }
+
+        SwaggerSecurityScheme.Type.APIKEY -> {
+            when (`in`) {
+                SwaggerSecurityScheme.In.HEADER -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.HEADER)
+                SwaggerSecurityScheme.In.QUERY -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.QUERY)
+                else -> accumulate(Issue.Warning("Unsupported API key location '${`in`}' for '$name'"))
+            }
+        }
+
+        else -> {
+            accumulate(Issue.Warning("Unsupported security scheme type '$type' for '$name'"))
         }
     }
 
@@ -174,7 +252,7 @@ object SpecParser {
             pathItem
                 .readOperationsMap()
                 .asSequence()
-                .mapNotNull { (method, value) -> HttpMethod.parse(method.name)?.let { it to value } }
+                .mapNotNull { (method, value) -> method.name.toEnumOrNull<HttpMethod>()?.let { it to value } }
                 .map { (method, operation) ->
                     val operationId = operation.operationId ?: generateOperationId(method, path)
 
@@ -185,11 +263,19 @@ object SpecParser {
                     val requestBody = nullable {
                         val body = operation.requestBody.bind()
                         val content = body.content.bind()
-                        val schema = content[JSON_CONTENT_TYPE]?.schema.bind()
+
+                        val contentType = ContentType.entries.find { it in content }.bind()
+
+                        val mediaType = content[contentType].bind()
+
+                        val schema = mediaType.schema
+                            ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request")
+                            .bind()
+
                         RequestBody(
                             required = body.required ?: false,
-                            contentType = JSON_CONTENT_TYPE,
-                            schema = schema.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request"),
+                            contentType = contentType,
+                            schema = schema,
                         )
                     }
 
@@ -200,7 +286,7 @@ object SpecParser {
                                 statusCode = code,
                                 description = resp.description,
                                 schema = resp.content
-                                    ?.get(JSON_CONTENT_TYPE)
+                                    ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
                                     ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                             )
@@ -211,6 +297,7 @@ object SpecParser {
                         method = method,
                         operationId = operationId,
                         summary = operation.summary,
+                        description = operation.description,
                         tags = operation.tags.orEmpty(),
                         parameters = mergedParams,
                         requestBody = requestBody,
@@ -222,15 +309,15 @@ object SpecParser {
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun SwaggerParameter.toParameter(): Parameter = Parameter(
         name = name ?: "",
-        location = ParameterLocation.parse(`in`) ?: ParameterLocation.QUERY,
+        location = `in`.toEnumOrNull<ParameterLocation>() ?: ParameterLocation.QUERY,
         required = required ?: false,
         schema = schema?.toTypeRef() ?: TypeRef.Primitive(PrimitiveType.STRING),
         description = description,
     )
 
-    // --- Schema extraction ---
+// --- Schema extraction ---
 
-    context(_: Raise<ParseResult.Failure>, _: ComponentSchemaIdentity, _: ComponentSchemas)
+    context(_: Raise<Issue.Error>, _: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
@@ -240,7 +327,7 @@ object SpecParser {
         val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
 
         ensure(oneOf.isNullOrEmpty() || anyOf.isNullOrEmpty()) {
-            ParseResult.Failure(listOf("Schema '$name' has both oneOf and anyOf. Use one combinator only."))
+            Issue.Error("Schema '$name' has both oneOf and anyOf. Use one combinator only.")
         }
 
         val (properties, requiredProps) =
@@ -261,6 +348,14 @@ object SpecParser {
             Discriminator(propertyName = propertyName, mapping = disc.mapping.orEmpty())
         }
 
+        // Resolve underlying type for primitive-only / $ref-wrapper schemas.
+        // Uses $ref for wrapper schemas, otherwise resolves structurally
+        // from type/format to bypass componentSchemaIdentity (which would self-reference).
+        val underlyingType = schema
+            .takeIf { properties.isEmpty() && allOf.isNullOrEmpty() && oneOf.isNullOrEmpty() && anyOf.isNullOrEmpty() }
+            ?.let { s -> s.`$ref`?.removePrefix(SCHEMA_PREFIX)?.let(TypeRef::Reference) ?: s.resolveByType() }
+            ?.takeUnless { it is TypeRef.Unknown }
+
         return SchemaModel(
             name = name,
             description = schema.description,
@@ -270,19 +365,29 @@ object SpecParser {
             oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
+            underlyingType = underlyingType,
         )
     }
 
-    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel = EnumModel(
-        name = name,
-        description = schema.description,
-        type = EnumBackingType.parse(schema.type) ?: EnumBackingType.STRING,
-        values = schema.enum.map { it.toString() },
-    )
+    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel {
+        val enumValues = schema.enum.map { it.toString() }
+        val valueDescriptions = when (val ext = schema.extensions?.get("x-enum-descriptions")) {
+            is List<*> if ext.size == enumValues.size -> enumValues.zip(ext).toMap()
+            is Map<*, *> -> ext
+            else -> emptyMap()
+        }.mapNotNull { (k, v) -> if (k is String && v is String) k to v else null }.toMap()
 
-    // --- allOf property merging ---
+        return EnumModel(
+            name = name,
+            description = schema.description,
+            type = schema.type.toEnumOrNull<EnumBackingType>() ?: EnumBackingType.STRING,
+            values = enumValues.map { EnumModel.Value(it, valueDescriptions[it]) },
+        )
+    }
 
-    context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
+// --- allOf property merging ---
+
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractAllOfProperties(parentName: String, schema: Schema<*>): Pair<List<PropertyModel>, Set<String>> {
         val topRequired = schema.required.orEmpty().toSet()
         val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
@@ -332,12 +437,14 @@ object SpecParser {
                 )
 
                 val schemaName = ensureNotNull(
-                    propertySchema.resolveName() ?: propertyName
-                        .takeIf { propertySchema.isInlineObject }
-                        ?.also { name ->
-                            componentSchemas[name] = propertySchema
-                            componentSchemaIdentity[propertySchema] = name
-                        },
+                    propertySchema.resolveName()
+                        ?: propertyName
+                            .takeIf { propertySchema.isInlineObject }
+                            ?.let { rawName ->
+                                componentSchemas[rawName] = propertySchema
+                                componentSchemaIdentity[propertySchema] = rawName
+                                rawName
+                            },
                 )
 
                 propertyName to schemaName
@@ -353,25 +460,29 @@ object SpecParser {
     private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
         ?: (resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
         ?: TypeRef.Unknown.takeIf { (allOf?.size ?: 0) > 1 }
-        ?: when (type) {
-            "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
+        ?: resolveByType(contextName)
 
-            "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
+    /** Resolves a [TypeRef] based on the schema's structural type/format, ignoring component identity. */
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
+    private fun Schema<*>.resolveByType(contextName: String? = null): TypeRef = when (type) {
+        "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-            "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
+        "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
 
-            "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
+        "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
 
-            "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
+        "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-            "object" -> when (val ap = additionalProperties) {
-                is Schema<*> -> TypeRef.Map(ap.toTypeRef())
-                is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
-                else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
-            }
+        "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
 
-            else -> TypeRef.Unknown
+        "object" -> when (val ap = additionalProperties) {
+            is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+            is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
+            else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
         }
+
+        else -> TypeRef.Unknown
+    }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? = takeIf { isInlineObject }?.let {
@@ -421,23 +532,37 @@ object SpecParser {
         return method.name.lowercase() + segments
     }
 
+    operator fun Content.get(contentType: ContentType) = this[contentType.value]
+
+    operator fun Content.contains(contentType: ContentType) = contentType.value in this
+
     private fun String.toPascalCase(): String =
         split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
 
-    private const val JSON_CONTENT_TYPE = "application/json"
     private const val SCHEMA_PREFIX = "#/components/schemas/"
 
     private val STRING_FORMAT_MAP = mapOf(
         "byte" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+        "binary" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
         "date-time" to TypeRef.Primitive(PrimitiveType.DATE_TIME),
         "date" to TypeRef.Primitive(PrimitiveType.DATE),
+        "uuid" to TypeRef.Primitive(PrimitiveType.UUID),
+        "uri" to TypeRef.Primitive(PrimitiveType.STRING),
+        "url" to TypeRef.Primitive(PrimitiveType.STRING),
+        "email" to TypeRef.Primitive(PrimitiveType.STRING),
+        "hostname" to TypeRef.Primitive(PrimitiveType.STRING),
+        "ipv4" to TypeRef.Primitive(PrimitiveType.STRING),
+        "ipv6" to TypeRef.Primitive(PrimitiveType.STRING),
+        "password" to TypeRef.Primitive(PrimitiveType.STRING),
     )
 
     private val INTEGER_FORMAT_MAP = mapOf(
+        "int32" to TypeRef.Primitive(PrimitiveType.INT),
         "int64" to TypeRef.Primitive(PrimitiveType.LONG),
     )
 
     private val NUMBER_FORMAT_MAP = mapOf(
         "float" to TypeRef.Primitive(PrimitiveType.FLOAT),
+        "double" to TypeRef.Primitive(PrimitiveType.DOUBLE),
     )
 }

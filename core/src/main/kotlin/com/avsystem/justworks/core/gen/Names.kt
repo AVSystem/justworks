@@ -26,10 +26,24 @@ val DELETE_FUN = MemberName("io.ktor.client.request", "delete")
 val PATCH_FUN = MemberName("io.ktor.client.request", "patch")
 
 // ============================================================================
+// Ktor Forms & Multipart
+// ============================================================================
+
+val SUBMIT_FORM_FUN = MemberName("io.ktor.client.request.forms", "submitForm")
+val SUBMIT_FORM_WITH_BINARY_DATA_FUN = MemberName("io.ktor.client.request.forms", "submitFormWithBinaryData")
+val FORM_DATA_FUN = MemberName("io.ktor.client.request.forms", "formData")
+val CHANNEL_PROVIDER = ClassName("io.ktor.client.request.forms", "ChannelProvider")
+val PARAMETERS_FUN = MemberName("io.ktor.http", "parameters")
+val CONTENT_TYPE_CLASS = ClassName("io.ktor.http", "ContentType")
+val HEADERS_CLASS = ClassName("io.ktor.http", "Headers")
+val HTTP_METHOD_CLASS = ClassName("io.ktor.http", "HttpMethod")
+
+// ============================================================================
 // kotlinx.serialization
 // ============================================================================
 
 val SERIALIZABLE = ClassName("kotlinx.serialization", "Serializable")
+val USE_SERIALIZERS = ClassName("kotlinx.serialization", "UseSerializers")
 val SERIAL_NAME = ClassName("kotlinx.serialization", "SerialName")
 val EXPERIMENTAL_SERIALIZATION_API = ClassName("kotlinx.serialization", "ExperimentalSerializationApi")
 val SERIALIZATION_EXCEPTION = ClassName("kotlinx.serialization", "SerializationException")
@@ -41,6 +55,13 @@ val SERIALIZERS_MODULE = ClassName("kotlinx.serialization.modules", "Serializers
 
 val JSON_OBJECT_EXT = MemberName("kotlinx.serialization.json", "jsonObject")
 
+val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
+val SERIAL_DESCRIPTOR = ClassName("kotlinx.serialization.descriptors", "SerialDescriptor")
+val PRIMITIVE_SERIAL_DESCRIPTOR_FUN = MemberName("kotlinx.serialization.descriptors", "PrimitiveSerialDescriptor")
+val PRIMITIVE_KIND = ClassName("kotlinx.serialization.descriptors", "PrimitiveKind")
+val DECODER = ClassName("kotlinx.serialization.encoding", "Decoder")
+val ENCODER = ClassName("kotlinx.serialization.encoding", "Encoder")
+
 val ENCODE_TO_STRING_FUN = MemberName("kotlinx.serialization", "encodeToString")
 val POLYMORPHIC_FUN = MemberName("kotlinx.serialization.modules", "polymorphic")
 val SUBCLASS_FUN = MemberName("kotlinx.serialization.modules", "subclass")
@@ -51,6 +72,13 @@ val SUBCLASS_FUN = MemberName("kotlinx.serialization.modules", "subclass")
 
 val INSTANT = ClassName("kotlin.time", "Instant")
 val LOCAL_DATE = ClassName("kotlinx.datetime", "LocalDate")
+
+// ============================================================================
+// UUID (kotlin.uuid)
+// ============================================================================
+
+val UUID_TYPE = ClassName("kotlin.uuid", "Uuid")
+val EXPERIMENTAL_UUID_API = ClassName("kotlin.uuid", "ExperimentalUuidApi")
 
 // ============================================================================
 // Error Handling (Arrow + Kotlin stdlib)
@@ -86,6 +114,7 @@ val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuild
 val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
 val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
 val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")
+val UUID_SERIALIZER = ClassName("com.avsystem.justworks", "UuidSerializer")
 
 // ============================================================================
 // Shared property / parameter names (used by multiple generators)
@@ -99,4 +128,3 @@ const val APPLY_AUTH = "applyAuth"
 const val SAFE_CALL = "safeCall"
 const val CREATE_HTTP_CLIENT = "createHttpClient"
 const val GENERATED_SERIALIZERS_MODULE = "generatedSerializersModule"
-const val NETWORK_ERROR = "Network error"

@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.shared.ApiResponseGenerator
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec

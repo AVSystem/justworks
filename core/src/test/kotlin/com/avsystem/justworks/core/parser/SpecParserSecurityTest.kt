@@ -7,7 +7,6 @@ import org.junit.jupiter.api.TestInstance
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
-import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
@@ -60,6 +59,12 @@ class SpecParserSecurityTest : SpecParserTestBase() {
     fun `excludes unreferenced OAuth2 scheme`() {
         val names = apiSpec.securitySchemes.map { it.name }
         assertTrue("UnusedOAuth" !in names, "UnusedOAuth should not be in parsed schemes")
+    }
+
+    @Test
+    fun `excludes unsupported cookie API key scheme`() {
+        val names = apiSpec.securitySchemes.map { it.name }
+        assertTrue("ApiKeyCookie" !in names, "ApiKeyCookie should not be in parsed schemes")
     }
 
     @Test

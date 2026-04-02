@@ -1,5 +1,6 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.EnumModel
@@ -16,14 +17,18 @@ import kotlin.test.assertTrue
 
 class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
-    private val generator = ModelGenerator(modelPackage)
 
-    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList(),) = ApiSpec(
+    private fun generate(spec: ApiSpec) = context(ModelPackage(modelPackage)) {
+        ModelGenerator.generate(spec, NameRegistry())
+    }
+
+    private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
         title = "Test",
         version = "1.0",
         endpoints = emptyList(),
         schemas = schemas,
         enums = enums,
+        securitySchemes = emptyList(),
     )
 
     private fun schema(
@@ -45,7 +50,7 @@ class ModelGeneratorPolymorphicTest {
         discriminator = discriminator,
     )
 
-    private fun findType(files: List<com.squareup.kotlinpoet.FileSpec>, name: String,): TypeSpec {
+    private fun findType(files: List<com.squareup.kotlinpoet.FileSpec>, name: String): TypeSpec {
         for (file in files) {
             val found = file.members.filterIsInstance<TypeSpec>().find { it.name == name }
             if (found != null) return found
@@ -85,7 +90,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("sideLength"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         assertTrue(KModifier.SEALED in shapeType.modifiers, "Expected SEALED modifier on Shape")
@@ -102,7 +107,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         val annotations = shapeType.annotations.map { it.typeName.toString() }
@@ -125,7 +130,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val superinterfaces = circleType.superinterfaces.keys.map { it.toString() }
@@ -149,7 +154,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val serialNameAnnotation =
@@ -183,7 +188,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         val discriminatorAnnotation =
@@ -216,7 +221,7 @@ class ModelGeneratorPolymorphicTest {
                 requiredProperties = setOf("radius"),
             )
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
         val serialNameAnnotation =
@@ -244,7 +249,7 @@ class ModelGeneratorPolymorphicTest {
             )
         val circleSchema = schema(name = "Circle")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val shapeFile = findFile(files, "Shape")
 
         val optInAnnotation =
@@ -287,7 +292,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Dog")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
+        val files = generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
         val extendedDogType = findType(files, "ExtendedDog")
         val constructor = assertNotNull(extendedDogType.primaryConstructor, "Expected primary constructor")
 
@@ -323,7 +328,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Dog")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
+        val files = generate(spec(schemas = listOf(dogSchema, extendedDogSchema)))
         val extendedDogType = findType(files, "ExtendedDog")
         val constructor = assertNotNull(extendedDogType.primaryConstructor)
 
@@ -374,7 +379,7 @@ class ModelGeneratorPolymorphicTest {
                     ),
             )
 
-        val files = generator.generate(
+        val files = generate(
             spec(schemas = listOf(networkMeshSchema, extenderPropsSchema, ethernetPropsSchema)),
         )
         val networkMeshType = findType(files, "NetworkMeshDevice")
@@ -410,7 +415,7 @@ class ModelGeneratorPolymorphicTest {
                     ),
             )
 
-        val files = generator.generate(spec(schemas = listOf(networkMeshSchema, extenderPropsSchema)))
+        val files = generate(spec(schemas = listOf(networkMeshSchema, extenderPropsSchema)))
         val extenderType = findType(files, "ExtenderDeviceProperties")
 
         // Verify @SerialName uses wrapper property name
@@ -444,7 +449,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val paymentType = findType(files, "Payment")
 
         val serializableAnnotation = paymentType.annotations.find {
@@ -474,7 +479,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val serializerType = findType(files, "PaymentSerializer")
 
         assertEquals(TypeSpec.Kind.OBJECT, serializerType.kind, "PaymentSerializer should be an object")
@@ -502,7 +507,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val serializerType = findType(files, "PaymentSerializer")
         val selectDeserializer = serializerType.funSpecs.find { it.name == "selectDeserializer" }
         assertNotNull(selectDeserializer, "PaymentSerializer should have selectDeserializer function")
@@ -536,7 +541,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("amount"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, typeASchema, typeBSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, typeASchema, typeBSchema)))
         val serializerType = findType(files, "PaymentSerializer")
         val selectDeserializer = serializerType.funSpecs.find { it.name == "selectDeserializer" }
         assertNotNull(selectDeserializer, "PaymentSerializer should have selectDeserializer function")
@@ -565,7 +570,7 @@ class ModelGeneratorPolymorphicTest {
             requiredProperties = setOf("accountNumber"),
         )
 
-        val files = generator.generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
+        val files = generate(spec(schemas = listOf(unionSchema, creditCardSchema, bankTransferSchema)))
         val creditCardType = findType(files, "CreditCard")
 
         val annotations = creditCardType.annotations.map { it.typeName.toString() }
@@ -589,7 +594,7 @@ class ModelGeneratorPolymorphicTest {
         val circleSchema = schema(name = "Circle")
         val squareSchema = schema(name = "Square")
 
-        val files = generator.generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
+        val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
         // Should have plain @Serializable, NOT @Serializable(with = ...)
@@ -609,6 +614,170 @@ class ModelGeneratorPolymorphicTest {
             null,
             shapeSerializerType,
             "Discriminated anyOf should NOT generate a JsonContentPolymorphicSerializer",
+        )
+    }
+
+    // -- CEM-01: boolean discriminator names (KotlinPoet handles escaping) --
+
+    @Test
+    fun `boolean discriminator names produce valid data classes`() {
+        val deviceStatusSchema = schema(
+            name = "DeviceStatus",
+            oneOf = listOf(
+                TypeRef.Reference("true"),
+                TypeRef.Reference("false"),
+            ),
+            discriminator = Discriminator(
+                propertyName = "online",
+                mapping = mapOf(
+                    "true" to "#/components/schemas/true",
+                    "false" to "#/components/schemas/false",
+                ),
+            ),
+        )
+        val trueSchema = schema(
+            name = "true",
+            properties = listOf(
+                PropertyModel("connectedSince", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("connectedSince"),
+        )
+        val falseSchema = schema(
+            name = "false",
+            properties = listOf(
+                PropertyModel("lastSeen", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("lastSeen"),
+        )
+
+        val files = generate(
+            spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
+        )
+
+        val trueType = findType(files, "true")
+        assertTrue(KModifier.DATA in trueType.modifiers, "'true' should be data class")
+
+        val falseType = findType(files, "false")
+        assertTrue(KModifier.DATA in falseType.modifiers, "'false' should be data class")
+
+        // Both implement DeviceStatus sealed interface
+        val trueSuperinterfaces = trueType.superinterfaces.keys.map { it.toString() }
+        assertTrue(
+            "$modelPackage.DeviceStatus" in trueSuperinterfaces,
+            "'true' should implement DeviceStatus. Superinterfaces: $trueSuperinterfaces",
+        )
+        val falseSuperinterfaces = falseType.superinterfaces.keys.map { it.toString() }
+        assertTrue(
+            "$modelPackage.DeviceStatus" in falseSuperinterfaces,
+            "'false' should implement DeviceStatus. Superinterfaces: $falseSuperinterfaces",
+        )
+    }
+
+    @Test
+    fun `all oneOf variant schemas generate data classes even with many subtypes`() {
+        val variantNames = listOf(
+            "ExtenderDevice",
+            "EthernetDevice",
+            "WanDevice",
+            "USBDevice",
+            "WiFiDevice",
+            "OtherDevice",
+        )
+
+        val networkMeshSchema = schema(
+            name = "NetworkMeshDevice",
+            oneOf = variantNames.map { TypeRef.Reference(it) },
+            discriminator = Discriminator(
+                propertyName = "deviceType",
+                mapping = variantNames.associateWith { "#/components/schemas/$it" },
+            ),
+        )
+
+        val variantSchemas = variantNames.map { name ->
+            schema(
+                name = name,
+                properties = listOf(
+                    PropertyModel("deviceId", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                ),
+                requiredProperties = setOf("deviceId"),
+            )
+        }
+
+        val files = generate(
+            spec(schemas = listOf(networkMeshSchema) + variantSchemas),
+        )
+
+        // All 6 variants generated
+        for (name in variantNames) {
+            val variantType = findType(files, name)
+            assertTrue(
+                KModifier.DATA in variantType.modifiers,
+                "$name should be a data class",
+            )
+            val superinterfaces = variantType.superinterfaces.keys.map { it.toString() }
+            assertTrue(
+                "$modelPackage.NetworkMeshDevice" in superinterfaces,
+                "$name should implement NetworkMeshDevice. Superinterfaces: $superinterfaces",
+            )
+        }
+
+        // SerializersModule contains all variants
+        val serializersModuleFile = files.find { it.name == "SerializersModule" }
+        assertNotNull(serializersModuleFile, "SerializersModule file should be generated")
+        val moduleCode = serializersModuleFile.toString()
+        for (name in variantNames) {
+            assertTrue(
+                name in moduleCode,
+                "SerializersModule should reference $name. Code: $moduleCode",
+            )
+        }
+    }
+
+    @Test
+    fun `SerializersModule includes boolean variant names`() {
+        val deviceStatusSchema = schema(
+            name = "DeviceStatus",
+            oneOf = listOf(
+                TypeRef.Reference("true"),
+                TypeRef.Reference("false"),
+            ),
+            discriminator = Discriminator(
+                propertyName = "online",
+                mapping = mapOf(
+                    "true" to "#/components/schemas/true",
+                    "false" to "#/components/schemas/false",
+                ),
+            ),
+        )
+        val trueSchema = schema(
+            name = "true",
+            properties = listOf(
+                PropertyModel("connectedSince", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("connectedSince"),
+        )
+        val falseSchema = schema(
+            name = "false",
+            properties = listOf(
+                PropertyModel("lastSeen", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("lastSeen"),
+        )
+
+        val files = generate(
+            spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
+        )
+
+        val serializersModuleFile = files.find { it.name == "SerializersModule" }
+        assertNotNull(serializersModuleFile, "SerializersModule file should be generated")
+        val moduleCode = serializersModuleFile.toString()
+        assertTrue(
+            "`true`" in moduleCode,
+            "SerializersModule should reference `true`. Code: $moduleCode",
+        )
+        assertTrue(
+            "`false`" in moduleCode,
+            "SerializersModule should reference `false`. Code: $moduleCode",
         )
     }
 
@@ -632,7 +801,7 @@ class ModelGeneratorPolymorphicTest {
                 allOf = listOf(TypeRef.Reference("Pet")),
             )
 
-        val files = generator.generate(spec(schemas = listOf(petSchema, dogSchema)))
+        val files = generate(spec(schemas = listOf(petSchema, dogSchema)))
         val dogType = findType(files, "Dog")
 
         val superinterfaces = dogType.superinterfaces.keys.map { it.toString() }

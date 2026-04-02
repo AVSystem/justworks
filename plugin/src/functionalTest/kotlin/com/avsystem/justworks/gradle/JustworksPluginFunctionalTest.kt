@@ -600,7 +600,7 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
-    fun `spec without security schemes generates backward-compatible ApiClientBase`() {
+    fun `spec without security schemes generates ApiClientBase with no auth params`() {
         writeBuildFile()
 
         runner("justworksGenerateMain").build()
@@ -610,8 +610,8 @@ class JustworksPluginFunctionalTest {
         assertTrue(apiClientBase.exists(), "ApiClientBase.kt should exist")
 
         val content = apiClientBase.readText()
-        assertTrue(content.contains("token"), "Should contain backward-compat token param")
-        assertTrue(content.contains("Bearer"), "Should contain Bearer in applyAuth body")
+        assertTrue(!content.contains("token"), "Should NOT contain token param when no security schemes")
+        assertTrue(!content.contains("Bearer"), "Should NOT contain Bearer when no security schemes")
     }
 
     @Test
