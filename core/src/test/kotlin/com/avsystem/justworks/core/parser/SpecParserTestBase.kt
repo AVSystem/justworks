@@ -14,6 +14,6 @@ abstract class SpecParserTestBase {
 
     protected fun parseSpec(file: File): ApiSpec = when (val result = SpecParser.parse(file)) {
         is ParseResult.Success -> result.apiSpec
-        is ParseResult.Failure -> fail("Expected success but got errors: ${result.errors}")
+        is ParseResult.Failure -> fail("Expected success but got error: ${result.error}")
     }
 }

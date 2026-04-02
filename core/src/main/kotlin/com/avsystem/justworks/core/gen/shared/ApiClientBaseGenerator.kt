@@ -1,5 +1,33 @@
-package com.avsystem.justworks.core.gen
+package com.avsystem.justworks.core.gen.shared
 
+import com.avsystem.justworks.core.gen.API_CLIENT_BASE
+import com.avsystem.justworks.core.gen.APPLY_AUTH
+import com.avsystem.justworks.core.gen.BASE_URL
+import com.avsystem.justworks.core.gen.BODY_AS_TEXT_FUN
+import com.avsystem.justworks.core.gen.BODY_FUN
+import com.avsystem.justworks.core.gen.CLIENT
+import com.avsystem.justworks.core.gen.CLOSEABLE
+import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
+import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
+import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
+import com.avsystem.justworks.core.gen.ENCODE_TO_STRING_FUN
+import com.avsystem.justworks.core.gen.HEADERS_FUN
+import com.avsystem.justworks.core.gen.HTTP_CLIENT
+import com.avsystem.justworks.core.gen.HTTP_ERROR
+import com.avsystem.justworks.core.gen.HTTP_ERROR_TYPE
+import com.avsystem.justworks.core.gen.HTTP_HEADERS
+import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
+import com.avsystem.justworks.core.gen.HTTP_REQUEST_TIMEOUT_EXCEPTION
+import com.avsystem.justworks.core.gen.HTTP_RESPONSE
+import com.avsystem.justworks.core.gen.HTTP_SUCCESS
+import com.avsystem.justworks.core.gen.IO_EXCEPTION
+import com.avsystem.justworks.core.gen.JSON_CLASS
+import com.avsystem.justworks.core.gen.JSON_FUN
+import com.avsystem.justworks.core.gen.RAISE
+import com.avsystem.justworks.core.gen.RAISE_FUN
+import com.avsystem.justworks.core.gen.SAFE_CALL
+import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.TOKEN
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.ContextParameter
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
@@ -24,11 +52,12 @@ import com.squareup.kotlinpoet.UNIT
  * - `ApiClientBase` abstract class with common client infrastructure
  */
 @OptIn(ExperimentalKotlinPoetApi::class)
-object ApiClientBaseGenerator {
-    private const val BLOCK = "block"
-    private const val MAP_TO_RESULT = "mapToResult"
-    private const val SUCCESS_BODY = "successBody"
+internal object ApiClientBaseGenerator {
     private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
+    private const val SUCCESS_BODY = "successBody"
+    private const val MAP_TO_RESULT = "mapToResult"
+    private const val BLOCK = "block"
+    private const val NETWORK_ERROR = "Network error"
 
     fun generate(): FileSpec {
         val t = TypeVariableName("T").copy(reified = true)
@@ -44,7 +73,7 @@ object ApiClientBaseGenerator {
     }
 
     private fun buildEncodeParam(t: TypeVariableName): FunSpec = FunSpec
-        .builder("encodeParam")
+        .builder(ENCODE_PARAM_FUN.simpleName)
         .addModifiers(KModifier.INLINE)
         .addTypeVariable(t)
         .addParameter("value", TypeVariableName("T"))

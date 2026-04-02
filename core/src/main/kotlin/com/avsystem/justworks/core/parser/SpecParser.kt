@@ -1,14 +1,20 @@
 package com.avsystem.justworks.core.parser
 
-import arrow.core.compareTo
 import arrow.core.fold
-import arrow.core.merge
-import arrow.core.raise.context.Raise
+import arrow.core.getOrElse
+import arrow.core.left
+import arrow.core.raise.ExperimentalRaiseAccumulateApi
+import arrow.core.raise.Raise
+import arrow.core.raise.context.either
 import arrow.core.raise.context.ensure
 import arrow.core.raise.context.ensureNotNull
-import arrow.core.raise.either
+import arrow.core.raise.iorNel
 import arrow.core.raise.nullable
+import arrow.core.toNonEmptyListOrNull
+import com.avsystem.justworks.core.Issue
+import com.avsystem.justworks.core.Warnings
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.EnumBackingType
@@ -22,13 +28,16 @@ import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
+import com.avsystem.justworks.core.toEnumOrNull
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
+import io.swagger.v3.oas.models.media.Content
 import io.swagger.v3.oas.models.media.Schema
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
 import java.util.IdentityHashMap
+import kotlin.collections.emptyMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 
 /**
@@ -38,17 +47,20 @@ import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
  * ```kotlin
  * when (val result = SpecParser.parse(file)) {
  *     is ParseResult.Success -> result.apiSpec
- *     is ParseResult.Failure -> handleErrors(result.errors)
+ *     is ParseResult.Failure -> handleErrors(result.error)
  * }
  * ```
  *
  * Both [Success] and [Failure] may carry [warnings] about non-fatal issues
  * encountered during parsing or validation.
  */
-sealed interface ParseResult {
-    data class Success(val apiSpec: ApiSpec, val warnings: List<String> = emptyList()) : ParseResult
 
-    data class Failure(val errors: List<String>, val warnings: List<String> = emptyList()) : ParseResult
+sealed interface ParseResult {
+    val warnings: List<Issue.Warning>
+
+    data class Success(val apiSpec: ApiSpec, override val warnings: List<Issue.Warning>) : ParseResult
+
+    data class Failure(val error: Issue.Error, override val warnings: List<Issue.Warning>) : ParseResult
 }
 
 object SpecParser {
@@ -66,36 +78,47 @@ object SpecParser {
      * @return [ParseResult.Success] with the parsed model and any warnings, or
      *         [ParseResult.Failure] with a non-empty list of error messages
      */
-    fun parse(specFile: File): ParseResult = either {
+    @OptIn(ExperimentalRaiseAccumulateApi::class)
+    fun parse(specFile: File): ParseResult {
         val parseOptions = ParseOptions().apply {
             isResolve = true
             isResolveFully = true
             isResolveCombinators = false
         }
 
-        val swaggerResult = OpenAPIParser().readLocation(specFile.absolutePath, null, parseOptions)
-        val openApi = swaggerResult.openAPI
-        val swaggerMessages = swaggerResult.messages.orEmpty()
+        val result = iorNel {
+            either {
+                val swaggerResult = OpenAPIParser().readLocation(specFile.absolutePath, null, parseOptions)
 
-        ensureNotNull(openApi) {
-            ParseResult.Failure(swaggerMessages.ifEmpty { listOf("Failed to parse spec: ${specFile.name}") })
+                swaggerResult
+                    ?.messages
+                    ?.map(Issue::Warning)
+                    ?.toNonEmptyListOrNull()
+                    ?.let(::accumulate)
+
+                val openApi = swaggerResult?.openAPI
+
+                ensureNotNull(openApi) {
+                    Issue.Error("Failed to parse spec: ${specFile.name}")
+                }
+
+                SpecValidator.validate(openApi)
+                openApi.toApiSpec()
+            }
         }
+        val warnings = result.leftOrNull().orEmpty()
+        val either = result.getOrElse { Issue.Error("Failed to parse spec: ${specFile.name}").left() }
 
-        val validationIssues = SpecValidator.validate(openApi)
-        val (errors, warnings) = validationIssues.partition { it is SpecValidator.ValidationIssue.Error }
-        val allWarnings = warnings.map { it.message } + swaggerMessages
-
-        ensure(errors.isEmpty()) {
-            ParseResult.Failure(errors.map { it.message }, allWarnings)
-        }
-
-        ParseResult.Success(openApi.toApiSpec(), warnings = allWarnings)
-    }.merge()
+        return either.fold(
+            ifLeft = { ParseResult.Failure(it, warnings) },
+            ifRight = { ParseResult.Success(it, warnings) },
+        )
+    }
 
     private typealias ComponentSchemaIdentity = IdentityHashMap<Schema<*>, String>
     private typealias ComponentSchemas = MutableMap<String, Schema<*>>
 
-    context(_: Raise<ParseResult.Failure>)
+    context(_: Raise<Issue.Error>, _: Warnings)
     private fun OpenAPI.toApiSpec(): ApiSpec {
         val allSchemas = components?.schemas.orEmpty()
 
@@ -153,7 +176,7 @@ object SpecParser {
             pathItem
                 .readOperationsMap()
                 .asSequence()
-                .mapNotNull { (method, value) -> HttpMethod.parse(method.name)?.let { it to value } }
+                .mapNotNull { (method, value) -> method.name.toEnumOrNull<HttpMethod>()?.let { it to value } }
                 .map { (method, operation) ->
                     val operationId = operation.operationId ?: generateOperationId(method, path)
 
@@ -164,11 +187,19 @@ object SpecParser {
                     val requestBody = nullable {
                         val body = operation.requestBody.bind()
                         val content = body.content.bind()
-                        val schema = content[JSON_CONTENT_TYPE]?.schema.bind()
+
+                        val contentType = ContentType.entries.find { it in content }.bind()
+
+                        val mediaType = content[contentType].bind()
+
+                        val schema = mediaType.schema
+                            ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request")
+                            .bind()
+
                         RequestBody(
                             required = body.required ?: false,
-                            contentType = JSON_CONTENT_TYPE,
-                            schema = schema.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request"),
+                            contentType = contentType,
+                            schema = schema,
                         )
                     }
 
@@ -179,7 +210,7 @@ object SpecParser {
                                 statusCode = code,
                                 description = resp.description,
                                 schema = resp.content
-                                    ?.get(JSON_CONTENT_TYPE)
+                                    ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
                                     ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                             )
@@ -190,6 +221,7 @@ object SpecParser {
                         method = method,
                         operationId = operationId,
                         summary = operation.summary,
+                        description = operation.description,
                         tags = operation.tags.orEmpty(),
                         parameters = mergedParams,
                         requestBody = requestBody,
@@ -201,15 +233,15 @@ object SpecParser {
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun SwaggerParameter.toParameter(): Parameter = Parameter(
         name = name ?: "",
-        location = ParameterLocation.parse(`in`) ?: ParameterLocation.QUERY,
+        location = `in`.toEnumOrNull<ParameterLocation>() ?: ParameterLocation.QUERY,
         required = required ?: false,
         schema = schema?.toTypeRef() ?: TypeRef.Primitive(PrimitiveType.STRING),
         description = description,
     )
 
-    // --- Schema extraction ---
+// --- Schema extraction ---
 
-    context(_: Raise<ParseResult.Failure>, _: ComponentSchemaIdentity, _: ComponentSchemas)
+    context(_: Raise<Issue.Error>, _: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
@@ -219,7 +251,7 @@ object SpecParser {
         val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
 
         ensure(oneOf.isNullOrEmpty() || anyOf.isNullOrEmpty()) {
-            ParseResult.Failure(listOf("Schema '$name' has both oneOf and anyOf. Use one combinator only."))
+            Issue.Error("Schema '$name' has both oneOf and anyOf. Use one combinator only.")
         }
 
         val (properties, requiredProps) =
@@ -261,16 +293,25 @@ object SpecParser {
         )
     }
 
-    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel = EnumModel(
-        name = name,
-        description = schema.description,
-        type = EnumBackingType.parse(schema.type) ?: EnumBackingType.STRING,
-        values = schema.enum.map { it.toString() },
-    )
+    private fun extractEnumModel(name: String, schema: Schema<*>): EnumModel {
+        val enumValues = schema.enum.map { it.toString() }
+        val valueDescriptions = when (val ext = schema.extensions?.get("x-enum-descriptions")) {
+            is List<*> if ext.size == enumValues.size -> enumValues.zip(ext).toMap()
+            is Map<*, *> -> ext
+            else -> emptyMap()
+        }.mapNotNull { (k, v) -> if (k is String && v is String) k to v else null }.toMap()
 
-    // --- allOf property merging ---
+        return EnumModel(
+            name = name,
+            description = schema.description,
+            type = schema.type.toEnumOrNull<EnumBackingType>() ?: EnumBackingType.STRING,
+            values = enumValues.map { EnumModel.Value(it, valueDescriptions[it]) },
+        )
+    }
 
-    context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
+// --- allOf property merging ---
+
+    context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractAllOfProperties(parentName: String, schema: Schema<*>): Pair<List<PropertyModel>, Set<String>> {
         val topRequired = schema.required.orEmpty().toSet()
         val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
@@ -415,10 +456,13 @@ object SpecParser {
         return method.name.lowercase() + segments
     }
 
+    operator fun Content.get(contentType: ContentType) = this[contentType.value]
+
+    operator fun Content.contains(contentType: ContentType) = contentType.value in this
+
     private fun String.toPascalCase(): String =
         split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
 
-    private const val JSON_CONTENT_TYPE = "application/json"
     private const val SCHEMA_PREFIX = "#/components/schemas/"
 
     private val STRING_FORMAT_MAP = mapOf(

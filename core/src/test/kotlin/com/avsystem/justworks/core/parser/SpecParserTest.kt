@@ -1,7 +1,9 @@
 package com.avsystem.justworks.core.parser
 
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.EnumBackingType
+import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.HttpMethod
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
@@ -27,10 +29,10 @@ class SpecParserTest : SpecParserTestBase() {
         }
     }
 
-    private fun parseSpecErrors(file: File): List<String> {
+    private fun parseSpecIssues(file: File): List<String> {
         val result = SpecParser.parse(file)
         check(result is ParseResult.Failure) { "Expected failure" }
-        return result.errors
+        return result.warnings.map { it.message } + result.error.message
     }
 
     // -- SPEC-01: OpenAPI 3.0 parsing --
@@ -53,7 +55,10 @@ class SpecParserTest : SpecParserTestBase() {
         val petStatus = petstore.enums.find { it.name == "PetStatus" }
         assertNotNull(petStatus, "PetStatus enum missing")
         assertEquals(EnumBackingType.STRING, petStatus.type)
-        assertEquals(listOf("available", "pending", "sold"), petStatus.values)
+        assertEquals(
+            listOf(EnumModel.Value("available"), EnumModel.Value("pending"), EnumModel.Value("sold")),
+            petStatus.values,
+        )
     }
 
     @Test
@@ -129,7 +134,7 @@ class SpecParserTest : SpecParserTestBase() {
 
         val body = assertNotNull(createPet.requestBody, "createPet should have a request body")
         assertTrue(body.required, "Request body should be required")
-        assertEquals("application/json", body.contentType)
+        assertEquals(ContentType.JSON_CONTENT_TYPE, body.contentType)
 
         val bodyType = assertIs<TypeRef.Reference>(body.schema)
         assertEquals("NewPet", bodyType.schemaName)
@@ -195,10 +200,9 @@ class SpecParserTest : SpecParserTestBase() {
         val order =
             spec.schemas.find { it.name == "Order" }
                 ?: fail("Order schema not found")
-        val itemProp =
-            order.properties.find { it.name == "item" }
-                ?: fail("item property not found on Order")
-
+        assert(order.properties.any { it.name == "item" }) {
+            "item property not found on Order"
+        }
         // After resolveFully, the item property may be inlined or a reference
         // Either way, ItemDetails should exist as a named schema
         val itemDetails = spec.schemas.find { it.name == "ItemDetails" }
@@ -216,26 +220,26 @@ class SpecParserTest : SpecParserTestBase() {
         // The $ref parameter (LimitParam) should be resolved to an actual parameter
         val limitParam =
             listOrders.parameters.find { it.name == "limit" }
-                ?: fail("limit parameter not found -- \$ref parameter not resolved")
+                ?: fail($$"limit parameter not found -- $ref parameter not resolved")
         assertEquals(ParameterLocation.QUERY, limitParam.location)
     }
 
-    // -- SPEC-03: Error reporting --
+    // -- SPEC-03: Warning reporting --
 
     @Test
-    fun `parse invalid spec returns Failure`() {
+    fun `parse spec with missing info produces warnings`() {
         val result = SpecParser.parse(loadResource("invalid-spec.yaml"))
-        assertIs<ParseResult.Failure>(result)
+        assertIs<ParseResult.Success>(result)
+        assertTrue(result.warnings.isNotEmpty(), "Spec with missing info should produce warnings")
     }
 
     @Test
-    fun `parse invalid spec has descriptive error messages`() {
-        val errors = parseSpecErrors(loadResource("invalid-spec.yaml"))
-
-        assertTrue(errors.isNotEmpty(), "Failure should have error messages")
-        // Errors should be human-readable, not empty or codes-only
-        errors.forEach { error ->
-            assertTrue(error.length > 5, "Error message too short to be useful: '$error'")
+    fun `parse spec with missing info has descriptive warning messages`() {
+        val result = SpecParser.parse(loadResource("invalid-spec.yaml"))
+        assertIs<ParseResult.Success>(result)
+        assertTrue(result.warnings.isNotEmpty(), "Should have warning messages")
+        result.warnings.forEach { warning ->
+            assertTrue(warning.message.length > 5, "Warning message too short to be useful: '$warning'")
         }
     }
 
@@ -292,7 +296,7 @@ class SpecParserTest : SpecParserTestBase() {
 
     @Test
     fun `mixed anyOf and oneOf raises error`() {
-        val errors = parseSpecErrors(loadResource("mixed-combinator-spec.yaml"))
+        val errors = parseSpecIssues(loadResource("mixed-combinator-spec.yaml"))
 
         val errorMessages = errors.joinToString("\n")
         assertTrue(
@@ -306,7 +310,7 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `property with allOf reference resolves to referenced type`() {
         val spec =
-            """
+            $$"""
             openapi: 3.0.0
             info:
               title: Test
@@ -326,7 +330,7 @@ class SpecParserTest : SpecParserTestBase() {
                       type: string
                     config:
                       allOf:
-                        - ${'$'}ref: '#/components/schemas/TaskConfig'
+                        - $ref: '#/components/schemas/TaskConfig'
                   required:
                     - name
             """.trimIndent()
@@ -420,7 +424,7 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `ref wrapper schema has underlyingType Reference`() {
         val spec = parseSpec(
-            """
+            $$"""
             openapi: 3.0.0
             info:
               title: Test
@@ -434,7 +438,7 @@ class SpecParserTest : SpecParserTestBase() {
                     name:
                       type: string
                 PetAlias:
-                  ${'$'}ref: '#/components/schemas/Pet'
+                  $ref: '#/components/schemas/Pet'
             """.trimIndent().toTempFile(),
         )
 
@@ -472,7 +476,7 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `schema with allOf has no underlyingType`() {
         val spec = parseSpec(
-            """
+            $$"""
             openapi: 3.0.0
             info:
               title: Test
@@ -487,7 +491,7 @@ class SpecParserTest : SpecParserTestBase() {
                       type: integer
                 Extended:
                   allOf:
-                    - ${'$'}ref: '#/components/schemas/Base'
+                    - $ref: '#/components/schemas/Base'
                   type: object
                   properties:
                     name:
@@ -498,6 +502,77 @@ class SpecParserTest : SpecParserTestBase() {
         val extended = spec.schemas.find { it.name == "Extended" }
             ?: fail("Extended schema not found")
         assertEquals(null, extended.underlyingType, "allOf schema should not have underlyingType")
+    }
+
+    // -- x-enum-descriptions --
+
+    @Test
+    fun `enum with x-enum-descriptions as list populates value descriptions`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Color:
+                  type: string
+                  enum:
+                    - red
+                    - green
+                    - blue
+                  x-enum-descriptions:
+                    - The color red
+                    - The color green
+                    - The color blue
+            """.trimIndent().toTempFile(),
+        )
+
+        val color = spec.enums.find { it.name == "Color" } ?: fail("Color enum not found")
+        assertEquals(
+            listOf(
+                EnumModel.Value("red", "The color red"),
+                EnumModel.Value("green", "The color green"),
+                EnumModel.Value("blue", "The color blue"),
+            ),
+            color.values,
+        )
+    }
+
+    @Test
+    fun `enum with x-enum-descriptions as map populates value descriptions`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Priority:
+                  type: string
+                  enum:
+                    - low
+                    - medium
+                    - high
+                  x-enum-descriptions:
+                    low: Low priority
+                    high: High priority
+            """.trimIndent().toTempFile(),
+        )
+
+        val priority = spec.enums.find { it.name == "Priority" } ?: fail("Priority enum not found")
+        assertEquals(
+            listOf(
+                EnumModel.Value("low", "Low priority"),
+                EnumModel.Value("medium", null),
+                EnumModel.Value("high", "High priority"),
+            ),
+            priority.values,
+        )
     }
 
     // -- SCHM-03/04/05: Extended format type mapping --

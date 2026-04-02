@@ -47,11 +47,12 @@ abstract class JustworksGenerateTask : DefaultTask() {
         val outDir = outputDir.get().asFile.recreateDirectory()
 
         val spec = specFile.get().asFile
-        when (val result = SpecParser.parse(spec)) {
+        val result = SpecParser.parse(spec)
+        result.warnings.forEach { logger.warn(it.message) }
+
+        when (result) {
             is ParseResult.Failure -> {
-                throw GradleException(
-                    "Failed to parse spec (task: $name): ${spec.name}:\n${result.errors.joinToString("\n")}",
-                )
+                throw GradleException("Failed to parse spec (task: $name): ${spec.name}:\n${result.error}")
             }
 
             is ParseResult.Success -> {

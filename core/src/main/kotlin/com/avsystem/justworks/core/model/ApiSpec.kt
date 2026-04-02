@@ -20,6 +20,7 @@ data class Endpoint(
     val method: HttpMethod,
     val operationId: String,
     val summary: String?,
+    val description: String?,
     val tags: List<String>,
     val parameters: List<Parameter>,
     val requestBody: RequestBody?,
@@ -31,11 +32,7 @@ enum class HttpMethod {
     POST,
     PUT,
     DELETE,
-    PATCH;
-
-    companion object {
-        fun parse(name: String): HttpMethod? = entries.find { it.name.equals(name, true) }
-    }
+    PATCH
 }
 
 data class Parameter(
@@ -50,18 +47,21 @@ data class Parameter(
 enum class ParameterLocation {
     PATH,
     QUERY,
-    HEADER;
-
-    companion object {
-        fun parse(name: String): ParameterLocation? = entries.find { it.name.equals(name, true) }
-    }
+    HEADER
 }
 
 data class RequestBody(
     val required: Boolean,
-    val contentType: String,
+    val contentType: ContentType,
     val schema: TypeRef,
 )
+
+// the order is important!!!
+enum class ContentType(val value: String) {
+    MULTIPART_FORM_DATA("multipart/form-data"),
+    FORM_URL_ENCODED("application/x-www-form-urlencoded"),
+    JSON_CONTENT_TYPE("application/json"),
+}
 
 data class Response(
     val statusCode: String,
@@ -95,16 +95,14 @@ data class EnumModel(
     val name: String,
     val description: String?,
     val type: EnumBackingType,
-    val values: List<String>,
-)
+    val values: List<Value>,
+) {
+    data class Value(val name: String, val description: String? = null)
+}
 
 enum class EnumBackingType {
     STRING,
-    INTEGER;
-
-    companion object {
-        fun parse(name: String): EnumBackingType? = entries.find { it.name.equals(name, true) }
-    }
+    INTEGER
 }
 
 data class Discriminator(val propertyName: String, val mapping: Map<String, String>)
