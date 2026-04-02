@@ -43,8 +43,6 @@ import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
 import java.util.IdentityHashMap
-import kotlin.apply
-import kotlin.collections.map
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 import io.swagger.v3.oas.models.security.SecurityScheme as SwaggerSecurityScheme
 

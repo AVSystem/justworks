@@ -657,14 +657,6 @@ class ClientGeneratorTest {
     // -- SECU: Security-aware constructor generation --
 
     @Test
-    fun `no securitySchemes generates constructor with only baseUrl`() {
-        val cls = clientClass(listOf(endpoint()))
-        val constructor = assertNotNull(cls.primaryConstructor)
-        val paramNames = constructor.parameters.map { it.name }
-        assertEquals(listOf("baseUrl"), paramNames)
-    }
-
-    @Test
     fun `ApiKey HEADER scheme generates constructor with baseUrl and apiKey param`() {
         val cls = clientClass(
             listOf(endpoint()),

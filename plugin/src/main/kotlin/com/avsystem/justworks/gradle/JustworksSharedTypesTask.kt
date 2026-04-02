@@ -38,13 +38,27 @@ abstract class JustworksSharedTypesTask : DefaultTask() {
 
         val specs = specFiles.files.sortedBy { it.path }.mapNotNull { file ->
             when (val result = SpecParser.parse(file)) {
-                is ParseResult.Success -> result.apiSpec
+                is ParseResult.Success -> {
+                    result.apiSpec
+                }
+
                 is ParseResult.Failure -> {
                     logger.warn("Failed to parse spec '${file.name}': ${result.error}")
                     null
                 }
             }
         }
+
+        specs
+            .asSequence()
+            .flatMap { it.securitySchemes }
+            .groupingBy { it.name }
+            .eachCount()
+            .forEach { (name, schemes) ->
+                if (schemes > 1) {
+                    logger.warn("Security scheme '$name' defined with conflicting types — using first occurrence")
+                }
+            }
 
         val count = CodeGenerator.generateSharedTypes(outDir, specs)
         logger.lifecycle("Generated $count shared type files")
