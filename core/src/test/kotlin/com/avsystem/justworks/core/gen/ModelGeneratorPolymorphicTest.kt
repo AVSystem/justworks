@@ -1,6 +1,7 @@
 package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.gen.model.ModelGenerator
+import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.EnumModel
@@ -111,7 +112,7 @@ class ModelGeneratorPolymorphicTest {
         val shapeType = findType(files, "Shape")
 
         assertTrue(KModifier.SEALED in shapeType.modifiers, "Expected SEALED modifier on Shape")
-        assertEquals(TypeSpec.Kind.CLASS, shapeType.kind, "Expected CLASS kind (not INTERFACE)")
+        assertEquals(TypeSpec.Kind.INTERFACE, shapeType.kind, "Expected INTERFACE kind for sealed hierarchy")
     }
 
     @Test
@@ -191,7 +192,7 @@ class ModelGeneratorPolymorphicTest {
     // -- POLY-02: Variant subtypes extend sealed class --
 
     @Test
-    fun `variant data class extends sealed class via superclass`() {
+    fun `variant data class implements sealed interface via superinterface`() {
         val shapeSchema =
             schema(
                 name = "Shape",
@@ -207,11 +208,10 @@ class ModelGeneratorPolymorphicTest {
         val files = generate(spec(schemas = listOf(shapeSchema, circleSchema)))
         val circleType = findType(files, "Circle")
 
-        // Should use superclass (not superinterfaces) since parent is sealed class
-        val superclass = circleType.superclass.toString()
+        val superinterfaces = circleType.superinterfaces.keys.map { it.toString() }
         assertTrue(
-            "$modelPackage.Shape" in superclass,
-            "Circle should extend Shape as superclass. Superclass: $superclass",
+            "$modelPackage.Shape" in superinterfaces,
+            "Circle should implement Shape as superinterface. Superinterfaces: $superinterfaces",
         )
     }
 
@@ -478,7 +478,7 @@ class ModelGeneratorPolymorphicTest {
         val networkMeshType = findType(files, "NetworkMeshDevice")
 
         assertTrue(KModifier.SEALED in networkMeshType.modifiers)
-        assertEquals(TypeSpec.Kind.CLASS, networkMeshType.kind, "Expected CLASS kind for discriminated oneOf")
+        assertEquals(TypeSpec.Kind.INTERFACE, networkMeshType.kind, "Expected INTERFACE kind for discriminated oneOf")
         val discriminatorAnnotation =
             networkMeshType.annotations.find {
                 it.typeName.toString() == "kotlinx.serialization.json.JsonClassDiscriminator"
@@ -689,8 +689,8 @@ class ModelGeneratorPolymorphicTest {
         val files = generate(spec(schemas = listOf(shapeSchema, circleSchema, squareSchema)))
         val shapeType = findType(files, "Shape")
 
-        // Should be sealed class (not interface) for anyOf with discriminator
-        assertEquals(TypeSpec.Kind.CLASS, shapeType.kind, "Discriminated anyOf should be sealed CLASS")
+        // Should be sealed interface for anyOf with discriminator
+        assertEquals(TypeSpec.Kind.INTERFACE, shapeType.kind, "Discriminated anyOf should be sealed INTERFACE")
 
         // Should have plain @Serializable, NOT @Serializable(with = ...)
         val serializableAnnotation = shapeType.annotations.find {
@@ -754,22 +754,22 @@ class ModelGeneratorPolymorphicTest {
             spec(schemas = listOf(deviceStatusSchema, trueSchema, falseSchema)),
         )
 
-        val trueType = findType(files, "true")
-        assertTrue(KModifier.DATA in trueType.modifiers, "'true' should be data class")
+        val trueType = findType(files, "True")
+        assertTrue(KModifier.DATA in trueType.modifiers, "'True' should be data class")
 
-        val falseType = findType(files, "false")
-        assertTrue(KModifier.DATA in falseType.modifiers, "'false' should be data class")
+        val falseType = findType(files, "False")
+        assertTrue(KModifier.DATA in falseType.modifiers, "'False' should be data class")
 
-        // Both should extend DeviceStatus sealed class as superclass
-        val trueSuperclass = trueType.superclass.toString()
+        // Both should implement DeviceStatus sealed interface
+        val trueSuperinterfaces = trueType.superinterfaces.keys.map { it.toString() }
         assertTrue(
-            "$modelPackage.DeviceStatus" in trueSuperclass,
-            "'true' should extend DeviceStatus. Superclass: $trueSuperclass",
+            "$modelPackage.DeviceStatus" in trueSuperinterfaces,
+            "'True' should implement DeviceStatus. Superinterfaces: $trueSuperinterfaces",
         )
-        val falseSuperclass = falseType.superclass.toString()
+        val falseSuperinterfaces = falseType.superinterfaces.keys.map { it.toString() }
         assertTrue(
-            "$modelPackage.DeviceStatus" in falseSuperclass,
-            "'false' should extend DeviceStatus. Superclass: $falseSuperclass",
+            "$modelPackage.DeviceStatus" in falseSuperinterfaces,
+            "'False' should implement DeviceStatus. Superinterfaces: $falseSuperinterfaces",
         )
     }
 
@@ -807,13 +807,14 @@ class ModelGeneratorPolymorphicTest {
             spec(schemas = listOf(networkMeshSchema) + variantSchemas),
         )
 
-        // Parent should be sealed class
+        // Parent should be sealed interface
         val networkMeshType = findType(files, "NetworkMeshDevice")
-        assertEquals(TypeSpec.Kind.CLASS, networkMeshType.kind, "Expected sealed CLASS")
+        assertEquals(TypeSpec.Kind.INTERFACE, networkMeshType.kind, "Expected sealed INTERFACE")
 
-        // All 6 variants nested inside parent
+        // All 6 variants nested inside parent (names are PascalCased)
         val nestedNames = networkMeshType.typeSpecs.map { it.name }
-        for (name in variantNames) {
+        val expectedNames = variantNames.map { it.toPascalCase() }
+        for (name in expectedNames) {
             assertTrue(name in nestedNames, "$name should be nested inside NetworkMeshDevice. Nested: $nestedNames")
             val variantType = networkMeshType.typeSpecs.find { it.name == name }!!
             assertTrue(KModifier.DATA in variantType.modifiers, "$name should be a data class")
@@ -823,7 +824,7 @@ class ModelGeneratorPolymorphicTest {
         val serializersModuleFile = files.find { it.name == "SerializersModule" }
         assertNotNull(serializersModuleFile, "SerializersModule file should be generated")
         val moduleCode = serializersModuleFile.toString()
-        for (name in variantNames) {
+        for (name in expectedNames) {
             assertTrue(
                 name in moduleCode,
                 "SerializersModule should reference $name. Code: $moduleCode",
@@ -870,12 +871,12 @@ class ModelGeneratorPolymorphicTest {
         assertNotNull(serializersModuleFile, "SerializersModule file should be generated")
         val moduleCode = serializersModuleFile.toString()
         assertTrue(
-            "`true`" in moduleCode,
-            "SerializersModule should reference `true`. Code: $moduleCode",
+            "True" in moduleCode,
+            "SerializersModule should reference True. Code: $moduleCode",
         )
         assertTrue(
-            "`false`" in moduleCode,
-            "SerializersModule should reference `false`. Code: $moduleCode",
+            "False" in moduleCode,
+            "SerializersModule should reference False. Code: $moduleCode",
         )
     }
 
@@ -902,11 +903,11 @@ class ModelGeneratorPolymorphicTest {
         val files = generate(spec(schemas = listOf(petSchema, dogSchema)))
         val dogType = findType(files, "Dog")
 
-        // Dog should extend Pet (sealed class) as superclass
-        val superclass = dogType.superclass.toString()
+        // Dog should implement Pet (sealed interface) as superinterface
+        val superinterfaces = dogType.superinterfaces.keys.map { it.toString() }
         assertTrue(
-            "$modelPackage.Pet" in superclass,
-            "Dog should have Pet as superclass. Superclass: $superclass",
+            "$modelPackage.Pet" in superinterfaces,
+            "Dog should have Pet as superinterface. Superinterfaces: $superinterfaces",
         )
     }
 

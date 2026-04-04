@@ -6,6 +6,7 @@ import com.avsystem.justworks.core.gen.POLYMORPHIC_FUN
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.SUBCLASS_FUN
 import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.toPascalCase
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -38,7 +39,7 @@ internal object SerializersModuleGenerator {
             val parentClass = ClassName(hierarchy.modelPackage, parent)
             code.beginControlFlow("%M(%T::class)", POLYMORPHIC_FUN, parentClass)
             for (variant in variants) {
-                val variantClass = parentClass.nestedClass(variant)
+                val variantClass = parentClass.nestedClass(variant.toPascalCase())
                 code.addStatement("%M(%T::class)", SUBCLASS_FUN, variantClass)
             }
             code.endControlFlow()

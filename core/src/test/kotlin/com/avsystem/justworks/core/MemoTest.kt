@@ -46,7 +46,7 @@ class MemoTest {
     }
 
     @Test
-    fun `CacheGroup should reset all memoized instances`() {
+    fun `MemoScope should reset all memoized instances`() {
         val counter1 = AtomicInteger(0)
         val counter2 = AtomicInteger(0)
         val memoScope = MemoScope()

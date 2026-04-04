@@ -27,6 +27,8 @@ import com.avsystem.justworks.core.gen.USE_SERIALIZERS
 import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
 import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
+import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
 import com.avsystem.justworks.core.gen.resolveInlineTypes
 import com.avsystem.justworks.core.gen.resolveSerialName
 import com.avsystem.justworks.core.gen.resolveTypeRef
@@ -35,6 +37,7 @@ import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
 import com.avsystem.justworks.core.gen.toInlinedName
+import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumModel
@@ -99,13 +102,7 @@ internal object ModelGenerator {
             .flatMap { generateSchemaFiles(it) }
             .toList()
 
-        val inlineSchemaFiles = resolvedInlineSchemas.map {
-            if (it.isNested) {
-                generateNestedInlineClass(it)
-            } else {
-                generateDataClass(it)
-            }
-        }
+        val inlineSchemaFiles = resolvedInlineSchemas.map { generateDataClass(it) }
 
         val enumFiles = resolvedSpec.enums.map { generateEnumClass(it) }
 
@@ -190,13 +187,13 @@ internal object ModelGenerator {
     }
 
     /**
-     * Generates a sealed class with nested data class subtypes for oneOf or anyOf-with-discriminator schemas.
+     * Generates a sealed interface with nested subtypes for oneOf or anyOf-with-discriminator schemas.
      */
     context(hierarchy: Hierarchy)
     private fun generateSealedHierarchy(schema: SchemaModel): FileSpec {
         val className = ClassName(hierarchy.modelPackage, schema.name)
 
-        val parentBuilder = TypeSpec.classBuilder(className).addModifiers(KModifier.SEALED)
+        val parentBuilder = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
         parentBuilder.addAnnotation(SERIALIZABLE)
 
         if (schema.discriminator != null) {
@@ -215,9 +212,13 @@ internal object ModelGenerator {
         // Generate nested subtypes
         val variants = hierarchy.sealedHierarchies[schema.name]
         variants?.forEach { variantName ->
-            val variantSchema = hierarchy.schemasById[variantName]
-            val serialName = schema.resolveSerialName(variantName)
-            val nestedType = buildNestedVariant(variantSchema, variantName, className, serialName)
+            val nestedType = buildNestedVariant(
+                variantSchema = hierarchy.schemasById[variantName],
+                variantName = variantName,
+                parentClassName = className,
+                serialName = schema.resolveSerialName(variantName),
+                discriminatorProperty = schema.discriminator?.propertyName,
+            )
             parentBuilder.addType(nestedType)
         }
 
@@ -236,7 +237,8 @@ internal object ModelGenerator {
     }
 
     /**
-     * Builds a nested data class TypeSpec for a variant inside a sealed class hierarchy.
+     * Builds a nested TypeSpec for a variant inside a sealed interface hierarchy.
+     * Generates an `object` when there are no properties, or a `data class` otherwise.
      */
     context(hierarchy: Hierarchy)
     private fun buildNestedVariant(
@@ -244,19 +246,33 @@ internal object ModelGenerator {
         variantName: String,
         parentClassName: ClassName,
         serialName: String,
+        discriminatorProperty: String?,
     ): TypeSpec {
-        val variantClassName = parentClassName.nestedClass(variantName)
-        val builder = TypeSpec.classBuilder(variantClassName).addModifiers(KModifier.DATA)
-        builder.superclass(parentClassName)
-        // sealed class has no constructor params, but KotlinPoet requires this call to emit `Shape()`
-        builder.addSuperclassConstructorParameter("")
+        val variantClassName = parentClassName.nestedClass(variantName.toPascalCase())
+
+        val filteredSchema = variantSchema?.let { schema ->
+            val properties = discriminatorProperty?.let { discriminatorProperty ->
+                schema.properties.filter { it.name != discriminatorProperty }
+            }
+            if (properties != null) {
+                schema.copy(properties = properties)
+            } else {
+                schema
+            }
+        }
+
+        val builder = if (filteredSchema?.properties.isNullOrEmpty()) {
+            TypeSpec.objectBuilder(variantClassName)
+        } else {
+            TypeSpec.classBuilder(variantClassName).addModifiers(KModifier.DATA)
+        }
+
+        builder.addSuperinterface(parentClassName)
         builder.addAnnotation(SERIALIZABLE)
         builder.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
 
-        if (variantSchema != null) {
-            buildConstructorAndProperties(variantSchema, builder)
-        } else {
-            builder.primaryConstructor(FunSpec.constructorBuilder().build())
+        if (!filteredSchema?.properties.isNullOrEmpty()) {
+            buildConstructorAndProperties(filteredSchema, builder)
         }
 
         return builder.build()
@@ -323,7 +339,7 @@ internal object ModelGenerator {
         )
 
         if (schema.description != null) {
-            typeSpec.addKdoc("%L", schema.description)
+            typeSpec.addKdoc("%L", schema.description.sanitizeKdoc())
         }
 
         return FileSpec.builder(className).addType(typeSpec.build()).build()
@@ -589,21 +605,6 @@ internal object ModelGenerator {
             }
         }
         return visited.toList()
-    }
-
-    context(hierarchy: Hierarchy)
-    private fun generateNestedInlineClass(schema: SchemaModel): FileSpec {
-        val flatName = schema.name.toInlinedName()
-        val className = ClassName(hierarchy.modelPackage, flatName)
-
-        val typeSpec = TypeSpec
-            .classBuilder(className)
-            .addModifiers(KModifier.DATA)
-            .addAnnotation(SERIALIZABLE)
-
-        buildConstructorAndProperties(schema, typeSpec)
-
-        return FileSpec.builder(className).addType(typeSpec.build()).build()
     }
 
     private val SchemaModel.isPrimitiveOnly: Boolean

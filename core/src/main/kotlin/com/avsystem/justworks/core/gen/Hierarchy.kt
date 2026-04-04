@@ -9,12 +9,12 @@ import com.squareup.kotlinpoet.ClassName
 internal class Hierarchy(val modelPackage: ModelPackage) {
     private val schemas = mutableSetOf<SchemaModel>()
 
+    private val memoScope = MemoScope()
+
     /**
      * Updates the underlying schemas and invalidates all cached derived views.
      * This is necessary when schemas are updated (e.g., after inlining types).
      */
-    private val memoScope = MemoScope()
-
     fun addSchemas(newSchemas: List<SchemaModel>) {
         schemas += newSchemas
         memoScope.reset()
@@ -68,7 +68,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
             .filterNot { (parent, _) -> parent in anyOfWithoutDiscriminator }
             .flatMap { (parent, variants) ->
                 val parentClass = ClassName(modelPackage, parent)
-                variants.map { variant -> variant to parentClass.nestedClass(variant) } +
+                variants.map { variant -> variant to parentClass.nestedClass(variant.toPascalCase()) } +
                     (parent to parentClass)
             }.toMap()
     }
