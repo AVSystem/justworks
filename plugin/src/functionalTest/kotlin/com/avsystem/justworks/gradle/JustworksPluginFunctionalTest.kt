@@ -304,7 +304,7 @@ class JustworksPluginFunctionalTest {
         val shapeFile = outputDir.resolve("Shape.kt")
         assertTrue(shapeFile.exists(), "Shape.kt should exist")
         val shapeContent = shapeFile.readText()
-        assertTrue(shapeContent.contains("sealed class"), "Shape.kt should contain sealed class")
+        assertTrue(shapeContent.contains("sealed interface"), "Shape.kt should contain sealed interface")
         assertTrue(shapeContent.contains("JsonClassDiscriminator"), "Shape.kt should contain @JsonClassDiscriminator")
 
         // Variant subtypes are nested inside Shape.kt, no separate files
