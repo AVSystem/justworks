@@ -3,7 +3,7 @@ package com.avsystem.justworks.core.gen.client
 import com.avsystem.justworks.core.gen.BODY
 import com.avsystem.justworks.core.gen.CHANNEL_PROVIDER
 import com.avsystem.justworks.core.gen.CONTENT_TYPE_CLASS
-import com.avsystem.justworks.core.gen.ModelPackage
+import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.isBinaryUpload
 import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.gen.requiredProperties
@@ -16,7 +16,7 @@ import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.STRING
 
 internal object ParametersGenerator {
-    context(_: ModelPackage)
+    context(_: Hierarchy)
     fun buildMultipartParameters(requestBody: RequestBody): List<ParameterSpec> =
         requestBody.schema.properties.flatMap { prop ->
             val name = prop.name.toCamelCase()
@@ -33,13 +33,13 @@ internal object ParametersGenerator {
             }
         }
 
-    context(_: ModelPackage)
+    context(_: Hierarchy)
     fun buildFormParameters(requestBody: RequestBody): List<ParameterSpec> = requestBody.schema.properties.map { prop ->
         val isRequired = requestBody.required && prop.name in requestBody.schema.requiredProperties
         buildNullableParameter(prop.type, prop.name, isRequired)
     }
 
-    context(_: ModelPackage)
+    context(_: Hierarchy)
     fun buildNullableParameter(
         typeRef: TypeRef,
         name: String,
@@ -50,7 +50,7 @@ internal object ParametersGenerator {
         return builder.build()
     }
 
-    context(_: ModelPackage)
+    context(_: Hierarchy)
     fun buildBodyParams(requestBody: RequestBody) = when (requestBody.contentType) {
         ContentType.MULTIPART_FORM_DATA -> buildMultipartParameters(requestBody)
         ContentType.FORM_URL_ENCODED -> buildFormParameters(requestBody)
