@@ -64,7 +64,7 @@ class MemoTest {
     }
 
     @Test
-    fun `memoized helper should add to CacheGroup`() {
+    fun `memoized helper should add to MemoScope`() {
         val memoScope = MemoScope()
         val counter = AtomicInteger(0)
         val m = memoized(memoScope) { counter.incrementAndGet() }
