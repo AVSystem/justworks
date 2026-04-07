@@ -23,14 +23,10 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.IO_EXCEPTION
 import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_FUN
-import com.avsystem.justworks.core.gen.RAISE
-import com.avsystem.justworks.core.gen.RAISE_FUN
 import com.avsystem.justworks.core.gen.SAFE_CALL
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.TOKEN
 import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.ContextParameter
-import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -51,7 +47,6 @@ import com.squareup.kotlinpoet.UNIT
  * - `HttpResponse.toEmptyResult()` extension for Unit response mapping
  * - `ApiClientBase` abstract class with common client infrastructure
  */
-@OptIn(ExperimentalKotlinPoetApi::class)
 internal object ApiClientBaseGenerator {
     private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
     private const val SUCCESS_BODY = "successBody"
@@ -87,26 +82,22 @@ internal object ApiClientBaseGenerator {
         .addModifiers(KModifier.INTERNAL, KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
-        .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
         .addParameter(SUCCESS_BODY, LambdaTypeName.get(returnType = TypeVariableName("T")))
         .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
         .beginControlFlow("return when (status.value)")
         .addStatement("in 200..299 -> %T(status.value, %L())", HTTP_SUCCESS, SUCCESS_BODY)
         .addStatement(
-            "in 300..399 -> %M(%T(status.value, %M(), %T.Redirect))",
-            RAISE_FUN,
+            "in 300..399 -> throw %T(status.value, %M(), %T.Redirect)",
             HTTP_ERROR,
             BODY_AS_TEXT_FUN,
             HTTP_ERROR_TYPE,
         ).addStatement(
-            "in 400..499 -> %M(%T(status.value, %M(), %T.Client))",
-            RAISE_FUN,
+            "in 400..499 -> throw %T(status.value, %M(), %T.Client)",
             HTTP_ERROR,
             BODY_AS_TEXT_FUN,
             HTTP_ERROR_TYPE,
         ).addStatement(
-            "else -> %M(%T(status.value, %M(), %T.Server))",
-            RAISE_FUN,
+            "else -> throw %T(status.value, %M(), %T.Server)",
             HTTP_ERROR,
             BODY_AS_TEXT_FUN,
             HTTP_ERROR_TYPE,
@@ -118,7 +109,6 @@ internal object ApiClientBaseGenerator {
         .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
-        .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
         .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
         .addStatement("return %L { %M() }", MAP_TO_RESULT, BODY_FUN)
         .build()
@@ -127,7 +117,6 @@ internal object ApiClientBaseGenerator {
         .builder("toEmptyResult")
         .addModifiers(KModifier.SUSPEND)
         .receiver(HTTP_RESPONSE)
-        .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
         .returns(HTTP_SUCCESS.parameterizedBy(UNIT))
         .addStatement("return %L { Unit }", MAP_TO_RESULT)
         .build()
@@ -194,22 +183,19 @@ internal object ApiClientBaseGenerator {
     private fun buildSafeCall(): FunSpec = FunSpec
         .builder(SAFE_CALL)
         .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND)
-        .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
         .addParameter(BLOCK, LambdaTypeName.get(returnType = HTTP_RESPONSE).copy(suspending = true))
         .returns(HTTP_RESPONSE)
         .beginControlFlow("return try")
         .addStatement("%L()", BLOCK)
         .nextControlFlow("catch (e: %T)", IO_EXCEPTION)
         .addStatement(
-            "%M(%T(0, e.message ?: %S, %T.Network))",
-            RAISE_FUN,
+            "throw %T(0, e.message ?: %S, %T.Network)",
             HTTP_ERROR,
             NETWORK_ERROR,
             HTTP_ERROR_TYPE,
         ).nextControlFlow("catch (e: %T)", HTTP_REQUEST_TIMEOUT_EXCEPTION)
         .addStatement(
-            "%M(%T(0, e.message ?: %S, %T.Network))",
-            RAISE_FUN,
+            "throw %T(0, e.message ?: %S, %T.Network)",
             HTTP_ERROR,
             NETWORK_ERROR,
             HTTP_ERROR_TYPE,

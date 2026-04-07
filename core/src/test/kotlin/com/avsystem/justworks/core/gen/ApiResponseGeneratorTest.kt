@@ -29,10 +29,19 @@ class ApiResponseGeneratorTest {
     }
 
     @Test
-    fun `generates data class HttpError`() {
+    fun `generates data class HttpError extending RuntimeException`() {
         val typeSpec = httpErrorClass()
         assertEquals("HttpError", typeSpec.name)
         assertTrue(KModifier.DATA in typeSpec.modifiers, "Expected DATA modifier")
+        assertEquals("kotlin.RuntimeException", typeSpec.superclass.toString(), "Expected RuntimeException superclass")
+        assertTrue(
+            typeSpec.superclassConstructorParameters.isNotEmpty(),
+            "Expected superclass constructor parameter for message",
+        )
+        assertTrue(
+            typeSpec.superclassConstructorParameters.first().toString().contains("message"),
+            "Expected message passed to RuntimeException constructor",
+        )
     }
 
     @Test

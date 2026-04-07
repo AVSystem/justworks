@@ -81,11 +81,10 @@ val UUID_TYPE = ClassName("kotlin.uuid", "Uuid")
 val EXPERIMENTAL_UUID_API = ClassName("kotlin.uuid", "ExperimentalUuidApi")
 
 // ============================================================================
-// Error Handling (Arrow + Kotlin stdlib)
+// Error Handling
 // ============================================================================
 
-val RAISE = ClassName("arrow.core.raise", "Raise")
-val RAISE_FUN = MemberName("arrow.core.raise.context", "raise")
+val RUNTIME_EXCEPTION = ClassName("kotlin", "RuntimeException")
 
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
 val HTTP_ERROR_TYPE = ClassName("com.avsystem.justworks", "HttpErrorType")

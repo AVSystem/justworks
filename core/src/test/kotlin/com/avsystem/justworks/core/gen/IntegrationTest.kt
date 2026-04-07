@@ -171,6 +171,26 @@ class IntegrationTest {
     }
 
     @Test
+    fun `generated client code does not reference Arrow`() {
+        for (fixture in SPEC_FIXTURES) {
+            val spec = parseSpec(fixture).apiSpec
+            if (spec.endpoints.isEmpty()) continue
+
+            val (_, resolvedSpec) = generateModelWithResolvedSpec(spec)
+            val clientFiles = generateClient(resolvedSpec)
+            val apiClientBaseFile = ApiClientBaseGenerator.generate()
+
+            val allSources = (clientFiles + apiClientBaseFile).map { it.toString() }
+            for (source in allSources) {
+                assertFalse(
+                    source.contains("arrow.core"),
+                    "$fixture: Generated code should not contain Arrow imports",
+                )
+            }
+        }
+    }
+
+    @Test
     fun `all generated files are syntactically valid Kotlin`() {
         for (fixture in SPEC_FIXTURES) {
             val spec = parseSpec(fixture).apiSpec

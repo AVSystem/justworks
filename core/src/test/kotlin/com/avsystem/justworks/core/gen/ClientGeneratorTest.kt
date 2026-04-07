@@ -228,19 +228,15 @@ class ClientGeneratorTest {
         assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
     }
 
-    // -- Context receiver: Raise<HttpError> --
+    // -- Error handling: endpoint functions throw HttpError (no Arrow dependency) --
 
-    @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
-    fun `endpoint functions have Raise HttpError context parameter`() {
+    fun `endpoint functions do not have context parameters`() {
         val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        @OptIn(ExperimentalKotlinPoetApi::class)
         val contextParameters = funSpec.contextParameters
-        assertTrue(contextParameters.isNotEmpty(), "Expected context parameter")
-        val contextType = contextParameters.first().type
-        assertTrue(contextType is ParameterizedTypeName, "Expected parameterized Raise type")
-        assertEquals("arrow.core.raise.Raise", contextType.rawType.toString())
-        assertEquals("com.avsystem.justworks.HttpError", contextType.typeArguments.first().toString())
+        assertTrue(contextParameters.isEmpty(), "Expected no context parameters (Arrow removed)")
     }
 
     // -- CLNT-09: Header parameters become function parameters --

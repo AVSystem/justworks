@@ -11,7 +11,6 @@ import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.NameRegistry
-import com.avsystem.justworks.core.gen.RAISE
 import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
@@ -26,8 +25,6 @@ import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.ContextParameter
-import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -46,7 +43,6 @@ import com.squareup.kotlinpoet.UNIT
  * that extends `ApiClientBase` with suspend functions for every endpoint in that tag group.
  */
 
-@OptIn(ExperimentalKotlinPoetApi::class)
 internal object ClientGenerator {
     private const val DEFAULT_TAG = "Default"
     private const val API_SUFFIX = "Api"
@@ -113,7 +109,6 @@ internal object ClientGenerator {
         val funBuilder = FunSpec
             .builder(functionName)
             .addModifiers(KModifier.SUSPEND)
-            .contextParameters(listOf(ContextParameter(RAISE.parameterizedBy(HTTP_ERROR))))
             .returns(returnType)
 
         val params = endpoint.parameters.groupBy { it.location }

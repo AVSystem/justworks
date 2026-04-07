@@ -11,7 +11,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-@OptIn(ExperimentalKotlinPoetApi::class)
 class ApiClientBaseGeneratorTest {
     private val file = ApiClientBaseGenerator.generate()
 
@@ -69,15 +68,17 @@ class ApiClientBaseGeneratorTest {
         assertTrue(body.contains("token()"), "Expected token() invocation")
     }
 
+    @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
     fun `ApiClientBase has safeCall function`() {
         val safeCall = classSpec.funSpecs.first { it.name == "safeCall" }
         assertTrue(KModifier.PROTECTED in safeCall.modifiers)
         assertTrue(KModifier.SUSPEND in safeCall.modifiers)
-        assertTrue(safeCall.contextParameters.isNotEmpty(), "Expected context parameter")
+        assertTrue(safeCall.contextParameters.isEmpty(), "safeCall should not have context parameters")
         val body = safeCall.body.toString()
         assertTrue(body.contains("IOException"), "Expected IOException catch")
         assertTrue(body.contains("HttpRequestTimeoutException"), "Expected HttpRequestTimeoutException catch")
+        assertTrue(body.contains("throw"), "Expected throw for error handling")
         assertTrue(body.contains("Network error"), "Expected Network error message")
     }
 
@@ -103,29 +104,37 @@ class ApiClientBaseGeneratorTest {
         assertTrue(typeVar.isReified, "Expected reified type variable")
     }
 
+    @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
-    fun `toResult is suspend inline with reified T and context parameter`() {
+    fun `toResult is suspend inline with reified T and no context parameters`() {
         val fn = topLevelFun("toResult")
         assertTrue(KModifier.SUSPEND in fn.modifiers)
         assertTrue(KModifier.INLINE in fn.modifiers)
         val typeVar = fn.typeVariables.first()
         assertTrue(typeVar.isReified, "Expected reified type variable")
         assertNotNull(fn.receiverType, "Expected HttpResponse receiver")
-        assertTrue(fn.contextParameters.isNotEmpty(), "Expected context parameter")
-        val contextType = fn.contextParameters.first().type
-        assertTrue(contextType is ParameterizedTypeName)
-        assertEquals("arrow.core.raise.Raise", contextType.rawType.toString())
+        assertTrue(fn.contextParameters.isEmpty(), "toResult should not have context parameters")
     }
 
+    @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
-    fun `toEmptyResult is suspend with context parameter and returns HttpSuccess Unit`() {
+    fun `toEmptyResult is suspend with no context parameters and returns HttpSuccess Unit`() {
         val fn = topLevelFun("toEmptyResult")
         assertTrue(KModifier.SUSPEND in fn.modifiers)
         assertNotNull(fn.receiverType, "Expected HttpResponse receiver")
-        assertTrue(fn.contextParameters.isNotEmpty(), "Expected context parameter")
+        assertTrue(fn.contextParameters.isEmpty(), "toEmptyResult should not have context parameters")
         val returnType = fn.returnType as ParameterizedTypeName
         assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
         assertEquals("kotlin.Unit", returnType.typeArguments.first().toString())
+    }
+
+    @OptIn(ExperimentalKotlinPoetApi::class)
+    @Test
+    fun `mapToResult uses throw for error responses and has no context parameters`() {
+        val fn = topLevelFun("mapToResult")
+        assertTrue(fn.contextParameters.isEmpty(), "mapToResult should not have context parameters")
+        val body = fn.body.toString()
+        assertTrue(body.contains("throw"), "Expected throw for non-2xx responses")
     }
 
     @Test
