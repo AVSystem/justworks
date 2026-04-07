@@ -41,15 +41,24 @@ class IntegrationTest {
     }
 
     private fun generateModel(spec: ApiSpec): List<FileSpec> =
-        context(ModelPackage(modelPackage)) { ModelGenerator.generate(spec, NameRegistry()) }
+        context(Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }, NameRegistry()) {
+            ModelGenerator.generate(spec)
+        }
 
     private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult =
-        context(ModelPackage(modelPackage)) { ModelGenerator.generateWithResolvedSpec(spec, NameRegistry()) }
-
-    private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
-        context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
-            ClientGenerator.generate(spec, hasPolymorphicTypes, NameRegistry())
+        context(Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }, NameRegistry()) {
+            ModelGenerator.generateWithResolvedSpec(spec)
         }
+
+    private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> = context(
+        Hierarchy(ModelPackage(modelPackage)).apply {
+            addSchemas(spec.schemas)
+        },
+        ApiPackage(apiPackage),
+        NameRegistry(),
+    ) {
+        ClientGenerator.generate(spec, hasPolymorphicTypes)
+    }
 
     @Test
     fun `real-world specs generate compilable enum code without class body conflicts`() {

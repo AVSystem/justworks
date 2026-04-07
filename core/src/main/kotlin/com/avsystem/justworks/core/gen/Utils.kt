@@ -1,11 +1,12 @@
 package com.avsystem.justworks.core.gen
 
+import com.avsystem.justworks.core.SCHEMA_PREFIX
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
+import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.BOOLEAN
 import com.squareup.kotlinpoet.BYTE_ARRAY
-import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.DOUBLE
 import com.squareup.kotlinpoet.FLOAT
 import com.squareup.kotlinpoet.INT
@@ -28,7 +29,7 @@ internal val TypeRef.requiredProperties: Set<String>
         is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptySet()
     }
 
-context(modelPackage: ModelPackage)
+context(hierarchy: Hierarchy)
 internal fun TypeRef.toTypeName(): TypeName = when (this) {
     is TypeRef.Primitive -> {
         when (type) {
@@ -54,7 +55,7 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
     }
 
     is TypeRef.Reference -> {
-        ClassName(modelPackage, schemaName)
+        hierarchy[schemaName]
     }
 
     is TypeRef.Inline -> {
@@ -67,3 +68,13 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
 }
 
 internal fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
+
+/**
+ * Resolves the @SerialName value for a variant within a oneOf schema.
+ */
+internal fun SchemaModel.resolveSerialName(variantSchemaName: String): String = discriminator
+    ?.mapping
+    ?.firstNotNullOfOrNull { (serialName, refPath) ->
+        serialName.takeIf { refPath.removePrefix(SCHEMA_PREFIX) == variantSchemaName }
+    }
+    ?: variantSchemaName
