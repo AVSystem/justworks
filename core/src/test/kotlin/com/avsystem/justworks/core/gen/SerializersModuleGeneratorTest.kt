@@ -1,7 +1,8 @@
 package com.avsystem.justworks.core.gen
 
-import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
+import com.avsystem.justworks.core.model.SchemaModel
+import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.PropertySpec
 import kotlin.test.Test
@@ -12,23 +13,44 @@ import kotlin.test.assertTrue
 class SerializersModuleGeneratorTest {
     private val modelPackage = ModelPackage("com.example.model")
 
-    private fun hierarchyInfo(
-        sealedHierarchies: Map<String, List<String>>,
-        anyOfWithoutDiscriminator: Set<String> = emptySet(),
-    ) = ModelGenerator.HierarchyInfo(
-        sealedHierarchies = sealedHierarchies,
-        variantParents = emptyMap(),
-        anyOfWithoutDiscriminator = anyOfWithoutDiscriminator,
-        schemas = emptyList(),
+    private fun emptySchema(
+        name: String,
+        oneOf: List<TypeRef>? = null,
+        anyOf: List<TypeRef>? = null,
+    ) = SchemaModel(
+        name = name,
+        description = null,
+        properties = emptyList(),
+        requiredProperties = emptySet(),
+        oneOf = oneOf,
+        anyOf = anyOf,
+        allOf = null,
+        discriminator = null,
     )
 
-    private fun generate(info: ModelGenerator.HierarchyInfo): FileSpec? =
-        context(info, modelPackage) { SerializersModuleGenerator.generate() }
+    private fun buildHierarchy(
+        sealedHierarchies: Map<String, List<String>>,
+        anyOfWithoutDiscriminator: Set<String> = emptySet(),
+    ): Hierarchy {
+        val schemas = sealedHierarchies.flatMap { (parent, variants) ->
+            val refs = variants.map { TypeRef.Reference(it) }
+            val parentSchema = emptySchema(
+                name = parent,
+                oneOf = if (parent !in anyOfWithoutDiscriminator) refs else null,
+                anyOf = if (parent in anyOfWithoutDiscriminator) refs else null,
+            )
+            val variantSchemas = variants.map { emptySchema(it) }
+            listOf(parentSchema) + variantSchemas
+        }
+        return Hierarchy(modelPackage).apply { addSchemas(schemas) }
+    }
+
+    private fun generate(hierarchy: Hierarchy): FileSpec? = context(hierarchy) { SerializersModuleGenerator.generate() }
 
     @Test
     fun `generates SerializersModule with polymorphic registration`() {
         val hierarchies = mapOf("Shape" to listOf("Circle", "Square"))
-        val fileSpec = generate(hierarchyInfo(hierarchies))
+        val fileSpec = generate(buildHierarchy(hierarchies))
 
         assertNotNull(fileSpec, "Should generate a FileSpec for non-empty hierarchies")
 
@@ -47,7 +69,7 @@ class SerializersModuleGeneratorTest {
                 "Shape" to listOf("Circle", "Square"),
                 "Animal" to listOf("Cat", "Dog"),
             )
-        val fileSpec = generate(hierarchyInfo(hierarchies))
+        val fileSpec = generate(buildHierarchy(hierarchies))
         assertNotNull(fileSpec)
 
         val initializer =
@@ -66,7 +88,7 @@ class SerializersModuleGeneratorTest {
 
     @Test
     fun `returns null for empty hierarchies`() {
-        val result = generate(hierarchyInfo(emptyMap()))
+        val result = generate(buildHierarchy(emptyMap<String, List<String>>()))
         assertNull(result, "Should return null for empty hierarchies")
     }
 
@@ -76,7 +98,7 @@ class SerializersModuleGeneratorTest {
             "Shape" to listOf("Circle", "Square"),
             "Pet" to listOf("Cat", "Dog"),
         )
-        val info = hierarchyInfo(hierarchies, anyOfWithoutDiscriminator = setOf("Pet"))
+        val info = buildHierarchy(hierarchies, anyOfWithoutDiscriminator = setOf("Pet"))
         val fileSpec = generate(info)
 
         assertNotNull(fileSpec)
@@ -93,7 +115,7 @@ class SerializersModuleGeneratorTest {
     @Test
     fun `returns null when all hierarchies are anyOf without discriminator`() {
         val hierarchies = mapOf("Pet" to listOf("Cat", "Dog"))
-        val info = hierarchyInfo(hierarchies, anyOfWithoutDiscriminator = setOf("Pet"))
+        val info = buildHierarchy(hierarchies, anyOfWithoutDiscriminator = setOf("Pet"))
         val result = generate(info)
 
         assertNull(result, "Should return null when only non-discriminator anyOf hierarchies exist")

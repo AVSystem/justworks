@@ -20,17 +20,20 @@ object CodeGenerator {
         modelPackage: String,
         apiPackage: String,
         outputDir: File,
-    ): Result = context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
-        val modelRegistry = NameRegistry()
-        val apiRegistry = NameRegistry()
+    ): Result {
+        val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }
 
-        val (modelFiles, resolvedSpec) = ModelGenerator.generateWithResolvedSpec(spec, modelRegistry)
+        val (modelFiles, resolvedSpec) = context(hierarchy, NameRegistry()) {
+            ModelGenerator.generateWithResolvedSpec(spec)
+        }
 
         modelFiles.forEach { it.writeTo(outputDir) }
 
         val hasPolymorphicTypes = modelFiles.any { it.name == SERIALIZERS_MODULE.simpleName }
 
-        val clientFiles = ClientGenerator.generate(resolvedSpec, hasPolymorphicTypes, apiRegistry)
+        val clientFiles = context(hierarchy, ApiPackage(apiPackage), NameRegistry()) {
+            ClientGenerator.generate(resolvedSpec, hasPolymorphicTypes)
+        }
 
         clientFiles.forEach { it.writeTo(outputDir) }
 

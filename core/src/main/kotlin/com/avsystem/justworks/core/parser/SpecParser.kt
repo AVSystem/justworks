@@ -11,6 +11,7 @@ import arrow.core.raise.context.ensureNotNull
 import arrow.core.raise.iorNel
 import arrow.core.raise.nullable
 import com.avsystem.justworks.core.Issue
+import com.avsystem.justworks.core.SCHEMA_PREFIX
 import com.avsystem.justworks.core.Warnings
 import com.avsystem.justworks.core.accumulate
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
@@ -538,8 +539,6 @@ object SpecParser {
 
     private fun String.toPascalCase(): String =
         split("-", "_", ".").joinToString("") { part -> part.replaceFirstChar { it.uppercase() } }
-
-    private const val SCHEMA_PREFIX = "#/components/schemas/"
 
     private val STRING_FORMAT_MAP = mapOf(
         "byte" to TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
