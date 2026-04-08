@@ -112,6 +112,10 @@ internal object ApiClientBaseGenerator {
             "in 200..299 -> %T(status.value, %L())",
             HTTP_SUCCESS,
             SUCCESS_BODY,
+        ).addStatement(
+            "in 300..399 -> %T.Redirect(status.value, %M())",
+            HTTP_ERROR,
+            DESERIALIZE_ERROR_BODY_FUN,
         ).apply {
             for ((name, code) in ApiResponseGenerator.HTTP_ERROR_SUBTYPES) {
                 addStatement(

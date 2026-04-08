@@ -63,19 +63,24 @@ class ApiResponseGeneratorTest {
             "BadRequest",
             "Conflict",
             "Forbidden",
+            "GatewayTimeout",
             "Gone",
             "InternalServerError",
             "MethodNotAllowed",
             "Network",
             "NotFound",
             "Other",
+            "PayloadTooLarge",
+            "Redirect",
+            "RequestTimeout",
             "ServiceUnavailable",
             "TooManyRequests",
             "Unauthorized",
             "UnprocessableEntity",
+            "UnsupportedMediaType",
         )
         assertEquals(expected, subtypeNames)
-        assertEquals(14, subtypeNames.size)
+        assertEquals(19, subtypeNames.size)
     }
 
     @Test

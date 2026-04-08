@@ -294,22 +294,27 @@ val result = client.findPets(status = "available", limit = 20)
 
 `HttpError<E>` provides typed subtypes for common HTTP error codes:
 
-| Subtype                        | HTTP status | Description           |
-|--------------------------------|-------------|-----------------------|
-| `HttpError.BadRequest`         | 400         | Bad request           |
-| `HttpError.Unauthorized`       | 401         | Unauthorized          |
-| `HttpError.Forbidden`          | 403         | Forbidden             |
-| `HttpError.NotFound`           | 404         | Not found             |
-| `HttpError.MethodNotAllowed`   | 405         | Method not allowed    |
-| `HttpError.Conflict`           | 409         | Conflict              |
-| `HttpError.Gone`               | 410         | Gone                  |
-| `HttpError.UnprocessableEntity`| 422         | Unprocessable entity  |
-| `HttpError.TooManyRequests`    | 429         | Too many requests     |
-| `HttpError.InternalServerError`| 500         | Internal server error |
-| `HttpError.BadGateway`         | 502         | Bad gateway           |
-| `HttpError.ServiceUnavailable` | 503         | Service unavailable   |
-| `HttpError.Other`              | *any other* | Catchall with code    |
-| `HttpError.Network`            | --          | I/O or timeout        |
+| Subtype                         | HTTP status | Description            |
+|---------------------------------|-------------|------------------------|
+| `HttpError.BadRequest`          | 400         | Bad request            |
+| `HttpError.Unauthorized`        | 401         | Unauthorized           |
+| `HttpError.Forbidden`           | 403         | Forbidden              |
+| `HttpError.NotFound`            | 404         | Not found              |
+| `HttpError.MethodNotAllowed`    | 405         | Method not allowed     |
+| `HttpError.RequestTimeout`      | 408         | Request timeout        |
+| `HttpError.Conflict`            | 409         | Conflict               |
+| `HttpError.Gone`                | 410         | Gone                   |
+| `HttpError.PayloadTooLarge`     | 413         | Payload too large      |
+| `HttpError.UnsupportedMediaType`| 415         | Unsupported media type |
+| `HttpError.UnprocessableEntity` | 422         | Unprocessable entity   |
+| `HttpError.TooManyRequests`     | 429         | Too many requests      |
+| `HttpError.InternalServerError` | 500         | Internal server error  |
+| `HttpError.BadGateway`          | 502         | Bad gateway            |
+| `HttpError.ServiceUnavailable`  | 503         | Service unavailable    |
+| `HttpError.GatewayTimeout`      | 504         | Gateway timeout        |
+| `HttpError.Redirect`            | 3xx         | Redirect               |
+| `HttpError.Other`               | *any other* | Catchall with code     |
+| `HttpError.Network`             | --          | I/O or timeout         |
 
 Each error subtype carries a nullable `body: E?` with the deserialized error response (or `null` if deserialization
 failed), plus an `code: Int` property.

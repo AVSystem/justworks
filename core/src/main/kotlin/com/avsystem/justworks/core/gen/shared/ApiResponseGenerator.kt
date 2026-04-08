@@ -31,13 +31,17 @@ internal object ApiResponseGenerator {
         "Forbidden" to 403,
         "NotFound" to 404,
         "MethodNotAllowed" to 405,
+        "RequestTimeout" to 408,
         "Conflict" to 409,
         "Gone" to 410,
+        "PayloadTooLarge" to 413,
+        "UnsupportedMediaType" to 415,
         "UnprocessableEntity" to 422,
         "TooManyRequests" to 429,
         "InternalServerError" to 500,
         "BadGateway" to 502,
         "ServiceUnavailable" to 503,
+        "GatewayTimeout" to 504,
     )
 
     fun generate(): List<FileSpec> = listOf(generateHttpResult(), generateHttpError(), generateHttpSuccess())
@@ -84,8 +88,11 @@ internal object ApiResponseGenerator {
             sealedClass.addType(buildBodySubtype(name, statusCode))
         }
 
+        // Redirect: 3xx range, both code and body in constructor
+        sealedClass.addType(buildRangeSubtype("Redirect"))
+
         // Other: both code and body in constructor
-        sealedClass.addType(buildOtherSubtype())
+        sealedClass.addType(buildRangeSubtype("Other"))
 
         // Network: no type variable, extends HttpError<Nothing>
         sealedClass.addType(buildNetworkSubtype())
@@ -127,10 +134,10 @@ internal object ApiResponseGenerator {
             ).build()
     }
 
-    private fun buildOtherSubtype(): TypeSpec {
+    private fun buildRangeSubtype(name: String): TypeSpec {
         val b = TypeVariableName("B", variance = KModifier.OUT)
         return TypeSpec
-            .classBuilder("Other")
+            .classBuilder(name)
             .addModifiers(KModifier.DATA)
             .addTypeVariable(b)
             .superclass(HTTP_ERROR.parameterizedBy(b))

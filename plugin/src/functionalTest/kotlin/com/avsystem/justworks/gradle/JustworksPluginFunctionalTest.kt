@@ -102,7 +102,6 @@ class JustworksPluginFunctionalTest {
                 implementation("io.ktor:ktor-client-core:3.1.1")
                 implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
-
             }
 
             kotlin {
@@ -555,7 +554,6 @@ class JustworksPluginFunctionalTest {
                 implementation("io.ktor:ktor-client-core:3.1.1")
                 implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
-
             }
 
             kotlin {
