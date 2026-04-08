@@ -300,18 +300,18 @@ class JustworksPluginFunctionalTest {
 
         val outputDir = projectDir.resolve("build/generated/justworks/main/com/example/model")
 
-        // Sealed interface file exists
+        // Sealed class file exists with nested subtypes
         val shapeFile = outputDir.resolve("Shape.kt")
         assertTrue(shapeFile.exists(), "Shape.kt should exist")
         val shapeContent = shapeFile.readText()
         assertTrue(shapeContent.contains("sealed interface"), "Shape.kt should contain sealed interface")
         assertTrue(shapeContent.contains("JsonClassDiscriminator"), "Shape.kt should contain @JsonClassDiscriminator")
 
-        // Variant data class file exists and implements sealed interface
+        // Variant subtypes are nested inside Shape.kt, no separate files
         val circleFile = outputDir.resolve("Circle.kt")
-        assertTrue(circleFile.exists(), "Circle.kt should exist")
-        val circleContent = circleFile.readText()
-        assertTrue(circleContent.contains(": Shape"), "Circle.kt should implement Shape")
+        assertFalse(circleFile.exists(), "Circle.kt should NOT exist as a separate file")
+        assertTrue(shapeContent.contains("data class Circle"), "Shape.kt should contain nested Circle")
+        assertTrue(shapeContent.contains("data class Square"), "Shape.kt should contain nested Square")
 
         // SerializersModule file exists
         val moduleFile = outputDir.resolve("SerializersModule.kt")

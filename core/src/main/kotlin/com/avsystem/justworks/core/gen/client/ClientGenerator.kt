@@ -9,8 +9,8 @@ import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
 import com.avsystem.justworks.core.gen.HTTP_RESULT
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
+import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
-import com.avsystem.justworks.core.gen.ModelPackage
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
@@ -27,7 +27,6 @@ import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -46,35 +45,29 @@ import com.squareup.kotlinpoet.UNIT
  * that extends `ApiClientBase` with suspend functions for every endpoint in that tag group.
  */
 
-@OptIn(ExperimentalKotlinPoetApi::class)
 internal object ClientGenerator {
     private const val DEFAULT_TAG = "Default"
     private const val API_SUFFIX = "Api"
 
-    context(_: ModelPackage, _: ApiPackage)
-    fun generate(
-        spec: ApiSpec,
-        hasPolymorphicTypes: Boolean,
-        nameRegistry: NameRegistry,
-    ): List<FileSpec> {
+    context(_: Hierarchy, _: ApiPackage, _: NameRegistry)
+    fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
-            generateClientFile(tag, endpoints, hasPolymorphicTypes, nameRegistry, spec.securitySchemes)
+            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes)
         }
     }
 
-    context(modelPackage: ModelPackage, apiPackage: ApiPackage)
+    context(hierarchy: Hierarchy, apiPackage: ApiPackage, nameRegistry: NameRegistry)
     private fun generateClientFile(
         tag: String,
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean,
-        nameRegistry: NameRegistry,
         securitySchemes: List<SecurityScheme>,
     ): FileSpec {
         val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
 
         val clientInitializer = if (hasPolymorphicTypes) {
-            val generatedSerializersModule = MemberName(modelPackage, GENERATED_SERIALIZERS_MODULE)
+            val generatedSerializersModule = MemberName(hierarchy.modelPackage, GENERATED_SERIALIZERS_MODULE)
             CodeBlock.of("${CREATE_HTTP_CLIENT}(%M)", generatedSerializersModule)
         } else {
             CodeBlock.of("${CREATE_HTTP_CLIENT}()")
@@ -107,8 +100,9 @@ internal object ClientGenerator {
             .primaryConstructor(constructorBuilder.build())
             .addProperty(httpClientProperty)
 
-        val methodRegistry = NameRegistry()
-        classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it, methodRegistry) })
+        context(NameRegistry()) {
+            classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })
+        }
 
         return FileSpec
             .builder(className)
@@ -116,8 +110,8 @@ internal object ClientGenerator {
             .build()
     }
 
-    context(_: ModelPackage)
-    private fun generateEndpointFunction(endpoint: Endpoint, methodRegistry: NameRegistry): FunSpec {
+    context(_: Hierarchy, methodRegistry: NameRegistry)
+    private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
         val errorType = resolveErrorType(endpoint)
@@ -172,7 +166,7 @@ internal object ClientGenerator {
         return funBuilder.build()
     }
 
-    context(_: ModelPackage)
+    context(_: Hierarchy)
     private fun resolveErrorType(endpoint: Endpoint): TypeName {
         val errorSchemas = endpoint.responses.entries
             .asSequence()
@@ -188,7 +182,7 @@ internal object ClientGenerator {
         }
     }
 
-    context(_: ModelPackage)
+    context(_: Hierarchy)
     private fun resolveReturnType(endpoint: Endpoint): TypeName = endpoint.responses.entries
         .asSequence()
         .filter { it.key.startsWith("2") }

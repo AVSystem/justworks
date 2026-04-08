@@ -32,7 +32,6 @@ import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
-import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -54,7 +53,6 @@ import com.squareup.kotlinpoet.UNIT
  * - `HttpResponse.toEmptyResult<E>()` extension for Unit response mapping
  * - `ApiClientBase` abstract class with common client infrastructure
  */
-@OptIn(ExperimentalKotlinPoetApi::class)
 internal object ApiClientBaseGenerator {
     private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
     private const val SUCCESS_BODY = "successBody"

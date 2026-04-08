@@ -41,15 +41,24 @@ class IntegrationTest {
     }
 
     private fun generateModel(spec: ApiSpec): List<FileSpec> =
-        context(ModelPackage(modelPackage)) { ModelGenerator.generate(spec, NameRegistry()) }
+        context(Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }, NameRegistry()) {
+            ModelGenerator.generate(spec)
+        }
 
     private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult =
-        context(ModelPackage(modelPackage)) { ModelGenerator.generateWithResolvedSpec(spec, NameRegistry()) }
-
-    private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
-        context(ModelPackage(modelPackage), ApiPackage(apiPackage)) {
-            ClientGenerator.generate(spec, hasPolymorphicTypes, NameRegistry())
+        context(Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }, NameRegistry()) {
+            ModelGenerator.generateWithResolvedSpec(spec)
         }
+
+    private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> = context(
+        Hierarchy(ModelPackage(modelPackage)).apply {
+            addSchemas(spec.schemas)
+        },
+        ApiPackage(apiPackage),
+        NameRegistry(),
+    ) {
+        ClientGenerator.generate(spec, hasPolymorphicTypes)
+    }
 
     @Test
     fun `real-world specs generate compilable enum code without class body conflicts`() {
@@ -156,6 +165,26 @@ class IntegrationTest {
                 assertTrue(
                     allSources.any { it.contains("UuidSerializer") },
                     "$fixture: Expected UuidSerializer when spec contains UUID properties",
+                )
+            }
+        }
+    }
+
+    @Test
+    fun `generated client code does not reference Arrow`() {
+        for (fixture in SPEC_FIXTURES) {
+            val spec = parseSpec(fixture).value
+            if (spec.endpoints.isEmpty()) continue
+
+            val (_, resolvedSpec) = generateModelWithResolvedSpec(spec)
+            val clientFiles = generateClient(resolvedSpec)
+            val apiClientBaseFile = ApiClientBaseGenerator.generate(spec.securitySchemes)
+
+            val allSources = (clientFiles + apiClientBaseFile).map { it.toString() }
+            for (source in allSources) {
+                assertFalse(
+                    source.contains("arrow.core"),
+                    "$fixture: Generated code should not contain Arrow imports",
                 )
             }
         }

@@ -13,7 +13,6 @@ import kotlin.test.assertEquals
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
-@OptIn(ExperimentalKotlinPoetApi::class)
 class ApiClientBaseGeneratorTest {
     private val file = ApiClientBaseGenerator.generate(emptyList())
 
@@ -84,6 +83,7 @@ class ApiClientBaseGeneratorTest {
         assertTrue(!body.contains("Authorization"), "Expected no Authorization header for empty schemes")
     }
 
+    @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
     fun `ApiClientBase has safeCall function with no context parameters`() {
         val safeCall = classSpec.funSpecs.first { it.name == "safeCall" }
@@ -121,6 +121,7 @@ class ApiClientBaseGeneratorTest {
         assertTrue(typeVar.isReified, "Expected reified type variable")
     }
 
+    @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
     fun `toResult is suspend inline with reified E and T, no context parameter`() {
         val fn = topLevelFun("toResult")
@@ -134,6 +135,7 @@ class ApiClientBaseGeneratorTest {
         assertEquals("com.avsystem.justworks.HttpResult", returnType.rawType.toString())
     }
 
+    @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
     fun `toEmptyResult returns HttpResult E Unit with no context parameter`() {
         val fn = topLevelFun("toEmptyResult")
