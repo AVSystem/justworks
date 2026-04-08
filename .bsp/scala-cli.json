@@ -1,0 +1,20 @@
+{
+  "name": "scala-cli",
+  "argv": [
+    "/opt/homebrew/bin/scala-cli",
+    "bsp",
+    "--json-options",
+    "/Users/bkozak/IdeaProjects/justworks/.scala-build/ide-options-v2.json",
+    "--json-launcher-options",
+    "/Users/bkozak/IdeaProjects/justworks/.scala-build/ide-launcher-options.json",
+    "--envs-file",
+    "/Users/bkozak/IdeaProjects/justworks/.scala-build/ide-envs.json",
+    "/Users/bkozak/IdeaProjects/justworks"
+  ],
+  "version": "1.12.0",
+  "bspVersion": "2.1.1",
+  "languages": [
+    "scala",
+    "java"
+  ]
+}

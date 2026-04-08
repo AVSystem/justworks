@@ -111,10 +111,32 @@ A `SerializersModule` is auto-generated when discriminated polymorphic types are
 | `application/json` request body | Supported         |
 | Form data / multipart           | Not supported     |
 
+### Security Schemes
+
+The plugin reads security schemes defined in the OpenAPI spec and generates authentication handling automatically.
+Only schemes referenced in the top-level `security` requirement are included.
+
+| Scheme type | Location | Generated constructor parameter(s)                             |
+|-------------|----------|----------------------------------------------------------------|
+| HTTP Bearer | Header   | `token: () -> String` (or `{name}Token` if multiple)           |
+| HTTP Basic  | Header   | `{name}Username: () -> String`, `{name}Password: () -> String` |
+| API Key     | Header   | `{name}Key: () -> String`                                      |
+| API Key     | Query    | `{name}Key: () -> String`                                      |
+
+All auth parameters are `() -> String` lambdas, called on every request. This lets you supply providers that refresh
+credentials automatically.
+
+The generated `ApiClientBase` contains an `applyAuth()` method that applies all credentials to each request:
+
+- Bearer tokens are sent as `Authorization: Bearer {token}` headers
+- Basic auth is sent as `Authorization: Basic {base64(username:password)}` headers
+- Header API keys are appended to request headers using the parameter name from the spec
+- Query API keys are appended to URL query parameters
+
 ### Not Supported
 
-Callbacks, links, webhooks, XML content types, and OpenAPI vendor extensions (`x-*`) are not processed. The plugin logs
-warnings for callbacks and links found in a spec.
+Callbacks, links, webhooks, XML content types, OpenAPI vendor extensions (`x-*`), OAuth 2.0, OpenID Connect, and
+cookie-based API keys are not processed. The plugin logs warnings for callbacks and links found in a spec.
 
 ## Generated Code Structure
 
@@ -127,7 +149,7 @@ registered spec).
 build/generated/justworks/
 ├── shared/kotlin/
 │   └── com/avsystem/justworks/
-│       ├── ApiClientBase.kt          # Abstract base class + helper extensions
+│       ├── ApiClientBase.kt          # Abstract base class + auth handling + helper extensions
 │       ├── HttpResult.kt             # HttpResult<E, T> sealed interface
 │       ├── HttpError.kt              # HttpError<B> sealed class hierarchy
 │       └── HttpSuccess.kt            # HttpSuccess<T> data class
@@ -237,10 +259,12 @@ dependencies {
 ### Creating the Client
 
 Each generated client extends `ApiClientBase` and creates its own pre-configured `HttpClient` internally.
-You only need to provide the base URL and authentication credentials.
+You only need to provide the base URL and authentication credentials (if the spec defines security schemes).
 
 Class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). Untagged endpoints go
 to `DefaultApi`.
+
+**Single Bearer token** (most common case):
 
 ```kotlin
 val client = PetsApi(
@@ -249,8 +273,8 @@ val client = PetsApi(
 )
 ```
 
-The `token` parameter is a `() -> String` lambda called on every request and sent as a `Bearer` token in the
-`Authorization` header. This lets you supply a provider that refreshes automatically:
+The `token` parameter is a `() -> String` lambda called on every request. This lets you supply a provider that refreshes
+automatically:
 
 ```kotlin
 val client = PetsApi(
@@ -258,6 +282,28 @@ val client = PetsApi(
     token = { tokenStore.getAccessToken() },
 )
 ```
+
+**Multiple security schemes** -- constructor parameters are derived from the scheme names defined in the spec:
+
+```kotlin
+val client = PetsApi(
+    baseUrl = "https://api.example.com",
+    bearerToken = { tokenStore.getAccessToken() },
+    internalApiKey = { secrets.getApiKey() },
+)
+```
+
+**Basic auth**:
+
+```kotlin
+val client = PetsApi(
+    baseUrl = "https://api.example.com",
+    basicUsername = { "user" },
+    basicPassword = { "pass" },
+)
+```
+
+See [Security Schemes](#security-schemes) for the full mapping of scheme types to constructor parameters.
 
 The client implements `Closeable` -- call `client.close()` when done to release HTTP resources.
 
