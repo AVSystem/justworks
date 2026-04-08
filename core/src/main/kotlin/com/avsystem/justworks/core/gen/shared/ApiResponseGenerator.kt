@@ -4,6 +4,7 @@ import com.avsystem.justworks.core.gen.BODY
 import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_ERROR_TYPE
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
+import com.avsystem.justworks.core.gen.RUNTIME_EXCEPTION
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.INT
@@ -15,7 +16,7 @@ import com.squareup.kotlinpoet.TypeVariableName
 
 /**
  * Generates [com.squareup.kotlinpoet.FileSpec]s containing:
- * - `HttpErrorType` enum class with Client, Server, Network values
+ * - `HttpErrorType` enum class with Client, Server, Redirect, Network values
  * - `HttpError` data class with code, message, type fields
  * - `HttpSuccess<T>` data class wrapping successful responses
  */
@@ -45,6 +46,8 @@ internal object ApiResponseGenerator {
         val dataClassType = TypeSpec
             .classBuilder(HTTP_ERROR)
             .addModifiers(KModifier.DATA)
+            .superclass(RUNTIME_EXCEPTION)
+            .addSuperclassConstructorParameter(MESSAGE)
             .primaryConstructor(primaryConstructor)
             .addProperty(
                 PropertySpec
