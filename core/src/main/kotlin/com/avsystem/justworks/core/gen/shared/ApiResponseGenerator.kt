@@ -16,7 +16,7 @@ import com.squareup.kotlinpoet.TypeVariableName
 
 /**
  * Generates [com.squareup.kotlinpoet.FileSpec]s containing:
- * - `HttpErrorType` enum class with Client, Server, Network values
+ * - `HttpErrorType` enum class with Client, Server, Redirect, Network values
  * - `HttpError` data class with code, message, type fields
  * - `HttpSuccess<T>` data class wrapping successful responses
  */
