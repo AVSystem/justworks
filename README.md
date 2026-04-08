@@ -128,7 +128,8 @@ build/generated/justworks/
 ├── shared/kotlin/
 │   └── com/avsystem/justworks/
 │       ├── ApiClientBase.kt          # Abstract base class + helper extensions
-│       ├── HttpError.kt              # HttpErrorType enum + HttpError data class
+│       ├── HttpResult.kt             # HttpResult<E, T> sealed interface
+│       ├── HttpError.kt              # HttpError<B> sealed class hierarchy
 │       └── HttpSuccess.kt            # HttpSuccess<T> data class
 │
 └── specName/
@@ -136,8 +137,7 @@ build/generated/justworks/
         ├── model/
         │   ├── Pet.kt                # @Serializable data class
         │   ├── PetStatus.kt          # @Serializable enum class
-        │   ├── Shape.kt              # sealed interface (oneOf/anyOf)
-        │   ├── Circle.kt             # variant data class : Shape
+        │   ├── Shape.kt              # sealed interface + nested variants (oneOf/anyOf)
         │   ├── UuidSerializer.kt     # (if spec uses UUID fields)
         │   └── SerializersModule.kt  # (if spec has polymorphic types)
         └── api/
@@ -148,7 +148,7 @@ build/generated/justworks/
 
 - **Data classes** -- one per named schema. Properties annotated with `@SerialName`, sorted required-first.
 - **Enums** -- constants in `UPPER_SNAKE_CASE` with `@SerialName` for the wire value.
-- **Sealed interfaces** -- for `oneOf`/`anyOf` schemas. Variants are separate data classes implementing the interface.
+- **Sealed interfaces** -- for `oneOf`/`anyOf` schemas. Discriminated variants are nested inside the sealed interface file.
 - **SerializersModule** -- top-level `val generatedSerializersModule` registering all polymorphic hierarchies. Only
   generated when needed.
 
@@ -156,7 +156,8 @@ build/generated/justworks/
 
 One client class per OpenAPI tag (e.g. `pets` tag -> `PetsApi`). Untagged endpoints go to `DefaultApi`.
 
-Each endpoint becomes a `suspend` function with `context(Raise<HttpError>)` that returns `HttpSuccess<T>`.
+Each endpoint becomes a `suspend` function that returns `HttpResult<E, T>` -- a sealed interface implemented by
+`HttpError<E>` (for failures) and `HttpSuccess<T>` (for successes). No Arrow or other external runtime dependencies are required.
 
 ### Gradle Tasks
 
@@ -221,22 +222,15 @@ Here is how to use them.
 
 ### Dependencies
 
-Add the required runtime dependencies and enable the experimental context parameters compiler flag:
+Add the required runtime dependencies:
 
 ```kotlin
-kotlin {
-    compilerOptions {
-        freeCompilerArgs.add("-Xcontext-parameters")
-    }
-}
-
 dependencies {
     implementation("io.ktor:ktor-client-core:3.1.1")
     implementation("io.ktor:ktor-client-cio:3.1.1")       // or another engine (OkHttp, Apache, etc.)
     implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-    implementation("io.arrow-kt:arrow-core:2.2.1.1")
 }
 ```
 
@@ -269,15 +263,20 @@ The client implements `Closeable` -- call `client.close()` when done to release 
 
 ### Making Requests
 
-Every endpoint becomes a `suspend` function on the client. Functions use
-Arrow's [Raise](https://arrow-kt.io/docs/typed-errors/) for structured error handling -- they require a
-`context(Raise<HttpError>)` and return `HttpSuccess<T>` on success:
+Every endpoint becomes a `suspend` function on the client that returns `HttpResult<E, T>`:
 
 ```kotlin
-// Inside a Raise<HttpError> context (e.g., within either { ... })
-val result: HttpSuccess<List<Pet>> = client.listPets(limit = 10)
-println(result.body) // the deserialized response body
-println(result.code) // the HTTP status code
+val result: HttpResult<JsonElement, List<Pet>> = client.listPets(limit = 10)
+
+when (result) {
+    is HttpSuccess -> {
+        println(result.body) // the deserialized response body
+        println(result.code) // the HTTP status code
+    }
+    is HttpError -> {
+        println("Error ${result.code}: ${result.body}")
+    }
+}
 ```
 
 Path, query, and header parameters map to function arguments. Optional parameters default to `null`:
@@ -288,48 +287,45 @@ val result = client.findPets(status = "available", limit = 20)
 
 ### Error Handling
 
-Generated endpoints use [Arrow's Raise](https://arrow-kt.io/docs/typed-errors/) -- errors are raised, not returned as
-`Either`. Use Arrow's `either { ... }` block to obtain an `Either<HttpError, HttpSuccess<T>>`:
+`HttpResult<E, T>` is a sealed interface with two branches:
+
+- `HttpSuccess<T>` -- successful response (2xx) with a deserialized body
+- `HttpError<E>` -- sealed class hierarchy for all error cases
+
+`HttpError<E>` provides typed subtypes for common HTTP error codes:
+
+| Subtype                        | HTTP status | Description           |
+|--------------------------------|-------------|-----------------------|
+| `HttpError.BadRequest`         | 400         | Bad request           |
+| `HttpError.Unauthorized`       | 401         | Unauthorized          |
+| `HttpError.Forbidden`          | 403         | Forbidden             |
+| `HttpError.NotFound`           | 404         | Not found             |
+| `HttpError.MethodNotAllowed`   | 405         | Method not allowed    |
+| `HttpError.Conflict`           | 409         | Conflict              |
+| `HttpError.Gone`               | 410         | Gone                  |
+| `HttpError.UnprocessableEntity`| 422         | Unprocessable entity  |
+| `HttpError.TooManyRequests`    | 429         | Too many requests     |
+| `HttpError.InternalServerError`| 500         | Internal server error |
+| `HttpError.BadGateway`         | 502         | Bad gateway           |
+| `HttpError.ServiceUnavailable` | 503         | Service unavailable   |
+| `HttpError.Other`              | *any other* | Catchall with code    |
+| `HttpError.Network`            | --          | I/O or timeout        |
+
+Each error subtype carries a nullable `body: E?` with the deserialized error response (or `null` if deserialization
+failed), plus an `code: Int` property.
 
 ```kotlin
-val result: Either<HttpError, HttpSuccess<Pet>> = either {
-    client.getPet(petId = 123)
+when (result) {
+    is HttpSuccess -> println("Pet: ${result.body.name}")
+    is HttpError.NotFound -> println("Pet not found")
+    is HttpError.Unauthorized -> println("Please log in")
+    is HttpError.Network -> println("Connection failed: ${result.cause}")
+    is HttpError -> println("HTTP ${result.code}: ${result.body}")
 }
-
-result.fold(
-    ifLeft = { error ->
-        when (error.type) {
-            HttpErrorType.Client -> println("Client error ${error.code}: ${error.message}")
-            HttpErrorType.Server -> println("Server error ${error.code}: ${error.message}")
-            HttpErrorType.Redirect -> println("Redirect ${error.code}")
-            HttpErrorType.Network -> println("Connection failed: ${error.message}")
-        }
-    },
-    ifRight = { success ->
-        println("Found: ${success.body.name}")
-    }
-)
 ```
 
-`HttpError` is a data class with the following fields:
-
-| Field     | Type            | Description                                  |
-|-----------|-----------------|----------------------------------------------|
-| `code`    | `Int`           | HTTP status code (or `0` for network errors) |
-| `message` | `String`        | Response body text or exception message      |
-| `type`    | `HttpErrorType` | Category of the error                        |
-
-`HttpErrorType` categorizes errors:
-
-| `HttpErrorType` value | Covered statuses / scenario        |
-|-----------------------|------------------------------------|
-| `Client`              | HTTP 4xx client errors             |
-| `Server`              | HTTP 5xx server errors             |
-| `Redirect`            | HTTP 3xx redirect responses        |
-| `Network`             | I/O failures, timeouts, DNS issues |
-
-Network errors (connection timeouts, DNS failures) are caught and reported as
-`HttpError(code = 0, ..., type = HttpErrorType.Network)` instead of propagating exceptions.
+Network errors (connection timeouts, DNS failures) are caught and reported as `HttpError.Network` instead of
+propagating exceptions.
 
 ## Publishing
 
