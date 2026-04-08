@@ -10,7 +10,6 @@ import com.avsystem.justworks.core.gen.CLOSEABLE
 import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
 import com.avsystem.justworks.core.gen.DESERIALIZE_ERROR_BODY_FUN
-import com.avsystem.justworks.core.gen.EITHER
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
 import com.avsystem.justworks.core.gen.ENCODE_TO_STRING_FUN
 import com.avsystem.justworks.core.gen.HEADERS_FUN
@@ -31,6 +30,7 @@ import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.SecurityScheme
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.FileSpec
@@ -94,7 +94,8 @@ internal object ApiClientBaseGenerator {
         .returns(TypeVariableName("E").copy(nullable = true))
         .beginControlFlow("return try")
         .addStatement("%M()", BODY_FUN)
-        .nextControlFlow("catch (_: %T)", Exception::class)
+        .nextControlFlow("catch (e: %T)", Exception::class)
+        .addStatement("if (e is %T) throw e", ClassName("kotlinx.coroutines", "CancellationException"))
         .addStatement("null")
         .endControlFlow()
         .build()
@@ -110,73 +111,19 @@ internal object ApiClientBaseGenerator {
         .returns(HTTP_RESULT.parameterizedBy(TypeVariableName("E"), TypeVariableName("T")))
         .beginControlFlow("return when (status.value)")
         .addStatement(
-            "in 200..299 -> %T.Right(%T(status.value, %L()))",
-            EITHER,
+            "in 200..299 -> %T(status.value, %L())",
             HTTP_SUCCESS,
             SUCCESS_BODY,
-        ).addStatement(
-            "400 -> %T.Left(%T.BadRequest(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "401 -> %T.Left(%T.Unauthorized(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "403 -> %T.Left(%T.Forbidden(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "404 -> %T.Left(%T.NotFound(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "405 -> %T.Left(%T.MethodNotAllowed(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "409 -> %T.Left(%T.Conflict(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "410 -> %T.Left(%T.Gone(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "422 -> %T.Left(%T.UnprocessableEntity(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "429 -> %T.Left(%T.TooManyRequests(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "500 -> %T.Left(%T.InternalServerError(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "502 -> %T.Left(%T.BadGateway(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "503 -> %T.Left(%T.ServiceUnavailable(%M()))",
-            EITHER,
-            HTTP_ERROR,
-            DESERIALIZE_ERROR_BODY_FUN,
-        ).addStatement(
-            "else -> %T.Left(%T.Other(status.value, %M()))",
-            EITHER,
+        ).apply {
+            for ((name, code) in ApiResponseGenerator.HTTP_ERROR_SUBTYPES) {
+                addStatement(
+                    "$code -> %T.$name(%M())",
+                    HTTP_ERROR,
+                    DESERIALIZE_ERROR_BODY_FUN,
+                )
+            }
+        }.addStatement(
+            "else -> %T.Other(status.value, %M())",
             HTTP_ERROR,
             DESERIALIZE_ERROR_BODY_FUN,
         ).endControlFlow()
@@ -373,9 +320,9 @@ internal object ApiClientBaseGenerator {
             .beginControlFlow("return try")
             .addStatement("%L()", BLOCK)
             .nextControlFlow("catch (e: %T)", IO_EXCEPTION)
-            .addStatement("%T.Left(%T.Network(e))", EITHER, HTTP_ERROR)
+            .addStatement("%T.Network(e)", HTTP_ERROR)
             .nextControlFlow("catch (e: %T)", HTTP_REQUEST_TIMEOUT_EXCEPTION)
-            .addStatement("%T.Left(%T.Network(e))", EITHER, HTTP_ERROR)
+            .addStatement("%T.Network(e)", HTTP_ERROR)
             .endControlFlow()
             .build()
     }

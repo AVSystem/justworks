@@ -96,7 +96,6 @@ class ApiClientBaseGeneratorTest {
         val body = safeCall.body.toString()
         assertTrue(body.contains("IOException"), "Expected IOException catch")
         assertTrue(body.contains("HttpRequestTimeoutException"), "Expected HttpRequestTimeoutException catch")
-        assertTrue(body.contains("Either.Left"), "Expected Either.Left in body")
         assertTrue(body.contains("HttpError.Network"), "Expected HttpError.Network in body")
     }
 
@@ -168,8 +167,7 @@ class ApiClientBaseGeneratorTest {
         assertTrue(body.contains("HttpError.NotFound"), "Expected HttpError.NotFound")
         assertTrue(body.contains("HttpError.InternalServerError"), "Expected HttpError.InternalServerError")
         assertTrue(body.contains("HttpError.Other"), "Expected HttpError.Other catchall")
-        assertTrue(body.contains("Either.Right"), "Expected Either.Right for success")
-        assertTrue(body.contains("Either.Left"), "Expected Either.Left for errors")
+        assertTrue(body.contains("HttpSuccess"), "Expected HttpSuccess for success")
     }
 
     @Test

@@ -2,7 +2,6 @@ package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.gen.shared.ApiResponseGenerator
 import com.squareup.kotlinpoet.KModifier
-import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeVariableName
 import kotlin.test.Test
@@ -13,12 +12,13 @@ import kotlin.test.assertTrue
 class ApiResponseGeneratorTest {
     private val files = ApiResponseGenerator.generate()
     private val httpErrorFile = files.first { it.name == "HttpError" }
+    private val httpResultFile = files.first { it.name == "HttpResult" }
 
     private fun httpErrorClass(): TypeSpec =
         httpErrorFile.members.filterIsInstance<TypeSpec>().first { it.name == "HttpError" }
 
-    private fun httpResultAlias(): TypeAliasSpec =
-        httpErrorFile.members.filterIsInstance<TypeAliasSpec>().first { it.name == "HttpResult" }
+    private fun httpResultInterface(): TypeSpec =
+        httpResultFile.members.filterIsInstance<TypeSpec>().first { it.name == "HttpResult" }
 
     private fun successClass(): TypeSpec {
         val successFile = files.first { it.name == "HttpSuccess" }
@@ -144,15 +144,29 @@ class ApiResponseGeneratorTest {
     }
 
     @Test
-    fun `HttpResult typealias is generated`() {
-        val alias = httpResultAlias()
-        assertEquals("HttpResult", alias.name)
-        assertEquals(2, alias.typeVariables.size)
-        assertEquals("E", alias.typeVariables[0].name)
-        assertEquals("T", alias.typeVariables[1].name)
-        assertTrue(alias.type.toString().contains("Either"), "Should reference Either")
-        assertTrue(alias.type.toString().contains("HttpError"), "Should reference HttpError")
-        assertTrue(alias.type.toString().contains("HttpSuccess"), "Should reference HttpSuccess")
+    fun `HttpResult is a sealed interface with E and T type variables`() {
+        val typeSpec = httpResultInterface()
+        assertEquals("HttpResult", typeSpec.name)
+        assertTrue(KModifier.SEALED in typeSpec.modifiers, "Expected SEALED modifier")
+        assertEquals(2, typeSpec.typeVariables.size)
+        assertEquals("E", typeSpec.typeVariables[0].name)
+        assertTrue(typeSpec.typeVariables[0].variance == KModifier.OUT, "Expected OUT variance on E")
+        assertEquals("T", typeSpec.typeVariables[1].name)
+        assertTrue(typeSpec.typeVariables[1].variance == KModifier.OUT, "Expected OUT variance on T")
+    }
+
+    @Test
+    fun `HttpError implements HttpResult`() {
+        val typeSpec = httpErrorClass()
+        val superinterfaces = typeSpec.superinterfaces.keys.map { it.toString() }
+        assertTrue(superinterfaces.any { it.contains("HttpResult") }, "HttpError should implement HttpResult")
+    }
+
+    @Test
+    fun `HttpSuccess implements HttpResult`() {
+        val typeSpec = successClass()
+        val superinterfaces = typeSpec.superinterfaces.keys.map { it.toString() }
+        assertTrue(superinterfaces.any { it.contains("HttpResult") }, "HttpSuccess should implement HttpResult")
     }
 
     @Test
@@ -180,9 +194,9 @@ class ApiResponseGeneratorTest {
     }
 
     @Test
-    fun `generates two files`() {
-        assertEquals(2, files.size)
+    fun `generates three files`() {
+        assertEquals(3, files.size)
         val fileNames = files.map { it.name }.sorted()
-        assertEquals(listOf("HttpError", "HttpSuccess"), fileNames)
+        assertEquals(listOf("HttpError", "HttpResult", "HttpSuccess"), fileNames)
     }
 }

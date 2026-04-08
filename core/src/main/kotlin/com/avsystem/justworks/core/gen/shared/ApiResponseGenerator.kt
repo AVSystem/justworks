@@ -1,7 +1,6 @@
 package com.avsystem.justworks.core.gen.shared
 
 import com.avsystem.justworks.core.gen.BODY
-import com.avsystem.justworks.core.gen.EITHER
 import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_RESULT
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
@@ -14,20 +13,19 @@ import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.THROWABLE
-import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeVariableName
 
 /**
  * Generates [FileSpec]s containing:
+ * - `HttpResult<out E, out T>` sealed interface for typed API responses
  * - `HttpError<out B>` sealed class hierarchy with predefined HTTP error subtypes
- * - `HttpResult<E, T>` typealias as `Either<HttpError<E>, HttpSuccess<T>>`
  * - `HttpSuccess<T>` data class wrapping successful responses
  */
 internal object ApiResponseGenerator {
     private const val CODE = "code"
 
-    private val HTTP_ERROR_SUBTYPES = listOf(
+    internal val HTTP_ERROR_SUBTYPES = listOf(
         "BadRequest" to 400,
         "Unauthorized" to 401,
         "Forbidden" to 403,
@@ -42,7 +40,24 @@ internal object ApiResponseGenerator {
         "ServiceUnavailable" to 503,
     )
 
-    fun generate(): List<FileSpec> = listOf(generateHttpError(), generateHttpSuccess())
+    fun generate(): List<FileSpec> = listOf(generateHttpResult(), generateHttpError(), generateHttpSuccess())
+
+    fun generateHttpResult(): FileSpec {
+        val e = TypeVariableName("E", variance = KModifier.OUT)
+        val t = TypeVariableName("T", variance = KModifier.OUT)
+
+        val sealedInterface = TypeSpec
+            .interfaceBuilder(HTTP_RESULT)
+            .addModifiers(KModifier.SEALED)
+            .addTypeVariable(e)
+            .addTypeVariable(t)
+            .build()
+
+        return FileSpec
+            .builder(HTTP_RESULT)
+            .addType(sealedInterface)
+            .build()
+    }
 
     fun generateHttpError(): FileSpec {
         val b = TypeVariableName("B", variance = KModifier.OUT)
@@ -51,6 +66,7 @@ internal object ApiResponseGenerator {
             .classBuilder(HTTP_ERROR)
             .addModifiers(KModifier.SEALED)
             .addTypeVariable(b)
+            .addSuperinterface(HTTP_RESULT.parameterizedBy(b, NOTHING))
             .addProperty(
                 PropertySpec
                     .builder(CODE, INT)
@@ -74,24 +90,9 @@ internal object ApiResponseGenerator {
         // Network: no type variable, extends HttpError<Nothing>
         sealedClass.addType(buildNetworkSubtype())
 
-        // HttpResult typealias
-        val e = TypeVariableName("E")
-        val t = TypeVariableName("T")
-        val httpResultAlias = TypeAliasSpec
-            .builder(
-                "HttpResult",
-                EITHER.parameterizedBy(
-                    HTTP_ERROR.parameterizedBy(e),
-                    HTTP_SUCCESS.parameterizedBy(t),
-                ),
-            ).addTypeVariable(e)
-            .addTypeVariable(t)
-            .build()
-
         return FileSpec
             .builder(HTTP_ERROR)
             .addType(sealedClass.build())
-            .addTypeAlias(httpResultAlias)
             .build()
     }
 
@@ -105,11 +106,11 @@ internal object ApiResponseGenerator {
             .primaryConstructor(
                 FunSpec
                     .constructorBuilder()
-                    .addParameter(BODY, b)
+                    .addParameter(BODY, b.copy(nullable = true))
                     .build(),
             ).addProperty(
                 PropertySpec
-                    .builder(BODY, b)
+                    .builder(BODY, b.copy(nullable = true))
                     .initializer(BODY)
                     .addModifiers(KModifier.OVERRIDE)
                     .build(),
@@ -137,7 +138,7 @@ internal object ApiResponseGenerator {
                 FunSpec
                     .constructorBuilder()
                     .addParameter(CODE, INT)
-                    .addParameter(BODY, b)
+                    .addParameter(BODY, b.copy(nullable = true))
                     .build(),
             ).addProperty(
                 PropertySpec
@@ -147,7 +148,7 @@ internal object ApiResponseGenerator {
                     .build(),
             ).addProperty(
                 PropertySpec
-                    .builder(BODY, b)
+                    .builder(BODY, b.copy(nullable = true))
                     .initializer(BODY)
                     .addModifiers(KModifier.OVERRIDE)
                     .build(),
@@ -194,7 +195,6 @@ internal object ApiResponseGenerator {
                 ).build(),
         ).build()
 
-
     fun generateHttpSuccess(): FileSpec {
         val t = TypeVariableName("T")
 
@@ -208,6 +208,7 @@ internal object ApiResponseGenerator {
             .classBuilder(HTTP_SUCCESS)
             .addModifiers(KModifier.DATA)
             .addTypeVariable(t)
+            .addSuperinterface(HTTP_RESULT.parameterizedBy(NOTHING, t))
             .primaryConstructor(primaryConstructor)
             .addProperty(PropertySpec.builder(CODE, INT).initializer(CODE).build())
             .addProperty(PropertySpec.builder(BODY, t).initializer(BODY).build())
