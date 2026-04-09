@@ -178,8 +178,9 @@ internal object ClientGenerator {
         if (querySchemes.isNotEmpty()) {
             builder.beginControlFlow("url")
             for (scheme in querySchemes) {
+                val paramName = scheme.paramNames(specTitle).first()
                 builder.addStatement(
-                    "parameters.append(%S, ${scheme.paramNames(specTitle).first()}())",
+                    "parameters.append(%S, $paramName())",
                     scheme.parameterName,
                 )
             }

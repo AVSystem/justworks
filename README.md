@@ -116,17 +116,21 @@ A `SerializersModule` is auto-generated when discriminated polymorphic types are
 The plugin reads security schemes defined in the OpenAPI spec and generates authentication handling automatically.
 Only schemes referenced in the top-level `security` requirement are included.
 
-| Scheme type | Location | Generated constructor parameter(s)                             |
-|-------------|----------|----------------------------------------------------------------|
-| HTTP Bearer | Header   | `token: () -> String` (or `{name}Token` if multiple)           |
-| HTTP Basic  | Header   | `{name}Username: () -> String`, `{name}Password: () -> String` |
-| API Key     | Header   | `{name}Key: () -> String`                                      |
-| API Key     | Query    | `{name}Key: () -> String`                                      |
+Parameter names are derived as `{schemeName}{specTitle}{Suffix}` where `schemeName` and `specTitle` are camel/PascalCased
+from the OpenAPI scheme key and `info.title` respectively. This scoping prevents collisions when multiple specs define
+schemes with the same name.
+
+| Scheme type | Location | Generated constructor parameter(s)                                             |
+|-------------|----------|--------------------------------------------------------------------------------|
+| HTTP Bearer | Header   | `{name}{title}Token: () -> String`                                             |
+| HTTP Basic  | Header   | `{name}{title}Username: () -> String`, `{name}{title}Password: () -> String`   |
+| API Key     | Header   | `{name}{title}: () -> String`                                                  |
+| API Key     | Query    | `{name}{title}: () -> String`                                                  |
 
 All auth parameters are `() -> String` lambdas, called on every request. This lets you supply providers that refresh
 credentials automatically.
 
-The generated `ApiClientBase` contains an `applyAuth()` method that applies all credentials to each request:
+Each generated client overrides an `applyAuth()` method that applies all credentials to each request:
 
 - Bearer tokens are sent as `Authorization: Bearer {token}` headers
 - Basic auth is sent as `Authorization: Basic {base64(username:password)}` headers
@@ -149,7 +153,7 @@ registered spec).
 build/generated/justworks/
 ├── shared/kotlin/
 │   └── com/avsystem/justworks/
-│       ├── ApiClientBase.kt          # Abstract base class + auth handling + helper extensions
+│       ├── ApiClientBase.kt          # Abstract base class + helper extensions
 │       ├── HttpError.kt              # HttpErrorType enum + HttpError data class
 │       └── HttpSuccess.kt            # HttpSuccess<T> data class
 │
@@ -263,42 +267,42 @@ You only need to provide the base URL and authentication credentials (if the spe
 Class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). Untagged endpoints go
 to `DefaultApi`.
 
-**Single Bearer token** (most common case):
+**Bearer token** (spec title "Petstore", scheme name "BearerAuth"):
 
 ```kotlin
 val client = PetsApi(
     baseUrl = "https://api.example.com",
-    token = { "your-bearer-token" },
+    bearerAuthPetstoreToken = { "your-bearer-token" },
 )
 ```
 
-The `token` parameter is a `() -> String` lambda called on every request. This lets you supply a provider that refreshes
+Auth parameters are `() -> String` lambdas called on every request, so you can supply a provider that refreshes
 automatically:
 
 ```kotlin
 val client = PetsApi(
     baseUrl = "https://api.example.com",
-    token = { tokenStore.getAccessToken() },
+    bearerAuthPetstoreToken = { tokenStore.getAccessToken() },
 )
 ```
 
-**Multiple security schemes** -- constructor parameters are derived from the scheme names defined in the spec:
+**Multiple security schemes** -- parameters are scoped by scheme name and spec title:
 
 ```kotlin
 val client = PetsApi(
     baseUrl = "https://api.example.com",
-    bearerToken = { tokenStore.getAccessToken() },
-    internalApiKey = { secrets.getApiKey() },
+    bearerAuthPetstoreToken = { tokenStore.getAccessToken() },
+    internalApiKeyPetstore = { secrets.getApiKey() },
 )
 ```
 
-**Basic auth**:
+**Basic auth** (scheme name "BasicAuth"):
 
 ```kotlin
 val client = PetsApi(
     baseUrl = "https://api.example.com",
-    basicUsername = { "user" },
-    basicPassword = { "pass" },
+    basicAuthPetstoreUsername = { "user" },
+    basicAuthPetstorePassword = { "pass" },
 )
 ```
 

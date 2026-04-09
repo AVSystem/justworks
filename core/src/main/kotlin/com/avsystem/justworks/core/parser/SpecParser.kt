@@ -89,20 +89,6 @@ object SpecParser {
         openApi.toApiSpec()
     }
 
-    /**
-     * Lightweight extraction of security schemes from an OpenAPI spec file.
-     *
-     * Parses only the `components/securitySchemes` and `security` sections,
-     * skipping the expensive endpoint and schema extraction performed by [parse].
-     */
-    fun parseSecuritySchemes(specFile: File): ParseResult<List<SecurityScheme>> =
-        parseSpec(specFile, resolveFully = false) { openApi ->
-            extractSecuritySchemes(
-                openApi.components?.securitySchemes.orEmpty(),
-                openApi.security.orEmpty(),
-            )
-        }
-
     @OptIn(ExperimentalRaiseAccumulateApi::class)
     private inline fun <T> parseSpec(
         specFile: File,
