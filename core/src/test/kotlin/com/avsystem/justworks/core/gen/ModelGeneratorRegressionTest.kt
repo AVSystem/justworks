@@ -26,6 +26,7 @@ class ModelGeneratorRegressionTest {
         endpoints = emptyList(),
         schemas = schemas,
         enums = emptyList(),
+        securitySchemes = emptyList(),
     )
 
     private fun schema(

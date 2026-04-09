@@ -14,6 +14,7 @@ import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.SCHEMA_PREFIX
 import com.avsystem.justworks.core.Warnings
 import com.avsystem.justworks.core.accumulate
+import com.avsystem.justworks.core.accumulateAndReturnNull
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
@@ -32,7 +33,6 @@ import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
-import com.avsystem.justworks.core.parser.SpecParser.parse
 import com.avsystem.justworks.core.toEnumOrNull
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
@@ -90,20 +90,6 @@ object SpecParser {
         openApi.toApiSpec()
     }
 
-    /**
-     * Lightweight extraction of security schemes from an OpenAPI spec file.
-     *
-     * Parses only the `components/securitySchemes` and `security` sections,
-     * skipping the expensive endpoint and schema extraction performed by [parse].
-     */
-    fun parseSecuritySchemes(specFile: File): ParseResult<List<SecurityScheme>> =
-        parseSpec(specFile, resolveFully = false) { openApi ->
-            extractSecuritySchemes(
-                openApi.components?.securitySchemes.orEmpty(),
-                openApi.security.orEmpty(),
-            )
-        }
-
     @OptIn(ExperimentalRaiseAccumulateApi::class)
     private inline fun <T> parseSpec(
         specFile: File,
@@ -156,6 +142,7 @@ object SpecParser {
     context(_: Raise<Issue.Error>, _: Warnings)
     private fun OpenAPI.toApiSpec(): ApiSpec {
         val allSchemas = components?.schemas.orEmpty()
+        val title = info?.title ?: "Untitled"
 
         val securitySchemes = extractSecuritySchemes(
             components?.securitySchemes.orEmpty(),
@@ -200,7 +187,7 @@ object SpecParser {
 
             val syntheticModels = collectModels(emptySet(), emptyList())
             return ApiSpec(
-                title = info?.title ?: "Untitled",
+                title = title,
                 version = info?.version ?: "0.0.0",
                 endpoints = endpoints,
                 schemas = schemaModels + syntheticModels,
@@ -229,7 +216,7 @@ object SpecParser {
             when (scheme?.lowercase()) {
                 "bearer" -> SecurityScheme.Bearer(name)
                 "basic" -> SecurityScheme.Basic(name)
-                else -> accumulate(Issue.Warning("Unsupported HTTP auth scheme '$scheme' for '$name'"))
+                else -> accumulateAndReturnNull(Issue.Warning("Unsupported HTTP auth scheme '$scheme' for '$name'"))
             }
         }
 
@@ -237,12 +224,12 @@ object SpecParser {
             when (`in`) {
                 SwaggerSecurityScheme.In.HEADER -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.HEADER)
                 SwaggerSecurityScheme.In.QUERY -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.QUERY)
-                else -> accumulate(Issue.Warning("Unsupported API key location '${`in`}' for '$name'"))
+                else -> accumulateAndReturnNull(Issue.Warning("Unsupported API key location '${`in`}' for '$name'"))
             }
         }
 
         else -> {
-            accumulate(Issue.Warning("Unsupported security scheme type '$type' for '$name'"))
+            accumulateAndReturnNull(Issue.Warning("Unsupported security scheme type '$type' for '$name'"))
         }
     }
 

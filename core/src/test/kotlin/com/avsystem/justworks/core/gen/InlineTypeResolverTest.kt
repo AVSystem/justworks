@@ -20,6 +20,7 @@ class InlineTypeResolverTest {
         schemas = emptyList(),
         enums = emptyList(),
         endpoints = emptyList(),
+        securitySchemes = emptyList(),
     )
 
     private fun inlineType(vararg propNames: String, contextHint: String = "Test") = TypeRef.Inline(
@@ -114,6 +115,7 @@ class InlineTypeResolverTest {
             version = "1.0",
             schemas = emptyList(),
             enums = emptyList(),
+            securitySchemes = emptyList(),
             endpoints = listOf(
                 Endpoint(
                     path = "/test",
@@ -148,6 +150,7 @@ class InlineTypeResolverTest {
             version = "1.0",
             schemas = emptyList(),
             enums = emptyList(),
+            securitySchemes = emptyList(),
             endpoints = listOf(
                 Endpoint(
                     path = "/test",

@@ -29,7 +29,7 @@ data class ApiSpec(
     val endpoints: List<Endpoint>,
     val schemas: List<SchemaModel>,
     val enums: List<EnumModel>,
-    val securitySchemes: List<SecurityScheme> = emptyList(),
+    val securitySchemes: List<SecurityScheme>,
 )
 
 data class Endpoint(
@@ -96,9 +96,7 @@ data class SchemaModel(
     val anyOf: List<TypeRef>?,
     val discriminator: Discriminator?,
     val underlyingType: TypeRef? = null,
-) {
-    val isNested get() = name.contains(".")
-}
+)
 
 data class PropertyModel(
     val name: String,

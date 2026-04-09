@@ -1,12 +1,17 @@
 package com.avsystem.justworks.core.gen.client
 
 import com.avsystem.justworks.core.gen.API_CLIENT_BASE
+import com.avsystem.justworks.core.gen.APPLY_AUTH
 import com.avsystem.justworks.core.gen.ApiPackage
+import com.avsystem.justworks.core.gen.BASE64_CLASS
 import com.avsystem.justworks.core.gen.BASE_URL
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
 import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
+import com.avsystem.justworks.core.gen.HTTP_HEADERS
+import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
 import com.avsystem.justworks.core.gen.HTTP_RESULT
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
@@ -17,10 +22,11 @@ import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParam
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.sanitizeKdoc
-import com.avsystem.justworks.core.gen.shared.ApiClientBaseGenerator
+import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
+import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
@@ -53,7 +59,7 @@ internal object ClientGenerator {
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
-            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes)
+            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes, spec.title)
         }
     }
 
@@ -63,6 +69,7 @@ internal object ClientGenerator {
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean,
         securitySchemes: List<SecurityScheme>,
+        specTitle: String,
     ): FileSpec {
         val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
 
@@ -74,7 +81,13 @@ internal object ClientGenerator {
         }
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
-        val authParams = ApiClientBaseGenerator.buildAuthConstructorParams(securitySchemes)
+        val authParamNames = securitySchemes.flatMap { scheme ->
+            when (scheme) {
+                is SecurityScheme.Bearer -> listOf(scheme.toAuthParam(specTitle).name)
+                is SecurityScheme.ApiKey -> listOf(scheme.toAuthParam(specTitle).name)
+                is SecurityScheme.Basic -> scheme.toAuthParam(specTitle).let { listOf(it.username, it.password) }
+            }
+        }
 
         val constructorBuilder = FunSpec
             .constructorBuilder()
@@ -85,9 +98,15 @@ internal object ClientGenerator {
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
 
-        for (paramName in authParams) {
+        for (paramName in authParamNames) {
             constructorBuilder.addParameter(paramName, tokenType)
-            classBuilder.addSuperclassConstructorParameter(paramName)
+            classBuilder.addProperty(
+                PropertySpec
+                    .builder(paramName, tokenType)
+                    .initializer(paramName)
+                    .addModifiers(KModifier.PRIVATE)
+                    .build(),
+            )
         }
 
         val httpClientProperty = PropertySpec
@@ -100,6 +119,10 @@ internal object ClientGenerator {
             .primaryConstructor(constructorBuilder.build())
             .addProperty(httpClientProperty)
 
+        if (securitySchemes.isNotEmpty()) {
+            classBuilder.addFunction(buildApplyAuth(securitySchemes, specTitle))
+        }
+
         context(NameRegistry()) {
             classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })
         }
@@ -108,6 +131,73 @@ internal object ClientGenerator {
             .builder(className)
             .addType(classBuilder.build())
             .build()
+    }
+
+    private fun buildApplyAuth(securitySchemes: List<SecurityScheme>, specTitle: String): FunSpec {
+        val builder = FunSpec
+            .builder(APPLY_AUTH)
+            .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
+            .receiver(HTTP_REQUEST_BUILDER)
+
+        val headerSchemes = securitySchemes.filter { scheme ->
+            scheme is SecurityScheme.Bearer ||
+                scheme is SecurityScheme.Basic ||
+                (scheme is SecurityScheme.ApiKey && scheme.location == ApiKeyLocation.HEADER)
+        }
+        val querySchemes = securitySchemes
+            .filterIsInstance<SecurityScheme.ApiKey>()
+            .filter { scheme -> scheme.location == ApiKeyLocation.QUERY }
+
+        if (headerSchemes.isNotEmpty()) {
+            builder.beginControlFlow("%M", HEADERS_FUN)
+            for (scheme in headerSchemes) {
+                when (scheme) {
+                    is SecurityScheme.Bearer -> {
+                        val authParam = scheme.toAuthParam(specTitle)
+                        builder.addStatement(
+                            "append(%T.Authorization, %P)",
+                            HTTP_HEADERS,
+                            CodeBlock.of($$"Bearer ${$${authParam.name}()}"),
+                        )
+                    }
+
+                    is SecurityScheme.Basic -> {
+                        val authParam = scheme.toAuthParam(specTitle)
+                        builder.addStatement(
+                            "append(%T.Authorization, %P)",
+                            HTTP_HEADERS,
+                            CodeBlock.of(
+                                $$"Basic ${%T.getEncoder().encodeToString(\"${$${authParam.username}()}:${$${authParam.password}()}\".toByteArray(Charsets.UTF_8))}",
+                                BASE64_CLASS,
+                            ),
+                        )
+                    }
+
+                    is SecurityScheme.ApiKey -> {
+                        val authParam = scheme.toAuthParam(specTitle)
+                        builder.addStatement(
+                            "append(%S, ${authParam.name}())",
+                            scheme.parameterName,
+                        )
+                    }
+                }
+            }
+            builder.endControlFlow()
+        }
+
+        if (querySchemes.isNotEmpty()) {
+            builder.beginControlFlow("url")
+            for (scheme in querySchemes) {
+                val authParam = scheme.toAuthParam(specTitle)
+                builder.addStatement(
+                    "parameters.append(%S, ${authParam.name}())",
+                    scheme.parameterName,
+                )
+            }
+            builder.endControlFlow()
+        }
+
+        return builder.build()
     }
 
     context(_: Hierarchy, methodRegistry: NameRegistry)

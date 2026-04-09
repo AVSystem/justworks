@@ -5,7 +5,6 @@ import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.gen.shared.ApiClientBaseGenerator
 import com.avsystem.justworks.core.gen.shared.ApiResponseGenerator
 import com.avsystem.justworks.core.model.ApiSpec
-import com.avsystem.justworks.core.model.SecurityScheme
 import java.io.File
 
 /**
@@ -21,7 +20,9 @@ object CodeGenerator {
         apiPackage: String,
         outputDir: File,
     ): Result {
-        val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }
+        val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
+            addSchemas(spec.schemas)
+        }
 
         val (modelFiles, resolvedSpec) = context(hierarchy, NameRegistry()) {
             ModelGenerator.generateWithResolvedSpec(spec)
@@ -40,8 +41,8 @@ object CodeGenerator {
         return Result(modelFiles.size, clientFiles.size)
     }
 
-    fun generateSharedTypes(outputDir: File, securitySchemes: List<SecurityScheme>): Int {
-        val files = ApiResponseGenerator.generate() + ApiClientBaseGenerator.generate(securitySchemes)
+    fun generateSharedTypes(outputDir: File): Int {
+        val files = ApiResponseGenerator.generate() + ApiClientBaseGenerator.generate()
         files.forEach { it.writeTo(outputDir) }
         return files.size
     }
