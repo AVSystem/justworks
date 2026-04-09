@@ -20,7 +20,6 @@ import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParam
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.sanitizeKdoc
-import com.avsystem.justworks.core.gen.shared.AuthParam
 import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
