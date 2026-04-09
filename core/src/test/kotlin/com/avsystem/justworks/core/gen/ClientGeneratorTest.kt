@@ -701,9 +701,9 @@ class ClientGeneratorTest {
         assertTrue("bearerAuthTestToken" in paramNames, "Expected bearerAuthTestToken param")
         assertTrue("apiKeyHeaderTest" in paramNames, "Expected apiKeyHeaderTest param")
 
-        // Verify baseUrl and no-op token are passed to super
+        // Verify only baseUrl is passed to super
         val superParams = cls.superclassConstructorParameters.map { it.toString().trim() }
-        assertEquals(2, superParams.size, "Expected baseUrl and token passed to super")
+        assertEquals(1, superParams.size, "Expected only baseUrl passed to super")
         assertEquals("baseUrl", superParams[0])
     }
 
@@ -745,13 +745,16 @@ class ClientGeneratorTest {
     }
 
     @Test
-    fun `single Bearer scheme does not override applyAuth (inherits from base)`() {
+    fun `single Bearer scheme overrides applyAuth with Bearer token`() {
         val cls = clientClass(
             listOf(endpoint()),
             listOf(SecurityScheme.Bearer("BearerAuth")),
         )
-        val applyAuthFuns = cls.funSpecs.filter { it.name == "applyAuth" }
-        assertTrue(applyAuthFuns.isEmpty(), "Single Bearer should not override applyAuth")
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("Authorization"), "Expected Authorization header")
+        assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
+        assertTrue(body.contains("token()"), "Expected token() invocation")
     }
 
     // -- SECU: applyAuth body assertions --
