@@ -131,19 +131,20 @@ internal object ClientGenerator {
             .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
             .receiver(HTTP_REQUEST_BUILDER)
 
-        val headerSchemes = securitySchemes.filter { scheme ->
+        val schemesWithNames = securitySchemes.map { it to it.paramNames(specTitle) }
+
+        val headerSchemes = schemesWithNames.filter { (scheme, _) ->
             scheme is SecurityScheme.Bearer ||
                 scheme is SecurityScheme.Basic ||
                 (scheme is SecurityScheme.ApiKey && scheme.location == ApiKeyLocation.HEADER)
         }
-        val querySchemes = securitySchemes
-            .filterIsInstance<SecurityScheme.ApiKey>()
-            .filter { it.location == ApiKeyLocation.QUERY }
+        val querySchemes = schemesWithNames.filter { (scheme, _) ->
+            scheme is SecurityScheme.ApiKey && scheme.location == ApiKeyLocation.QUERY
+        }
 
         if (headerSchemes.isNotEmpty()) {
             builder.beginControlFlow("%M", HEADERS_FUN)
-            for (scheme in headerSchemes) {
-                val names = scheme.paramNames(specTitle)
+            for ((scheme, names) in headerSchemes) {
                 when (scheme) {
                     is SecurityScheme.Bearer -> {
                         builder.addStatement(
@@ -158,7 +159,7 @@ internal object ClientGenerator {
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
                             CodeBlock.of(
-                                $$"Basic ${%T.getEncoder().encodeToString(\"${$${names[0]}()}:${$${names[1]}()}\".toByteArray())}",
+                                $$"Basic ${%T.getEncoder().encodeToString(\"${$${names[0]}()}:${$${names[1]}()}\".toByteArray(Charsets.UTF_8))}",
                                 BASE64_CLASS,
                             ),
                         )
@@ -177,10 +178,10 @@ internal object ClientGenerator {
 
         if (querySchemes.isNotEmpty()) {
             builder.beginControlFlow("url")
-            for (scheme in querySchemes) {
-                val paramName = scheme.paramNames(specTitle).first()
+            for ((scheme, names) in querySchemes) {
+                scheme as SecurityScheme.ApiKey
                 builder.addStatement(
-                    "parameters.append(%S, $paramName())",
+                    "parameters.append(%S, ${names.first()}())",
                     scheme.parameterName,
                 )
             }

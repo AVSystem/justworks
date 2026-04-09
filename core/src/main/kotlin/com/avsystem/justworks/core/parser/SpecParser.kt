@@ -13,6 +13,7 @@ import arrow.core.raise.nullable
 import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.SCHEMA_PREFIX
 import com.avsystem.justworks.core.Warnings
+import com.avsystem.justworks.core.accumulate
 import com.avsystem.justworks.core.accumulateAndReturnNull
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.model.ApiKeyLocation
@@ -130,7 +131,7 @@ object SpecParser {
 
         val swaggerResult = OpenAPIParser().readLocation(specFile.absolutePath, null, parseOptions)
 
-        swaggerResult?.messages?.forEach { accumulateAndReturnNull(Issue.Warning(it)) }
+        swaggerResult?.messages?.forEach { accumulate(Issue.Warning(it)) }
 
         return swaggerResult?.openAPI
     }

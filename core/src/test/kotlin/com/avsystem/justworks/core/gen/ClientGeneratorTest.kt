@@ -743,6 +743,61 @@ class ClientGeneratorTest {
         assertTrue("bearerAuthTestToken" in paramNames, "Expected bearerAuthTestToken param")
     }
 
+    // -- SECU: applyAuth body assertions --
+
+    @Test
+    fun `Bearer scheme applyAuth contains Authorization header with Bearer prefix`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.Bearer("BearerAuth")),
+        )
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("Authorization"), "Expected Authorization header")
+        assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
+        assertTrue(body.contains("bearerAuthTestToken()"), "Expected bearerAuthTestToken() invocation")
+    }
+
+    @Test
+    fun `Basic scheme applyAuth contains Authorization header with Base64 encoding`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.Basic("BasicAuth")),
+        )
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("Authorization"), "Expected Authorization header")
+        assertTrue(body.contains("Basic"), "Expected Basic prefix")
+        assertTrue(body.contains("Base64"), "Expected Base64 encoding")
+        assertTrue(body.contains("basicAuthTestUsername()"), "Expected username invocation")
+        assertTrue(body.contains("basicAuthTestPassword()"), "Expected password invocation")
+    }
+
+    @Test
+    fun `ApiKey HEADER scheme applyAuth appends header with spec parameter name`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.ApiKey("ApiKeyHeader", "X-API-Key", ApiKeyLocation.HEADER)),
+        )
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("X-API-Key"), "Expected X-API-Key header name")
+        assertTrue(body.contains("apiKeyHeaderTest()"), "Expected apiKeyHeaderTest() invocation")
+    }
+
+    @Test
+    fun `ApiKey QUERY scheme applyAuth appends query parameter`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.ApiKey("ApiKeyQuery", "api_key", ApiKeyLocation.QUERY)),
+        )
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("parameters.append"), "Expected query parameters.append call")
+        assertTrue(body.contains("api_key"), "Expected api_key parameter name")
+        assertTrue(body.contains("apiKeyQueryTest()"), "Expected apiKeyQueryTest() invocation")
+    }
+
     // -- DOCS-03: Endpoint KDoc generation --
 
     @Test
