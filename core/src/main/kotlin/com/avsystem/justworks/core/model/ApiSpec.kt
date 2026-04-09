@@ -32,7 +32,10 @@ enum class HttpMethod {
     POST,
     PUT,
     DELETE,
-    PATCH
+    PATCH,
+    HEAD,
+    OPTIONS,
+    TRACE
 }
 
 data class Parameter(
