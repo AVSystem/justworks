@@ -13,7 +13,6 @@ val HTTP_HEADERS = ClassName("io.ktor.http", "HttpHeaders")
 
 val JSON_FUN = MemberName("io.ktor.serialization.kotlinx.json", "json")
 val BODY_FUN = MemberName("io.ktor.client.call", "body")
-val BODY_AS_TEXT_FUN = MemberName("io.ktor.client.statement", "bodyAsText")
 val SET_BODY_FUN = MemberName("io.ktor.client.request", "setBody")
 val CONTENT_TYPE_FUN = MemberName("io.ktor.http", "contentType")
 val CONTENT_TYPE_APPLICATION = ClassName("io.ktor.http", "ContentType", "Application")
