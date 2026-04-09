@@ -9,18 +9,16 @@ package com.avsystem.justworks.core.model
  */
 sealed interface SecurityScheme {
     val name: String
-    val specTitle: String
 
-    data class Bearer(override val name: String, override val specTitle: String) : SecurityScheme
+    data class Bearer(override val name: String) : SecurityScheme
 
     data class ApiKey(
         override val name: String,
-        override val specTitle: String,
         val parameterName: String,
         val location: ApiKeyLocation,
     ) : SecurityScheme
 
-    data class Basic(override val name: String, override val specTitle: String) : SecurityScheme
+    data class Basic(override val name: String) : SecurityScheme
 }
 
 enum class ApiKeyLocation { HEADER, QUERY }

@@ -17,7 +17,9 @@ fun String.toCamelCase(): String = toPascalCase().replaceFirstChar { it.lowercas
 fun String.toPascalCase(): String = split(DELIMITERS)
     .filter { it.isNotEmpty() }
     .flatMap { it.split(CAMEL_BOUNDARY) }
-    .joinToString("") { it.lowercase().replaceFirstChar { c -> c.uppercaseChar() } }
+    .joinToString("") { segment ->
+        segment.filter { it.isLetterOrDigit() }.lowercase().replaceFirstChar { it.uppercaseChar() }
+    }
 
 /**
  * Converts any string to UPPER_SNAKE_CASE for use as an enum constant name.

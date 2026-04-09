@@ -98,7 +98,6 @@ object SpecParser {
     fun parseSecuritySchemes(specFile: File): ParseResult<List<SecurityScheme>> =
         parseSpec(specFile, resolveFully = false) { openApi ->
             extractSecuritySchemes(
-                openApi.info?.title ?: "Untitled",
                 openApi.components?.securitySchemes.orEmpty(),
                 openApi.security.orEmpty(),
             )
@@ -159,7 +158,6 @@ object SpecParser {
         val title = info?.title ?: "Untitled"
 
         val securitySchemes = extractSecuritySchemes(
-            title,
             components?.securitySchemes.orEmpty(),
             security.orEmpty(),
         )
@@ -214,7 +212,6 @@ object SpecParser {
 
     context(_: Warnings)
     private fun extractSecuritySchemes(
-        specTitle: String,
         definitions: Map<String, SwaggerSecurityScheme>,
         requirements: List<SecurityRequirement>,
     ): List<SecurityScheme> {
@@ -222,36 +219,24 @@ object SpecParser {
         return referencedNames.mapNotNull { name ->
             ensureNotNullOrAccumulate(definitions[name]) {
                 Issue.Warning("Security requirement references undefined scheme '$name'")
-            }?.toSecurityScheme(name, specTitle)
+            }?.toSecurityScheme(name)
         }
     }
 
     context(_: Warnings)
-    private fun SwaggerSecurityScheme.toSecurityScheme(name: String, specTitle: String): SecurityScheme? = when (type) {
+    private fun SwaggerSecurityScheme.toSecurityScheme(name: String): SecurityScheme? = when (type) {
         SwaggerSecurityScheme.Type.HTTP -> {
             when (scheme?.lowercase()) {
-                "bearer" -> SecurityScheme.Bearer(name, specTitle)
-                "basic" -> SecurityScheme.Basic(name, specTitle)
+                "bearer" -> SecurityScheme.Bearer(name)
+                "basic" -> SecurityScheme.Basic(name)
                 else -> accumulateAndReturnNull(Issue.Warning("Unsupported HTTP auth scheme '$scheme' for '$name'"))
             }
         }
 
         SwaggerSecurityScheme.Type.APIKEY -> {
             when (`in`) {
-                SwaggerSecurityScheme.In.HEADER -> SecurityScheme.ApiKey(
-                    name,
-                    specTitle,
-                    this.name,
-                    ApiKeyLocation.HEADER,
-                )
-
-                SwaggerSecurityScheme.In.QUERY -> SecurityScheme.ApiKey(
-                    name,
-                    specTitle,
-                    this.name,
-                    ApiKeyLocation.QUERY,
-                )
-
+                SwaggerSecurityScheme.In.HEADER -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.HEADER)
+                SwaggerSecurityScheme.In.QUERY -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.QUERY)
                 else -> accumulateAndReturnNull(Issue.Warning("Unsupported API key location '${`in`}' for '$name'"))
             }
         }

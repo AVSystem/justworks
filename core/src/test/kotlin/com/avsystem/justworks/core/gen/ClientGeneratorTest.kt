@@ -665,25 +665,25 @@ class ClientGeneratorTest {
     fun `ApiKey HEADER scheme generates constructor with baseUrl and apiKey param`() {
         val cls = clientClass(
             listOf(endpoint()),
-            listOf(SecurityScheme.ApiKey("ApiKeyHeader", "", "X-API-Key", ApiKeyLocation.HEADER)),
+            listOf(SecurityScheme.ApiKey("ApiKeyHeader", "X-API-Key", ApiKeyLocation.HEADER)),
         )
         val constructor = assertNotNull(cls.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
-        assertTrue("apiKeyHeader" in paramNames, "Expected apiKeyHeader param")
+        assertTrue("apiKeyHeaderTest" in paramNames, "Expected apiKeyHeaderTest param")
     }
 
     @Test
     fun `Basic scheme generates constructor with baseUrl, username, and password`() {
         val cls = clientClass(
             listOf(endpoint()),
-            listOf(SecurityScheme.Basic("BasicAuth", "")),
+            listOf(SecurityScheme.Basic("BasicAuth")),
         )
         val constructor = assertNotNull(cls.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
-        assertTrue("basicAuthUsername" in paramNames, "Expected basicAuthUsername param")
-        assertTrue("basicAuthPassword" in paramNames, "Expected basicAuthPassword param")
+        assertTrue("basicAuthTestUsername" in paramNames, "Expected basicAuthTestUsername param")
+        assertTrue("basicAuthTestPassword" in paramNames, "Expected basicAuthTestPassword param")
     }
 
     @Test
@@ -691,15 +691,15 @@ class ClientGeneratorTest {
         val cls = clientClass(
             listOf(endpoint()),
             listOf(
-                SecurityScheme.Bearer("BearerAuth", ""),
-                SecurityScheme.ApiKey("ApiKeyHeader", "", "X-API-Key", ApiKeyLocation.HEADER),
+                SecurityScheme.Bearer("BearerAuth"),
+                SecurityScheme.ApiKey("ApiKeyHeader", "X-API-Key", ApiKeyLocation.HEADER),
             ),
         )
         val constructor = assertNotNull(cls.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
-        assertTrue("bearerAuthToken" in paramNames, "Expected bearerAuthToken param")
-        assertTrue("apiKeyHeader" in paramNames, "Expected apiKeyHeader param")
+        assertTrue("bearerAuthTestToken" in paramNames, "Expected bearerAuthTestToken param")
+        assertTrue("apiKeyHeaderTest" in paramNames, "Expected apiKeyHeaderTest param")
 
         // Verify only baseUrl is passed to super (auth is handled per-client, not in ApiClientBase)
         val superParams = cls.superclassConstructorParameters.map { it.toString().trim() }
@@ -736,11 +736,11 @@ class ClientGeneratorTest {
     fun `single Bearer scheme generates named token param`() {
         val cls = clientClass(
             listOf(endpoint()),
-            listOf(SecurityScheme.Bearer("BearerAuth", "")),
+            listOf(SecurityScheme.Bearer("BearerAuth")),
         )
         val constructor = assertNotNull(cls.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
-        assertTrue("bearerAuthToken" in paramNames, "Expected bearerAuthToken param")
+        assertTrue("bearerAuthTestToken" in paramNames, "Expected bearerAuthTestToken param")
     }
 
     // -- DOCS-03: Endpoint KDoc generation --

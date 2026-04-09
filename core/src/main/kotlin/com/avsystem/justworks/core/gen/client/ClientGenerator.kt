@@ -57,7 +57,7 @@ internal object ClientGenerator {
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
-            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes)
+            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes, spec.title)
         }
     }
 
@@ -67,6 +67,7 @@ internal object ClientGenerator {
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean,
         securitySchemes: List<SecurityScheme>,
+        specTitle: String,
     ): FileSpec {
         val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
 
@@ -78,7 +79,7 @@ internal object ClientGenerator {
         }
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
-        val authParamNames = securitySchemes.flatMap { it.paramNames }
+        val authParamNames = securitySchemes.flatMap { it.paramNames(specTitle) }
 
         val constructorBuilder = FunSpec
             .constructorBuilder()
@@ -111,7 +112,7 @@ internal object ClientGenerator {
             .addProperty(httpClientProperty)
 
         if (securitySchemes.isNotEmpty()) {
-            classBuilder.addFunction(buildApplyAuth(securitySchemes))
+            classBuilder.addFunction(buildApplyAuth(securitySchemes, specTitle))
         }
 
         context(NameRegistry()) {
@@ -124,7 +125,7 @@ internal object ClientGenerator {
             .build()
     }
 
-    private fun buildApplyAuth(securitySchemes: List<SecurityScheme>): FunSpec {
+    private fun buildApplyAuth(securitySchemes: List<SecurityScheme>, specTitle: String): FunSpec {
         val builder = FunSpec
             .builder(APPLY_AUTH)
             .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
@@ -142,7 +143,7 @@ internal object ClientGenerator {
         if (headerSchemes.isNotEmpty()) {
             builder.beginControlFlow("%M", HEADERS_FUN)
             for (scheme in headerSchemes) {
-                val names = scheme.paramNames
+                val names = scheme.paramNames(specTitle)
                 when (scheme) {
                     is SecurityScheme.Bearer -> {
                         builder.addStatement(
@@ -178,7 +179,7 @@ internal object ClientGenerator {
             builder.beginControlFlow("url")
             for (scheme in querySchemes) {
                 builder.addStatement(
-                    "parameters.append(%S, ${scheme.paramNames.first()}())",
+                    "parameters.append(%S, ${scheme.paramNames(specTitle).first()}())",
                     scheme.parameterName,
                 )
             }
