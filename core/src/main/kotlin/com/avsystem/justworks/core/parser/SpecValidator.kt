@@ -38,5 +38,19 @@ object SpecValidator {
                 Issue.Warning("Links are not supported in v1 and will be ignored")
             }
         }
+
+        val operations = openApi.paths.orEmpty().flatMap { (path, pathItem) ->
+            pathItem.readOperationsMap().mapNotNull { (method, op) ->
+                op.operationId?.let { Triple(it, method.name, path) }
+            }
+        }
+        val operationIds = operations.groupBy { it.first }
+
+        for ((opId, occurrences) in operationIds) {
+            ensureOrAccumulate(occurrences.size == 1) {
+                val locations = occurrences.joinToString { "${it.second} ${it.third}" }
+                Issue.Warning("Duplicate operationId '$opId' found at: $locations")
+            }
+        }
     }
 }
