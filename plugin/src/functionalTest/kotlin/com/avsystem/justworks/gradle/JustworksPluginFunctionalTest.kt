@@ -593,15 +593,16 @@ class JustworksPluginFunctionalTest {
         assertTrue(content.contains("applyAuth"), "Should contain applyAuth override")
         assertTrue(content.contains("Authorization"), "Should contain Authorization header for Basic auth")
 
-        // ApiClientBase should be auth-agnostic
+        // ApiClientBase should NOT contain token — auth is per-client now
         val apiClientBase = projectDir
             .resolve("build/generated/justworks/shared/kotlin/com/avsystem/justworks/ApiClientBase.kt")
         val baseContent = apiClientBase.readText()
-        assertFalse(baseContent.contains("token"), "ApiClientBase should NOT contain auth params")
+        assertFalse(baseContent.contains("token"), "ApiClientBase should not contain token param")
+        assertFalse(baseContent.contains("Bearer"), "ApiClientBase should not contain Bearer auth")
     }
 
     @Test
-    fun `spec without security schemes generates ApiClientBase with no auth params`() {
+    fun `spec without security schemes generates ApiClientBase without auth`() {
         writeBuildFile()
 
         runner("justworksGenerateMain").build()
@@ -611,8 +612,8 @@ class JustworksPluginFunctionalTest {
         assertTrue(apiClientBase.exists(), "ApiClientBase.kt should exist")
 
         val content = apiClientBase.readText()
-        assertTrue(!content.contains("token"), "Should NOT contain token param when no security schemes")
-        assertTrue(!content.contains("Bearer"), "Should NOT contain Bearer when no security schemes")
+        assertFalse(content.contains("token"), "Should not contain token param")
+        assertFalse(content.contains("Bearer"), "Should not contain Bearer auth")
     }
 
     @Test

@@ -143,14 +143,10 @@ internal object ApiClientBaseGenerator {
         .build()
 
     private fun buildApiClientBaseClass(): TypeSpec {
-        val constructorBuilder = FunSpec
+        val constructor = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
-
-        val classBuilder = TypeSpec
-            .classBuilder(API_CLIENT_BASE)
-            .addModifiers(KModifier.ABSTRACT)
-            .addSuperinterface(CLOSEABLE)
+            .build()
 
         val baseUrlProp = PropertySpec
             .builder(BASE_URL, STRING)
@@ -169,22 +165,25 @@ internal object ApiClientBaseGenerator {
             .addStatement("$CLIENT.close()")
             .build()
 
-        val applyAuthFun = FunSpec
-            .builder(APPLY_AUTH)
-            .addModifiers(KModifier.PROTECTED, KModifier.OPEN)
-            .receiver(HTTP_REQUEST_BUILDER)
-            .build()
-
-        return classBuilder
-            .primaryConstructor(constructorBuilder.build())
+        return TypeSpec
+            .classBuilder(API_CLIENT_BASE)
+            .addModifiers(KModifier.ABSTRACT)
+            .addSuperinterface(CLOSEABLE)
+            .primaryConstructor(constructor)
             .addProperty(baseUrlProp)
             .addProperty(clientProp)
             .addFunction(closeFun)
-            .addFunction(applyAuthFun)
+            .addFunction(buildApplyAuth())
             .addFunction(buildSafeCall())
             .addFunction(buildCreateHttpClient())
             .build()
     }
+
+    private fun buildApplyAuth(): FunSpec = FunSpec
+        .builder(APPLY_AUTH)
+        .addModifiers(KModifier.PROTECTED, KModifier.OPEN)
+        .receiver(HTTP_REQUEST_BUILDER)
+        .build()
 
     private fun buildSafeCall(): FunSpec {
         val e = TypeVariableName("E").copy(reified = true)

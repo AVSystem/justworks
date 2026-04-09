@@ -717,9 +717,10 @@ class ClientGeneratorTest {
         assertTrue("bearerAuthTestToken" in paramNames, "Expected bearerAuthTestToken param")
         assertTrue("apiKeyHeaderTest" in paramNames, "Expected apiKeyHeaderTest param")
 
-        // Verify only baseUrl is passed to super (auth is handled per-client, not in ApiClientBase)
+        // Verify only baseUrl is passed to super
         val superParams = cls.superclassConstructorParameters.map { it.toString().trim() }
-        assertEquals(listOf("baseUrl"), superParams, "Expected only baseUrl passed to super")
+        assertEquals(1, superParams.size, "Expected only baseUrl passed to super")
+        assertEquals("baseUrl", superParams[0])
     }
 
     @Test
@@ -825,20 +826,18 @@ class ClientGeneratorTest {
     }
 
     @Test
-    fun `single Bearer scheme generates named token param`() {
+    fun `single Bearer scheme uses plain token param (no prefix)`() {
         val cls = clientClass(
             listOf(endpoint()),
             listOf(SecurityScheme.Bearer("BearerAuth")),
         )
         val constructor = assertNotNull(cls.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
-        assertTrue("bearerAuthTestToken" in paramNames, "Expected bearerAuthTestToken param")
+        assertEquals(listOf("baseUrl", "token"), paramNames, "Single Bearer should use plain token param")
     }
 
-    // -- SECU: applyAuth body assertions --
-
     @Test
-    fun `Bearer scheme applyAuth contains Authorization header with Bearer prefix`() {
+    fun `single Bearer scheme overrides applyAuth with Bearer token`() {
         val cls = clientClass(
             listOf(endpoint()),
             listOf(SecurityScheme.Bearer("BearerAuth")),
@@ -847,8 +846,10 @@ class ClientGeneratorTest {
         val body = applyAuth.body.toString()
         assertTrue(body.contains("Authorization"), "Expected Authorization header")
         assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
-        assertTrue(body.contains("bearerAuthTestToken()"), "Expected bearerAuthTestToken() invocation")
+        assertTrue(body.contains("token()"), "Expected token() invocation")
     }
+
+    // -- SECU: applyAuth body assertions --
 
     @Test
     fun `Basic scheme applyAuth contains Authorization header with Base64 encoding`() {

@@ -55,10 +55,12 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has applyAuth function`() {
+    fun `ApiClientBase has empty applyAuth function`() {
         val applyAuth = classSpec.funSpecs.first { it.name == "applyAuth" }
         assertTrue(KModifier.PROTECTED in applyAuth.modifiers)
+        assertTrue(KModifier.OPEN in applyAuth.modifiers)
         assertNotNull(applyAuth.receiverType, "Expected HttpRequestBuilder receiver")
+        assertTrue(applyAuth.body.toString().isBlank(), "Base applyAuth should be a no-op")
     }
 
     @OptIn(ExperimentalKotlinPoetApi::class)

@@ -17,6 +17,7 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
 import com.avsystem.justworks.core.gen.NameRegistry
+import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
@@ -81,13 +82,7 @@ internal object ClientGenerator {
         }
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
-        val authParamNames = securitySchemes.flatMap { scheme ->
-            when (scheme) {
-                is SecurityScheme.Bearer -> listOf(scheme.toAuthParam(specTitle).name)
-                is SecurityScheme.ApiKey -> listOf(scheme.toAuthParam(specTitle).name)
-                is SecurityScheme.Basic -> scheme.toAuthParam(specTitle).let { listOf(it.username, it.password) }
-            }
-        }
+        val isSingleBearer = securitySchemes.singleOrNull() is SecurityScheme.Bearer
 
         val constructorBuilder = FunSpec
             .constructorBuilder()
@@ -98,15 +93,36 @@ internal object ClientGenerator {
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
 
-        for (paramName in authParamNames) {
-            constructorBuilder.addParameter(paramName, tokenType)
+        if (isSingleBearer) {
+            // Single Bearer: use plain "token" param name for ergonomics
+            constructorBuilder.addParameter(TOKEN, tokenType)
             classBuilder.addProperty(
                 PropertySpec
-                    .builder(paramName, tokenType)
-                    .initializer(paramName)
+                    .builder(TOKEN, tokenType)
+                    .initializer(TOKEN)
                     .addModifiers(KModifier.PRIVATE)
                     .build(),
             )
+        } else if (securitySchemes.isNotEmpty()) {
+            // Multiple or non-Bearer schemes: generate named auth params
+            val authParamNames = securitySchemes.flatMap { scheme ->
+                when (scheme) {
+                    is SecurityScheme.Bearer -> listOf(scheme.toAuthParam(specTitle).name)
+                    is SecurityScheme.ApiKey -> listOf(scheme.toAuthParam(specTitle).name)
+                    is SecurityScheme.Basic -> scheme.toAuthParam(specTitle).let { listOf(it.username, it.password) }
+                }
+            }
+
+            for (paramName in authParamNames) {
+                constructorBuilder.addParameter(paramName, tokenType)
+                classBuilder.addProperty(
+                    PropertySpec
+                        .builder(paramName, tokenType)
+                        .initializer(paramName)
+                        .addModifiers(KModifier.PRIVATE)
+                        .build(),
+                )
+            }
         }
 
         val httpClientProperty = PropertySpec
@@ -120,7 +136,7 @@ internal object ClientGenerator {
             .addProperty(httpClientProperty)
 
         if (securitySchemes.isNotEmpty()) {
-            classBuilder.addFunction(buildApplyAuth(securitySchemes, specTitle))
+            classBuilder.addFunction(buildApplyAuth(securitySchemes, isSingleBearer, specTitle))
         }
 
         context(NameRegistry()) {
@@ -133,7 +149,11 @@ internal object ClientGenerator {
             .build()
     }
 
-    private fun buildApplyAuth(securitySchemes: List<SecurityScheme>, specTitle: String): FunSpec {
+    private fun buildApplyAuth(
+        securitySchemes: List<SecurityScheme>,
+        isSingleBearer: Boolean,
+        specTitle: String,
+    ): FunSpec {
         val builder = FunSpec
             .builder(APPLY_AUTH)
             .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
@@ -153,11 +173,11 @@ internal object ClientGenerator {
             for (scheme in headerSchemes) {
                 when (scheme) {
                     is SecurityScheme.Bearer -> {
-                        val authParam = scheme.toAuthParam(specTitle)
+                        val tokenRef = if (isSingleBearer) TOKEN else scheme.toAuthParam(specTitle).name
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
-                            CodeBlock.of($$"Bearer ${$${authParam.name}()}"),
+                            CodeBlock.of($$"Bearer ${$$tokenRef()}"),
                         )
                     }
 

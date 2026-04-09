@@ -23,7 +23,10 @@ components:
       type: apiKey
       in: cookie
       name: session_id
-    UnusedOAuth:
+    DigestAuth:
+      type: http
+      scheme: digest
+    OAuth2Auth:
       type: oauth2
       flows:
         implicit:
@@ -37,6 +40,9 @@ security:
   - ApiKeyQuery: []
   - BasicAuth: []
   - ApiKeyCookie: []
+  - DigestAuth: []
+  - OAuth2Auth: []
+  - NonExistentScheme: []
 
 paths:
   /health:
