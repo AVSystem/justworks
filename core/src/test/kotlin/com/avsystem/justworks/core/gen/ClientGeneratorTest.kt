@@ -371,6 +371,51 @@ class ClientGeneratorTest {
         assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
     }
 
+    // -- CONT-03b: Default response fallback --
+
+    @Test
+    fun `default response is used when no 2xx response is defined`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "default" to Response("default", "Default response", TypeRef.Reference("Pet")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
+    }
+
+    @Test
+    fun `2xx response takes precedence over default response`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "default" to Response("default", "Error", TypeRef.Reference("Error")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
+    }
+
+    @Test
+    fun `default response without schema returns Unit`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "default" to Response("default", "No content", null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.Unit", returnType.typeArguments.first().toString())
+    }
+
     // -- Client class extends ApiClientBase --
 
     @Test
