@@ -23,12 +23,12 @@ sealed interface AuthParam {
 
     @ConsistentCopyVisibility
     data class Bearer private constructor(val name: String) : AuthParam {
-        constructor(base: String, specTitle: String) : this("${formatBase(base, specTitle)}Bearer")
+        constructor(base: String, specTitle: String) : this("${formatBase(base, specTitle)}Token")
     }
 
     @ConsistentCopyVisibility
     data class ApiKey private constructor(val name: String) : AuthParam {
-        constructor(base: String, specTitle: String) : this("${formatBase(base, specTitle)}ApiKey")
+        constructor(base: String, specTitle: String) : this(formatBase(base, specTitle))
     }
 }
 
