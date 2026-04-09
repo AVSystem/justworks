@@ -20,7 +20,8 @@ import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParam
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.sanitizeKdoc
-import com.avsystem.justworks.core.gen.shared.paramNames
+import com.avsystem.justworks.core.gen.shared.AuthParam
+import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
@@ -79,7 +80,13 @@ internal object ClientGenerator {
         }
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
-        val authParamNames = securitySchemes.flatMap { it.paramNames(specTitle) }
+        val authParamNames = securitySchemes.flatMap {
+            when (val toAuthParam = it.toAuthParam(specTitle)) {
+                is AuthParam.Bearer -> listOf(toAuthParam.name)
+                is AuthParam.ApiKey -> listOf(toAuthParam.name)
+                is AuthParam.Basic -> listOf(toAuthParam.username, toAuthParam.password)
+            }
+        }
 
         val constructorBuilder = FunSpec
             .constructorBuilder()
@@ -131,7 +138,7 @@ internal object ClientGenerator {
             .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
             .receiver(HTTP_REQUEST_BUILDER)
 
-        val schemesWithNames = securitySchemes.map { it to it.paramNames(specTitle) }
+        val schemesWithNames = securitySchemes.map { it to it.toAuthParam(specTitle) }
 
         val headerSchemes = schemesWithNames.filter { (scheme, _) ->
             scheme is SecurityScheme.Bearer ||
@@ -144,30 +151,33 @@ internal object ClientGenerator {
 
         if (headerSchemes.isNotEmpty()) {
             builder.beginControlFlow("%M", HEADERS_FUN)
-            for ((scheme, names) in headerSchemes) {
+            for ((scheme, authParam) in headerSchemes) {
                 when (scheme) {
                     is SecurityScheme.Bearer -> {
+                        authParam as AuthParam.Bearer
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
-                            CodeBlock.of($$"Bearer ${$${names.first()}()}"),
+                            CodeBlock.of($$"Bearer ${$${authParam.name}()}"),
                         )
                     }
 
                     is SecurityScheme.Basic -> {
+                        authParam as AuthParam.Basic
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
                             CodeBlock.of(
-                                $$"Basic ${%T.getEncoder().encodeToString(\"${$${names[0]}()}:${$${names[1]}()}\".toByteArray(Charsets.UTF_8))}",
+                                $$"Basic ${%T.getEncoder().encodeToString(\"${$${authParam.username}()}:${$${authParam.password}()}\".toByteArray(Charsets.UTF_8))}",
                                 BASE64_CLASS,
                             ),
                         )
                     }
 
                     is SecurityScheme.ApiKey -> {
+                        authParam as AuthParam.ApiKey
                         builder.addStatement(
-                            "append(%S, ${names.first()}())",
+                            "append(%S, ${authParam.name}())",
                             scheme.parameterName,
                         )
                     }
@@ -178,10 +188,11 @@ internal object ClientGenerator {
 
         if (querySchemes.isNotEmpty()) {
             builder.beginControlFlow("url")
-            for ((scheme, names) in querySchemes) {
+            for ((scheme, authParam) in querySchemes) {
                 scheme as SecurityScheme.ApiKey
+                authParam as AuthParam.ApiKey
                 builder.addStatement(
-                    "parameters.append(%S, ${names.first()}())",
+                    "parameters.append(%S, ${authParam.name}())",
                     scheme.parameterName,
                 )
             }
