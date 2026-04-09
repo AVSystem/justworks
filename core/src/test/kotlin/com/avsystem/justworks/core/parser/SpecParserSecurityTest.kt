@@ -6,8 +6,8 @@ import com.avsystem.justworks.core.model.SecurityScheme
 import org.junit.jupiter.api.TestInstance
 import kotlin.test.BeforeTest
 import kotlin.test.Test
-import kotlin.test.assertIs
 import kotlin.test.assertEquals
+import kotlin.test.assertIs
 import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
