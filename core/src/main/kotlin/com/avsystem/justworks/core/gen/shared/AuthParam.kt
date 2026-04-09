@@ -4,34 +4,32 @@ import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.SecurityScheme
 
-/**
- * Derives constructor parameter names for a security scheme.
- *
- * Bearer and ApiKey produce a single parameter name; Basic produces two
- * (username + password). The names are scoped by [specTitle] to avoid
- * collisions when multiple specs define schemes with the same name.
- */
-internal fun SecurityScheme.toAuthParam(specTitle: String): AuthParam {
-    val base = "${name.toCamelCase()}${specTitle.toPascalCase()}"
-    return when (this) {
-        is SecurityScheme.Bearer -> AuthParam.Bearer(base)
-        is SecurityScheme.ApiKey -> AuthParam.ApiKey(base)
-        is SecurityScheme.Basic -> AuthParam.Basic(base)
-    }
-}
+internal fun SecurityScheme.Bearer.toAuthParam(specTitle: String) = AuthParam.Bearer(name, specTitle)
+
+internal fun SecurityScheme.ApiKey.toAuthParam(specTitle: String) = AuthParam.ApiKey(name, specTitle)
+
+internal fun SecurityScheme.Basic.toAuthParam(specTitle: String) = AuthParam.Basic(name, specTitle)
 
 sealed interface AuthParam {
-    data class Basic(private val base: String) : AuthParam {
-        private val formattedBase = base.toCamelCase()
-        val username: String = formattedBase + "Username"
-        val password: String = base.toPascalCase()
+    @ConsistentCopyVisibility
+    data class Basic private constructor(val username: String, val password: String) : AuthParam {
+        companion object {
+            operator fun invoke(base: String, specTitle: String): Basic {
+                val formattedBase = formatBase(base, specTitle)
+                return Basic(formattedBase + "Username", formattedBase + "Password")
+            }
+        }
     }
 
-    data class Bearer(private val base: String) : AuthParam {
-        val name = base.toCamelCase() + "Bearer"
+    @ConsistentCopyVisibility
+    data class Bearer private constructor(val name: String) : AuthParam {
+        constructor(base: String, specTitle: String) : this("${formatBase(base, specTitle)}Bearer")
     }
 
-    data class ApiKey(private val base: String) : AuthParam {
-        val name = base.toCamelCase() + "ApiKey"
+    @ConsistentCopyVisibility
+    data class ApiKey private constructor(val name: String) : AuthParam {
+        constructor(base: String, specTitle: String) : this("${formatBase(base, specTitle)}ApiKey")
     }
 }
+
+private fun formatBase(base: String, specTitle: String) = base.toCamelCase() + specTitle.toPascalCase()

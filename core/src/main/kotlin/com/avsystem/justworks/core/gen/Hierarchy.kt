@@ -8,7 +8,7 @@ import com.squareup.kotlinpoet.ClassName
 
 internal class Hierarchy(val modelPackage: ModelPackage) {
     private val schemaModels = mutableSetOf<SchemaModel>()
-    private val schemaModelsScope = MemoScope()
+    private val memoScope = MemoScope()
 
     /**
      * Updates the underlying schemas and invalidates all cached derived views.
@@ -16,21 +16,21 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
      */
     fun addSchemas(newSchemas: List<SchemaModel>) {
         schemaModels += newSchemas
-        schemaModelsScope.reset()
+        memoScope.reset()
     }
 
     /** All schemas indexed by name for quick lookup. */
-    val schemasById: Map<String, SchemaModel> by memoized(schemaModelsScope) {
+    val schemasById: Map<String, SchemaModel> by memoized(memoScope) {
         schemaModels.associateBy { it.name }
     }
 
     /** Schemas that define polymorphic variants via oneOf or anyOf. */
-    private val polymorphicSchemas: List<SchemaModel> by memoized(schemaModelsScope) {
+    private val polymorphicSchemas: List<SchemaModel> by memoized(memoScope) {
         schemaModels.filterNot { it.variants().isNullOrEmpty() }
     }
 
     /** Maps parent schema name to its variant schema names (for both oneOf and anyOf). */
-    val sealedHierarchies: Map<String, List<String>> by memoized(schemaModelsScope) {
+    val sealedHierarchies: Map<String, List<String>> by memoized(memoScope) {
         polymorphicSchemas
             .associate { schema ->
                 schema.name to schema
@@ -42,7 +42,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
     }
 
     /** Parent schema names that use anyOf without a discriminator (JsonContentPolymorphicSerializer pattern). */
-    val anyOfWithoutDiscriminator: Set<String> by memoized(schemaModelsScope) {
+    val anyOfWithoutDiscriminator: Set<String> by memoized(memoScope) {
         polymorphicSchemas
             .asSequence()
             .filter { !it.anyOf.isNullOrEmpty() && it.discriminator == null }
@@ -51,7 +51,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
     }
 
     /** Inverse of [sealedHierarchies] for anyOf-without-discriminator: variant name to its parent names. */
-    val anyOfParents: Map<String, Set<String>> by memoized(schemaModelsScope) {
+    val anyOfParents: Map<String, Set<String>> by memoized(memoScope) {
         sealedHierarchies
             .asSequence()
             .filter { (parent, _) -> parent in anyOfWithoutDiscriminator }
@@ -61,7 +61,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
     }
 
     /** Maps schema name to its [ClassName], using nested class for discriminated hierarchy variants. */
-    private val lookup: Map<String, ClassName> by memoized(schemaModelsScope) {
+    private val lookup: Map<String, ClassName> by memoized(memoScope) {
         sealedHierarchies
             .asSequence()
             .filterNot { (parent, _) -> parent in anyOfWithoutDiscriminator }

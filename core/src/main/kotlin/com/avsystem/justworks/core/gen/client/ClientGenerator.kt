@@ -80,11 +80,11 @@ internal object ClientGenerator {
         }
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
-        val authParamNames = securitySchemes.flatMap {
-            when (val toAuthParam = it.toAuthParam(specTitle)) {
-                is AuthParam.Bearer -> listOf(toAuthParam.name)
-                is AuthParam.ApiKey -> listOf(toAuthParam.name)
-                is AuthParam.Basic -> listOf(toAuthParam.username, toAuthParam.password)
+        val authParamNames = securitySchemes.flatMap { scheme ->
+            when (scheme) {
+                is SecurityScheme.Bearer -> listOf(scheme.toAuthParam(specTitle).name)
+                is SecurityScheme.ApiKey -> listOf(scheme.toAuthParam(specTitle).name)
+                is SecurityScheme.Basic -> scheme.toAuthParam(specTitle).let { listOf(it.username, it.password) }
             }
         }
 
@@ -138,23 +138,21 @@ internal object ClientGenerator {
             .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
             .receiver(HTTP_REQUEST_BUILDER)
 
-        val schemesWithNames = securitySchemes.map { it to it.toAuthParam(specTitle) }
-
-        val headerSchemes = schemesWithNames.filter { (scheme, _) ->
+        val headerSchemes = securitySchemes.filter { scheme ->
             scheme is SecurityScheme.Bearer ||
                 scheme is SecurityScheme.Basic ||
                 (scheme is SecurityScheme.ApiKey && scheme.location == ApiKeyLocation.HEADER)
         }
-        val querySchemes = schemesWithNames.filter { (scheme, _) ->
-            scheme is SecurityScheme.ApiKey && scheme.location == ApiKeyLocation.QUERY
-        }
+        val querySchemes = securitySchemes
+            .filterIsInstance<SecurityScheme.ApiKey>()
+            .filter { scheme -> scheme.location == ApiKeyLocation.QUERY }
 
         if (headerSchemes.isNotEmpty()) {
             builder.beginControlFlow("%M", HEADERS_FUN)
-            for ((scheme, authParam) in headerSchemes) {
+            for (scheme in headerSchemes) {
                 when (scheme) {
                     is SecurityScheme.Bearer -> {
-                        authParam as AuthParam.Bearer
+                        val authParam = scheme.toAuthParam(specTitle)
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
@@ -163,7 +161,7 @@ internal object ClientGenerator {
                     }
 
                     is SecurityScheme.Basic -> {
-                        authParam as AuthParam.Basic
+                        val authParam = scheme.toAuthParam(specTitle)
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
@@ -175,7 +173,7 @@ internal object ClientGenerator {
                     }
 
                     is SecurityScheme.ApiKey -> {
-                        authParam as AuthParam.ApiKey
+                        val authParam = scheme.toAuthParam(specTitle)
                         builder.addStatement(
                             "append(%S, ${authParam.name}())",
                             scheme.parameterName,
@@ -188,9 +186,8 @@ internal object ClientGenerator {
 
         if (querySchemes.isNotEmpty()) {
             builder.beginControlFlow("url")
-            for ((scheme, authParam) in querySchemes) {
-                scheme as SecurityScheme.ApiKey
-                authParam as AuthParam.ApiKey
+            for (scheme in querySchemes) {
+                val authParam = scheme.toAuthParam(specTitle)
                 builder.addStatement(
                     "parameters.append(%S, ${authParam.name}())",
                     scheme.parameterName,
