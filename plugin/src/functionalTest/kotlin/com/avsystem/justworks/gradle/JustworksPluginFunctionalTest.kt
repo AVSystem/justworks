@@ -595,15 +595,15 @@ class JustworksPluginFunctionalTest {
         assertTrue(content.contains("applyAuth"), "Should contain applyAuth override")
         assertTrue(content.contains("Authorization"), "Should contain Authorization header for Basic auth")
 
-        // ApiClientBase should be auth-agnostic
+        // ApiClientBase should still have the global token param (default Bearer)
         val apiClientBase = projectDir
             .resolve("build/generated/justworks/shared/kotlin/com/avsystem/justworks/ApiClientBase.kt")
         val baseContent = apiClientBase.readText()
-        assertFalse(baseContent.contains("token"), "ApiClientBase should NOT contain auth params")
+        assertTrue(baseContent.contains("token"), "ApiClientBase should contain token param")
     }
 
     @Test
-    fun `spec without security schemes generates ApiClientBase with no auth params`() {
+    fun `spec without security schemes generates ApiClientBase with token and Bearer`() {
         writeBuildFile()
 
         runner("justworksGenerateMain").build()
@@ -613,8 +613,8 @@ class JustworksPluginFunctionalTest {
         assertTrue(apiClientBase.exists(), "ApiClientBase.kt should exist")
 
         val content = apiClientBase.readText()
-        assertTrue(!content.contains("token"), "Should NOT contain token param when no security schemes")
-        assertTrue(!content.contains("Bearer"), "Should NOT contain Bearer when no security schemes")
+        assertTrue(content.contains("token"), "Should contain token param")
+        assertTrue(content.contains("Bearer"), "Should contain default Bearer auth")
     }
 
     @Test
@@ -724,8 +724,8 @@ class JustworksPluginFunctionalTest {
         assertTrue(api1Content.contains("commonAuthApi1"), "Spec1 client should take commonAuthApi1")
         assertTrue(api1Content.contains("X-API-Key-1"), "Spec1 client should reference X-API-Key-1")
         assertTrue(
-            api1Content.contains("ApiClientBase(baseUrl)"),
-            "Spec1 client should pass only baseUrl to super",
+            api1Content.contains("ApiClientBase(baseUrl,"),
+            "Spec1 client should pass baseUrl and token to super",
         )
 
         val api2Client = projectDir
@@ -735,8 +735,8 @@ class JustworksPluginFunctionalTest {
         assertTrue(api2Content.contains("commonAuthApi2"), "Spec2 client should take commonAuthApi2")
         assertTrue(api2Content.contains("X-API-Key-2"), "Spec2 client should reference X-API-Key-2")
         assertTrue(
-            api2Content.contains("ApiClientBase(baseUrl)"),
-            "Spec2 client should pass only baseUrl to super",
+            api2Content.contains("ApiClientBase(baseUrl,"),
+            "Spec2 client should pass baseUrl and token to super",
         )
     }
 

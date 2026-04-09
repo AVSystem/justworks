@@ -6,6 +6,7 @@ import com.avsystem.justworks.core.gen.ApiPackage
 import com.avsystem.justworks.core.gen.BASE64_CLASS
 import com.avsystem.justworks.core.gen.BASE_URL
 import com.avsystem.justworks.core.gen.CLIENT
+import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
 import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.HEADERS_FUN
@@ -79,13 +80,8 @@ internal object ClientGenerator {
         }
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
-        val authParamNames = securitySchemes.flatMap { scheme ->
-            when (scheme) {
-                is SecurityScheme.Bearer -> listOf(scheme.toAuthParam(specTitle).name)
-                is SecurityScheme.ApiKey -> listOf(scheme.toAuthParam(specTitle).name)
-                is SecurityScheme.Basic -> scheme.toAuthParam(specTitle).let { listOf(it.username, it.password) }
-            }
-        }
+        val isSingleBearer = securitySchemes.singleOrNull() is SecurityScheme.Bearer
+        val needsAuthOverride = securitySchemes.isNotEmpty() && !isSingleBearer
 
         val constructorBuilder = FunSpec
             .constructorBuilder()
@@ -96,15 +92,35 @@ internal object ClientGenerator {
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
 
-        for (paramName in authParamNames) {
-            constructorBuilder.addParameter(paramName, tokenType)
-            classBuilder.addProperty(
-                PropertySpec
-                    .builder(paramName, tokenType)
-                    .initializer(paramName)
-                    .addModifiers(KModifier.PRIVATE)
-                    .build(),
-            )
+        if (isSingleBearer) {
+            // Single Bearer: use plain token param, pass to super (base class handles Bearer)
+            constructorBuilder.addParameter(TOKEN, tokenType)
+            classBuilder.addSuperclassConstructorParameter(TOKEN)
+        } else if (securitySchemes.isNotEmpty()) {
+            // Multiple or non-Bearer schemes: generate named auth params, override applyAuth
+            val authParamNames = securitySchemes.flatMap { scheme ->
+                when (scheme) {
+                    is SecurityScheme.Bearer -> listOf(scheme.toAuthParam(specTitle).name)
+                    is SecurityScheme.ApiKey -> listOf(scheme.toAuthParam(specTitle).name)
+                    is SecurityScheme.Basic -> scheme.toAuthParam(specTitle).let { listOf(it.username, it.password) }
+                }
+            }
+
+            for (paramName in authParamNames) {
+                constructorBuilder.addParameter(paramName, tokenType)
+                classBuilder.addProperty(
+                    PropertySpec
+                        .builder(paramName, tokenType)
+                        .initializer(paramName)
+                        .addModifiers(KModifier.PRIVATE)
+                        .build(),
+                )
+            }
+
+            classBuilder.addSuperclassConstructorParameter("{ %S }", "")
+        } else {
+            // No security schemes: no auth params, pass no-op token to super
+            classBuilder.addSuperclassConstructorParameter("{ %S }", "")
         }
 
         val httpClientProperty = PropertySpec
@@ -117,7 +133,7 @@ internal object ClientGenerator {
             .primaryConstructor(constructorBuilder.build())
             .addProperty(httpClientProperty)
 
-        if (securitySchemes.isNotEmpty()) {
+        if (needsAuthOverride) {
             classBuilder.addFunction(buildApplyAuth(securitySchemes, specTitle))
         }
 

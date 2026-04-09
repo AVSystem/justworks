@@ -11,9 +11,11 @@ import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
 import com.avsystem.justworks.core.gen.ENCODE_TO_STRING_FUN
+import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
 import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_ERROR_TYPE
+import com.avsystem.justworks.core.gen.HTTP_HEADERS
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_TIMEOUT_EXCEPTION
 import com.avsystem.justworks.core.gen.HTTP_RESPONSE
@@ -23,6 +25,8 @@ import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_FUN
 import com.avsystem.justworks.core.gen.SAFE_CALL
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.TOKEN
+import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -118,19 +122,22 @@ internal object ApiClientBaseGenerator {
         .build()
 
     private fun buildApiClientBaseClass(): TypeSpec {
-        val constructorBuilder = FunSpec
+        val constructor = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
-
-        val classBuilder = TypeSpec
-            .classBuilder(API_CLIENT_BASE)
-            .addModifiers(KModifier.ABSTRACT)
-            .addSuperinterface(CLOSEABLE)
+            .addParameter(TOKEN, LambdaTypeName.get(returnType = STRING))
+            .build()
 
         val baseUrlProp = PropertySpec
             .builder(BASE_URL, STRING)
             .initializer(BASE_URL)
             .addModifiers(KModifier.PROTECTED)
+            .build()
+
+        val tokenProp = PropertySpec
+            .builder(TOKEN, LambdaTypeName.get(returnType = STRING))
+            .initializer(TOKEN)
+            .addModifiers(KModifier.PRIVATE)
             .build()
 
         val clientProp = PropertySpec
@@ -144,22 +151,32 @@ internal object ApiClientBaseGenerator {
             .addStatement("$CLIENT.close()")
             .build()
 
-        val applyAuthFun = FunSpec
-            .builder(APPLY_AUTH)
-            .addModifiers(KModifier.PROTECTED, KModifier.OPEN)
-            .receiver(HTTP_REQUEST_BUILDER)
-            .build()
-
-        return classBuilder
-            .primaryConstructor(constructorBuilder.build())
+        return TypeSpec
+            .classBuilder(API_CLIENT_BASE)
+            .addModifiers(KModifier.ABSTRACT)
+            .addSuperinterface(CLOSEABLE)
+            .primaryConstructor(constructor)
             .addProperty(baseUrlProp)
+            .addProperty(tokenProp)
             .addProperty(clientProp)
             .addFunction(closeFun)
-            .addFunction(applyAuthFun)
+            .addFunction(buildApplyAuth())
             .addFunction(buildSafeCall())
             .addFunction(buildCreateHttpClient())
             .build()
     }
+
+    private fun buildApplyAuth(): FunSpec = FunSpec
+        .builder(APPLY_AUTH)
+        .addModifiers(KModifier.PROTECTED, KModifier.OPEN)
+        .receiver(HTTP_REQUEST_BUILDER)
+        .beginControlFlow("%M", HEADERS_FUN)
+        .addStatement(
+            "append(%T.Authorization, %P)",
+            HTTP_HEADERS,
+            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN()}"),
+        ).endControlFlow()
+        .build()
 
     private fun buildSafeCall(): FunSpec = FunSpec
         .builder(SAFE_CALL)
