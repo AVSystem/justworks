@@ -234,6 +234,7 @@ class ClientGeneratorTest {
     fun `endpoint functions do not have context parameters`() {
         val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
+
         @OptIn(ExperimentalKotlinPoetApi::class)
         val contextParameters = funSpec.contextParameters
         assertTrue(contextParameters.isEmpty(), "Expected no context parameters (Arrow removed)")

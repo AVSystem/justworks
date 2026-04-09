@@ -39,7 +39,10 @@ class ApiResponseGeneratorTest {
             "Expected superclass constructor parameter for message",
         )
         assertTrue(
-            typeSpec.superclassConstructorParameters.first().toString().contains("message"),
+            typeSpec.superclassConstructorParameters
+                .first()
+                .toString()
+                .contains("message"),
             "Expected message passed to RuntimeException constructor",
         )
     }
