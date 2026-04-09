@@ -6,6 +6,7 @@ import com.avsystem.justworks.core.model.SecurityScheme
 import org.junit.jupiter.api.TestInstance
 import kotlin.test.BeforeTest
 import kotlin.test.Test
+import kotlin.test.assertIs
 import kotlin.test.assertEquals
 import kotlin.test.assertTrue
 
@@ -56,15 +57,45 @@ class SpecParserSecurityTest : SpecParserTestBase() {
     }
 
     @Test
-    fun `excludes unreferenced OAuth2 scheme`() {
-        val names = apiSpec.securitySchemes.map { it.name }
-        assertTrue("UnusedOAuth" !in names, "UnusedOAuth should not be in parsed schemes")
-    }
-
-    @Test
     fun `excludes unsupported cookie API key scheme`() {
         val names = apiSpec.securitySchemes.map { it.name }
         assertTrue("ApiKeyCookie" !in names, "ApiKeyCookie should not be in parsed schemes")
+    }
+
+    @Test
+    fun `excludes unsupported OAuth2 scheme`() {
+        val names = apiSpec.securitySchemes.map { it.name }
+        assertTrue("OAuth2Auth" !in names, "OAuth2Auth should not be in parsed schemes")
+    }
+
+    @Test
+    fun `excludes unsupported digest HTTP scheme`() {
+        val names = apiSpec.securitySchemes.map { it.name }
+        assertTrue("DigestAuth" !in names, "DigestAuth should not be in parsed schemes")
+    }
+
+    @Test
+    fun `warns about undefined scheme reference`() {
+        val result = SpecParser.parse(loadResource("security-schemes-spec.yaml"))
+        assertIs<ParseResult.Success<*>>(result)
+        assertTrue(
+            result.warnings.any { it.message.contains("NonExistentScheme") },
+            "Expected warning about undefined scheme 'NonExistentScheme'",
+        )
+    }
+
+    @Test
+    fun `warns about unsupported scheme types`() {
+        val result = SpecParser.parse(loadResource("security-schemes-spec.yaml"))
+        assertIs<ParseResult.Success<*>>(result)
+        assertTrue(
+            result.warnings.any { it.message.contains("digest") },
+            "Expected warning about unsupported HTTP scheme 'digest'",
+        )
+        assertTrue(
+            result.warnings.any { it.message.contains("OAuth2Auth") },
+            "Expected warning about unsupported scheme type for 'OAuth2Auth'",
+        )
     }
 
     @Test
