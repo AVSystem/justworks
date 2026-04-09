@@ -160,6 +160,49 @@ class SpecParserTest : SpecParserTestBase() {
         assertEquals("Pet", itemType.schemaName)
     }
 
+    // -- SPEC-01b: Warnings for unknown schemas --
+
+    @Test
+    fun `parse spec with unresolvable schema emits warning`() {
+        val result = SpecParser.parse(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Container:
+                  type: object
+                  properties:
+                    data:
+                      type: object
+            """.trimIndent().toTempFile(),
+        )
+        assertIs<ParseResult.Success>(result)
+        val warningMessages = result.warnings.map { it.message }
+        assertTrue(
+            warningMessages.any {
+                it.contains("Container") && it.contains("data") && it.contains("JsonElement")
+            },
+            "Expected warning about unresolvable type, got: $warningMessages",
+        )
+    }
+
+    @Test
+    fun `parse spec without unknown schemas has no unknown-type warnings`() {
+        val result = SpecParser.parse(loadResource("petstore.yaml"))
+        assertIs<ParseResult.Success>(result)
+        val unknownWarnings = result.warnings.filter {
+            it.message.contains("JsonElement")
+        }
+        assertTrue(
+            unknownWarnings.isEmpty(),
+            "Petstore should have no unknown-type warnings, got: $unknownWarnings",
+        )
+    }
+
     // -- SPEC-02: $ref resolution --
 
     @Test

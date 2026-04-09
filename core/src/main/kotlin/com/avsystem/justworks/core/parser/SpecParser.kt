@@ -14,6 +14,7 @@ import arrow.core.toNonEmptyListOrNull
 import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.SCHEMA_PREFIX
 import com.avsystem.justworks.core.Warnings
+import com.avsystem.justworks.core.ensureOrAccumulate
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Discriminator
@@ -160,11 +161,15 @@ object SpecParser {
             }
 
             val syntheticModels = collectModels(emptySet(), emptyList())
+
+            val allModels = schemaModels + syntheticModels
+            warnOnUnknownTypes(endpoints, allModels)
+
             return ApiSpec(
                 title = info?.title ?: "Untitled",
                 version = info?.version ?: "0.0.0",
                 endpoints = endpoints,
-                schemas = schemaModels + syntheticModels,
+                schemas = allModels,
                 enums = enumModels,
             )
         }
@@ -442,6 +447,47 @@ object SpecParser {
                     defaultValue = propSchema.default,
                 )
             }
+
+    context(_: Warnings)
+    private fun warnOnUnknownTypes(endpoints: List<Endpoint>, schemas: List<SchemaModel>) {
+        fun warn(context: String) {
+            ensureOrAccumulate(false) {
+                Issue.Warning("$context: unresolvable type mapped to JsonElement")
+            }
+        }
+
+        for (schema in schemas) {
+            for (prop in schema.properties) {
+                if (containsUnknown(prop.type)) {
+                    warn("Schema '${schema.name}', property '${prop.name}'")
+                }
+            }
+        }
+        for (endpoint in endpoints) {
+            val op = endpoint.operationId
+            for ((code, response) in endpoint.responses) {
+                if (response.schema != null && containsUnknown(response.schema)) {
+                    warn("Endpoint '$op', response '$code'")
+                }
+            }
+            if (endpoint.requestBody != null && containsUnknown(endpoint.requestBody.schema)) {
+                warn("Endpoint '$op', request body")
+            }
+            for (param in endpoint.parameters) {
+                if (containsUnknown(param.schema)) {
+                    warn("Endpoint '$op', parameter '${param.name}'")
+                }
+            }
+        }
+    }
+
+    private fun containsUnknown(type: TypeRef): Boolean = when (type) {
+        TypeRef.Unknown -> true
+        is TypeRef.Array -> containsUnknown(type.items)
+        is TypeRef.Map -> containsUnknown(type.valueType)
+        is TypeRef.Inline -> type.properties.any { containsUnknown(it.type) }
+        is TypeRef.Primitive, is TypeRef.Reference -> false
+    }
 
     private fun generateOperationId(method: HttpMethod, path: String): String {
         val segments = path
