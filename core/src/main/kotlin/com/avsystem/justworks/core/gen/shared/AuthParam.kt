@@ -1,55 +1,22 @@
 package com.avsystem.justworks.core.gen.shared
 
-import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.toCamelCase
+import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.SecurityScheme
 
 /**
- * Builds the list of auth-related constructor parameter names based on security schemes.
+ * Derives constructor parameter names for a security scheme.
+ *
+ * Bearer and ApiKey produce a single parameter name; Basic produces two
+ * (username + password). The names are scoped by both [SecurityScheme.name]
+ * and [SecurityScheme.specTitle] to avoid collisions across specs.
  */
-internal fun buildAuthConstructorParams(securitySchemes: List<SecurityScheme>): List<String> =
-    if (isSingleBearer(securitySchemes)) {
-        listOf(TOKEN)
-    } else {
-        securitySchemes.flatMap {
-            when (it) {
-                is SecurityScheme.Bearer -> {
-                    listOf(it.toAuthParam().name)
-                }
-
-                is SecurityScheme.ApiKey -> {
-                    listOf(it.toAuthParam().name)
-                }
-
-                is SecurityScheme.Basic -> {
-                    val authParam = it.toAuthParam()
-                    listOf(authParam.username, it.toAuthParam().password)
-                }
-            }
+internal val SecurityScheme.paramNames: List<String>
+    get() {
+        val base = "${name.toCamelCase()}${specTitle.toPascalCase()}"
+        return when (this) {
+            is SecurityScheme.Bearer -> listOf("${base}Token")
+            is SecurityScheme.ApiKey -> listOf(base)
+            is SecurityScheme.Basic -> listOf("${base}Username", "${base}Password")
         }
     }
-
-sealed interface AuthParam {
-    data class Bearer(private val _name: String) : AuthParam {
-        val name = "${_name.toCamelCase()}Token"
-    }
-
-    data class Basic(private val _name: String) : AuthParam {
-        val name = _name.toCamelCase()
-        val username = "${name}Username"
-        val password = "${name}Password"
-    }
-
-    data class ApiKey(private val _name: String) : AuthParam {
-        val name = _name.toCamelCase()
-    }
-}
-
-internal fun SecurityScheme.Basic.toAuthParam(): AuthParam.Basic = AuthParam.Basic(name)
-
-internal fun SecurityScheme.ApiKey.toAuthParam(): AuthParam.ApiKey = AuthParam.ApiKey(name)
-
-internal fun SecurityScheme.Bearer.toAuthParam(): AuthParam.Bearer = AuthParam.Bearer(name)
-
-internal fun isSingleBearer(securitySchemes: List<SecurityScheme>): Boolean =
-    securitySchemes.size == 1 && securitySchemes.first() is SecurityScheme.Bearer

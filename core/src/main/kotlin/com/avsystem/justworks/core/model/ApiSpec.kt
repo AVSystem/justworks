@@ -9,16 +9,18 @@ package com.avsystem.justworks.core.model
  */
 sealed interface SecurityScheme {
     val name: String
+    val specTitle: String
 
-    data class Bearer(override val name: String) : SecurityScheme
+    data class Bearer(override val name: String, override val specTitle: String) : SecurityScheme
 
     data class ApiKey(
         override val name: String,
+        override val specTitle: String,
         val parameterName: String,
         val location: ApiKeyLocation,
     ) : SecurityScheme
 
-    data class Basic(override val name: String) : SecurityScheme
+    data class Basic(override val name: String, override val specTitle: String) : SecurityScheme
 }
 
 enum class ApiKeyLocation { HEADER, QUERY }
@@ -29,7 +31,7 @@ data class ApiSpec(
     val endpoints: List<Endpoint>,
     val schemas: List<SchemaModel>,
     val enums: List<EnumModel>,
-    val securitySchemes: List<SecurityScheme> = emptyList(),
+    val securitySchemes: List<SecurityScheme>,
 )
 
 data class Endpoint(
@@ -96,9 +98,7 @@ data class SchemaModel(
     val anyOf: List<TypeRef>?,
     val discriminator: Discriminator?,
     val underlyingType: TypeRef? = null,
-) {
-    val isNested get() = name.contains(".")
-}
+)
 
 data class PropertyModel(
     val name: String,

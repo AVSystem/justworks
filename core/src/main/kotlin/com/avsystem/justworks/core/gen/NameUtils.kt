@@ -1,6 +1,6 @@
 package com.avsystem.justworks.core.gen
 
-private val DELIMITERS = Regex("[_\\-.]+")
+private val DELIMITERS = Regex("[_\\-.\\s]+")
 private val CAMEL_BOUNDARY = Regex("(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 /**

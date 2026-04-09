@@ -117,7 +117,6 @@ val UUID_SERIALIZER = ClassName("com.avsystem.justworks", "UuidSerializer")
 // ============================================================================
 
 const val BASE_URL = "baseUrl"
-const val TOKEN = "token"
 const val CLIENT = "client"
 const val BODY = "body"
 const val APPLY_AUTH = "applyAuth"
