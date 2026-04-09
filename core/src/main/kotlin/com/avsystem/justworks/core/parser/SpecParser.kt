@@ -13,7 +13,7 @@ import arrow.core.raise.nullable
 import com.avsystem.justworks.core.Issue
 import com.avsystem.justworks.core.SCHEMA_PREFIX
 import com.avsystem.justworks.core.Warnings
-import com.avsystem.justworks.core.accumulate
+import com.avsystem.justworks.core.accumulateAndReturnNull
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
@@ -32,7 +32,6 @@ import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
-import com.avsystem.justworks.core.parser.SpecParser.parse
 import com.avsystem.justworks.core.toEnumOrNull
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
@@ -145,7 +144,7 @@ object SpecParser {
 
         val swaggerResult = OpenAPIParser().readLocation(specFile.absolutePath, null, parseOptions)
 
-        swaggerResult?.messages?.forEach { accumulate(Issue.Warning(it)) }
+        swaggerResult?.messages?.forEach { accumulateAndReturnNull(Issue.Warning(it)) }
 
         return swaggerResult?.openAPI
     }
@@ -229,7 +228,7 @@ object SpecParser {
             when (scheme?.lowercase()) {
                 "bearer" -> SecurityScheme.Bearer(name)
                 "basic" -> SecurityScheme.Basic(name)
-                else -> accumulate(Issue.Warning("Unsupported HTTP auth scheme '$scheme' for '$name'"))
+                else -> accumulateAndReturnNull(Issue.Warning("Unsupported HTTP auth scheme '$scheme' for '$name'"))
             }
         }
 
@@ -237,12 +236,12 @@ object SpecParser {
             when (`in`) {
                 SwaggerSecurityScheme.In.HEADER -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.HEADER)
                 SwaggerSecurityScheme.In.QUERY -> SecurityScheme.ApiKey(name, this.name, ApiKeyLocation.QUERY)
-                else -> accumulate(Issue.Warning("Unsupported API key location '${`in`}' for '$name'"))
+                else -> accumulateAndReturnNull(Issue.Warning("Unsupported API key location '${`in`}' for '$name'"))
             }
         }
 
         else -> {
-            accumulate(Issue.Warning("Unsupported security scheme type '$type' for '$name'"))
+            accumulateAndReturnNull(Issue.Warning("Unsupported security scheme type '$type' for '$name'"))
         }
     }
 

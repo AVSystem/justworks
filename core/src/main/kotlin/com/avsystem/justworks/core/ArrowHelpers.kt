@@ -28,7 +28,7 @@ inline fun <Error, B : Any> ensureNotNullOrAccumulate(value: B?, error: () -> Er
 
 /** Accumulates a single error and returns `null`, for use in `when` branches that must yield a nullable result. */
 context(iorRaise: IorRaise<Nel<Error>>)
-fun <Error> accumulate(error: Error): Nothing? {
+fun <Error> accumulateAndReturnNull(error: Error): Nothing? {
     iorRaise.accumulate(nonEmptyListOf(error))
     return null
 }
