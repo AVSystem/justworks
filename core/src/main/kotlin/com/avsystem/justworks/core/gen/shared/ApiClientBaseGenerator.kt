@@ -26,7 +26,6 @@ import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_FUN
 import com.avsystem.justworks.core.gen.SAFE_CALL
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
-import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.SecurityScheme
@@ -178,37 +177,6 @@ internal object ApiClientBaseGenerator {
             .build()
     }
 
-    /**
-     * Builds the list of auth-related constructor parameter names based on security schemes.
-     */
-    internal fun buildAuthConstructorParams(securitySchemes: List<SecurityScheme>): List<String> {
-        val isSingleBearer = isSingleBearer(securitySchemes)
-
-        return securitySchemes.flatMap { scheme ->
-            when (scheme) {
-                is SecurityScheme.Bearer if isSingleBearer -> listOf(
-                    TOKEN,
-                )
-
-                is SecurityScheme.Bearer -> listOf(
-                    "${scheme.name.toCamelCase()}Token",
-                )
-
-                is SecurityScheme.ApiKey -> listOf(
-                    "${scheme.name.toCamelCase()}Key",
-                )
-
-                is SecurityScheme.Basic -> listOf(
-                    "${scheme.name.toCamelCase()}Username",
-                    "${scheme.name.toCamelCase()}Password",
-                )
-            }
-        }
-    }
-
-    private fun isSingleBearer(securitySchemes: List<SecurityScheme>): Boolean =
-        securitySchemes.size == 1 && securitySchemes.first() is SecurityScheme.Bearer
-
     private fun buildApplyAuth(securitySchemes: List<SecurityScheme>): FunSpec {
         val builder = FunSpec
             .builder(APPLY_AUTH)
@@ -232,32 +200,37 @@ internal object ApiClientBaseGenerator {
             builder.beginControlFlow("%M", HEADERS_FUN)
             for (scheme in headerSchemes) {
                 when (scheme) {
-                    is SecurityScheme.Bearer -> {
-                        val paramName = if (isSingleBearer) TOKEN else "${scheme.name.toCamelCase()}Token"
+                    is SecurityScheme.Bearer if isSingleBearer -> {
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
-                            CodeBlock.of($$"Bearer ${$$paramName()}"),
+                            CodeBlock.of($$"Bearer ${$${scheme.toAuthParam().name}()}"),
+                        )
+                    }
+
+                    is SecurityScheme.Bearer -> {
+                        builder.addStatement(
+                            "append(%T.Authorization, %P)",
+                            HTTP_HEADERS,
+                            CodeBlock.of($$"Bearer ${$${scheme.toAuthParam().name}()}"),
                         )
                     }
 
                     is SecurityScheme.Basic -> {
-                        val usernameParam = "${scheme.name.toCamelCase()}Username"
-                        val passwordParam = "${scheme.name.toCamelCase()}Password"
+                        val authParam = scheme.toAuthParam()
                         builder.addStatement(
                             "append(%T.Authorization, %P)",
                             HTTP_HEADERS,
                             CodeBlock.of(
-                                $$"Basic ${%T.getEncoder().encodeToString(\"${$$usernameParam()}:${$$passwordParam()}\".toByteArray())}",
+                                $$"Basic ${%T.getEncoder().encodeToString(\"${$${authParam.username}()}:${$${authParam.password}()}\".toByteArray())}",
                                 BASE64_CLASS,
                             ),
                         )
                     }
 
                     is SecurityScheme.ApiKey -> {
-                        val paramName = "${scheme.name.toCamelCase()}Key"
                         builder.addStatement(
-                            "append(%S, $paramName())",
+                            "append(%S, ${scheme.toAuthParam().name}())",
                             scheme.parameterName,
                         )
                     }
@@ -269,9 +242,8 @@ internal object ApiClientBaseGenerator {
         if (querySchemes.isNotEmpty()) {
             builder.beginControlFlow("url")
             for (scheme in querySchemes) {
-                val paramName = "${scheme.name.toCamelCase()}Key"
                 builder.addStatement(
-                    "parameters.append(%S, $paramName())",
+                    "parameters.append(%S, ${scheme.name.toCamelCase()}Key())",
                     scheme.parameterName,
                 )
             }
