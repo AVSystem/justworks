@@ -187,15 +187,15 @@ object SpecParser {
             }
 
             val syntheticModels = collectModels(emptySet(), emptyList())
+            val schemas = schemaModels + syntheticModels
 
-            val allModels = schemaModels + syntheticModels
-            warnOnUnknownTypes(endpoints, allModels)
+            warnOnUnknownTypes(endpoints, schemas)
 
             return ApiSpec(
                 title = title,
                 version = info?.version ?: "0.0.0",
                 endpoints = endpoints,
-                schemas = allModels,
+                schemas = schemas,
                 enums = enumModels,
                 securitySchemes = securitySchemes,
             )
@@ -513,32 +513,35 @@ object SpecParser {
 
     context(_: Warnings)
     private fun warnOnUnknownTypes(endpoints: List<Endpoint>, schemas: List<SchemaModel>) {
-        fun warn(context: String) {
-            ensureOrAccumulate(false) {
-                Issue.Warning("$context: unresolvable type mapped to JsonElement")
-            }
-        }
-
         for (schema in schemas) {
             for (prop in schema.properties) {
-                if (containsUnknown(prop.type)) {
-                    warn("Schema '${schema.name}', property '${prop.name}'")
+                ensureOrAccumulate(!containsUnknown(prop.type)) {
+                    Issue.Warning(
+                        "Schema '${schema.name}', property '${prop.name}': unresolvable type mapped to JsonElement",
+                    )
+                }
+            }
+            if (schema.underlyingType != null) {
+                ensureOrAccumulate(!containsUnknown(schema.underlyingType)) {
+                    Issue.Warning(
+                        "Schema '${schema.name}': underlying type contains unresolvable type mapped to JsonElement",
+                    )
                 }
             }
         }
         for (endpoint in endpoints) {
             val op = endpoint.operationId
             for ((code, response) in endpoint.responses) {
-                if (response.schema != null && containsUnknown(response.schema)) {
-                    warn("Endpoint '$op', response '$code'")
+                ensureOrAccumulate(response.schema == null || !containsUnknown(response.schema)) {
+                    Issue.Warning("Endpoint '$op', response '$code': unresolvable type mapped to JsonElement")
                 }
             }
-            if (endpoint.requestBody != null && containsUnknown(endpoint.requestBody.schema)) {
-                warn("Endpoint '$op', request body")
+            ensureOrAccumulate(endpoint.requestBody == null || !containsUnknown(endpoint.requestBody.schema)) {
+                Issue.Warning("Endpoint '$op', request body: unresolvable type mapped to JsonElement")
             }
             for (param in endpoint.parameters) {
-                if (containsUnknown(param.schema)) {
-                    warn("Endpoint '$op', parameter '${param.name}'")
+                ensureOrAccumulate(!containsUnknown(param.schema)) {
+                    Issue.Warning("Endpoint '$op', parameter '${param.name}': unresolvable type mapped to JsonElement")
                 }
             }
         }
