@@ -243,6 +243,60 @@ class SpecParserTest : SpecParserTestBase() {
         }
     }
 
+    // -- SPEC-03b: Duplicate operationId warning --
+
+    @Test
+    fun `parse spec with duplicate operationId emits warning`() {
+        val result = SpecParser.parse(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  tags: [Pets]
+                  responses:
+                    '200':
+                      description: OK
+              /animals:
+                get:
+                  operationId: listPets
+                  tags: [Animals]
+                  responses:
+                    '200':
+                      description: OK
+            """.trimIndent().toTempFile(),
+        )
+        assertIs<ParseResult.Success<ApiSpec>>(result)
+        val dupWarnings = result.warnings.filter {
+            it.message.contains("Duplicate operationId")
+        }
+        assertTrue(
+            dupWarnings.isNotEmpty(),
+            "Expected warning about duplicate operationId, got: ${result.warnings}",
+        )
+        assertTrue(
+            dupWarnings.first().message.contains("listPets"),
+            "Warning should mention the duplicate operationId",
+        )
+    }
+
+    @Test
+    fun `parse spec with unique operationIds has no duplicate warnings`() {
+        val result = SpecParser.parse(loadResource("petstore.yaml"))
+        assertIs<ParseResult.Success<ApiSpec>>(result)
+        val dupWarnings = result.warnings.filter {
+            it.message.contains("Duplicate operationId")
+        }
+        assertTrue(
+            dupWarnings.isEmpty(),
+            "Petstore should have no duplicate operationId warnings",
+        )
+    }
+
     // -- SPEC-04: Swagger 2.0 auto-conversion --
 
     @Test
