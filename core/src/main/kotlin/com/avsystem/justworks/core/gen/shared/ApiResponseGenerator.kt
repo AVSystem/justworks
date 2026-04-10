@@ -57,6 +57,7 @@ internal object ApiResponseGenerator {
             ).addProperty(
                 PropertySpec
                     .builder(MESSAGE, STRING)
+                    .addModifiers(KModifier.OVERRIDE)
                     .initializer(MESSAGE)
                     .build(),
             ).addProperty(
