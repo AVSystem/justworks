@@ -57,7 +57,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
 
             is ParseResult.Success -> {
                 val (modelCount, clientCount) = CodeGenerator.generate(
-                    spec = result.apiSpec,
+                    spec = result.value,
                     modelPackage = modelPackage.get(),
                     apiPackage = apiPackage.get(),
                     outputDir = outDir,

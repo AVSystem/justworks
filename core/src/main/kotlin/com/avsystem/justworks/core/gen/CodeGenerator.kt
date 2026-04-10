@@ -20,7 +20,9 @@ object CodeGenerator {
         apiPackage: String,
         outputDir: File,
     ): Result {
-        val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }
+        val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
+            addSchemas(spec.schemas)
+        }
 
         val (modelFiles, resolvedSpec) = context(hierarchy, NameRegistry()) {
             ModelGenerator.generateWithResolvedSpec(spec)

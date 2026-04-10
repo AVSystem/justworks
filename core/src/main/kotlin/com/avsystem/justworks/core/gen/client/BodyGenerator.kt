@@ -45,19 +45,26 @@ internal object BodyGenerator {
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
-    ): CodeBlock = CodeBlock
-        .builder()
-        .beginControlFlow("return $SAFE_CALL")
-        .apply {
-            val urlString = buildUrlString(endpoint, params)
-            when (endpoint.requestBody?.contentType) {
-                ContentType.MULTIPART_FORM_DATA -> buildMultipartBody(endpoint, params, urlString)
-                ContentType.FORM_URL_ENCODED -> buildFormUrlEncodedBody(endpoint, params, urlString)
-                ContentType.JSON_CONTENT_TYPE, null -> buildJsonBody(endpoint, params, urlString)
-            }
-        }.unindent()
-        .add("}.%M()\n", if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN)
-        .build()
+    ): CodeBlock {
+        val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
+        val code = CodeBlock.builder()
+
+        code.beginControlFlow("return $SAFE_CALL")
+
+        val urlString = buildUrlString(endpoint, params)
+        when (endpoint.requestBody?.contentType) {
+            ContentType.MULTIPART_FORM_DATA -> code.buildMultipartBody(endpoint, params, urlString)
+            ContentType.FORM_URL_ENCODED -> code.buildFormUrlEncodedBody(endpoint, params, urlString)
+            ContentType.JSON_CONTENT_TYPE, null -> code.buildJsonBody(endpoint, params, urlString)
+        }
+
+        // Close the HTTP call block and chain .toResult() / .toEmptyResult()
+        code.unindent()
+        code.add("}.%M()\n", resultFun)
+        code.endControlFlow() // safeCall
+
+        return code.build()
+    }
 
     private fun CodeBlock.Builder.buildJsonBody(
         endpoint: Endpoint,
@@ -75,12 +82,14 @@ internal object BodyGenerator {
         beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
         addCommonRequestParts(params)
 
-        optionalGuard(endpoint.requestBody?.required ?: false, BODY) {
-            addStatement("%M(%T.Json)", CONTENT_TYPE_FUN, CONTENT_TYPE_APPLICATION)
-            addStatement("%M(%L)", SET_BODY_FUN, BODY)
+        if (endpoint.requestBody != null) {
+            optionalGuard(endpoint.requestBody.required, BODY) {
+                addStatement("%M(%T.Json)", CONTENT_TYPE_FUN, CONTENT_TYPE_APPLICATION)
+                addStatement("%M(%L)", SET_BODY_FUN, BODY)
+            }
         }
 
-        endControlFlow() // client.METHOD
+        // Don't endControlFlow here — the outer buildFunctionBody closes with .toResult()
     }
 
     private fun CodeBlock.Builder.buildMultipartBody(
@@ -173,7 +182,7 @@ internal object BodyGenerator {
         beginControlFlow(")")
         addCommonRequestParts(params)
         addHttpMethodIfNeeded(endpoint.method)
-        endControlFlow()
+        // Don't endControlFlow here — the outer buildFunctionBody closes with .toResult()
     }
 
     private fun CodeBlock.Builder.addCommonRequestParts(params: Map<ParameterLocation, List<Parameter>>) {
@@ -191,7 +200,7 @@ internal object BodyGenerator {
     private fun buildUrlString(endpoint: Endpoint, params: Map<ParameterLocation, List<Parameter>>): CodeBlock {
         val (format, args) = params[ParameterLocation.PATH]
             .orEmpty()
-            .fold($$"${'$'}{$$BASE_URL}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
+            .fold($$"${%L}" + endpoint.path to listOf<Any>(BASE_URL)) { (format, args), param ->
                 format.replace("{${param.name}}", $$"${%M(%L)}") to args + ENCODE_PARAM_FUN + param.name.toCamelCase()
             }
         return CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
