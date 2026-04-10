@@ -7,8 +7,7 @@ import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ClassName
 
 internal class Hierarchy(val modelPackage: ModelPackage) {
-    private val schemas = mutableSetOf<SchemaModel>()
-
+    private val schemaModels = mutableSetOf<SchemaModel>()
     private val memoScope = MemoScope()
 
     /**
@@ -16,18 +15,18 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
      * This is necessary when schemas are updated (e.g., after inlining types).
      */
     fun addSchemas(newSchemas: List<SchemaModel>) {
-        schemas += newSchemas
+        schemaModels += newSchemas
         memoScope.reset()
     }
 
     /** All schemas indexed by name for quick lookup. */
     val schemasById: Map<String, SchemaModel> by memoized(memoScope) {
-        schemas.associateBy { it.name }
+        schemaModels.associateBy { it.name }
     }
 
     /** Schemas that define polymorphic variants via oneOf or anyOf. */
     private val polymorphicSchemas: List<SchemaModel> by memoized(memoScope) {
-        schemas.filterNot { it.variants().isNullOrEmpty() }
+        schemaModels.filterNot { it.variants().isNullOrEmpty() }
     }
 
     /** Maps parent schema name to its variant schema names (for both oneOf and anyOf). */
