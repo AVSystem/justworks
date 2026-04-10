@@ -10,9 +10,9 @@ import com.avsystem.justworks.core.gen.DELETE_FUN
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
 import com.avsystem.justworks.core.gen.FORM_DATA_FUN
 import com.avsystem.justworks.core.gen.GET_FUN
-import com.avsystem.justworks.core.gen.HEAD_FUN
 import com.avsystem.justworks.core.gen.HEADERS_CLASS
 import com.avsystem.justworks.core.gen.HEADERS_FUN
+import com.avsystem.justworks.core.gen.HEAD_FUN
 import com.avsystem.justworks.core.gen.HTTP_HEADERS
 import com.avsystem.justworks.core.gen.HTTP_METHOD_CLASS
 import com.avsystem.justworks.core.gen.OPTIONS_FUN
