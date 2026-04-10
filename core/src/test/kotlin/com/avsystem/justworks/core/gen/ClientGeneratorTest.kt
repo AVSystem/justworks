@@ -536,6 +536,42 @@ class ClientGeneratorTest {
         assertFalse(body.contains("submitForm"), "Should NOT contain submitForm for JSON")
     }
 
+    // -- No body: endpoint without requestBody should not emit setBody or contentType --
+
+    @Test
+    fun `endpoint without requestBody does not generate body null check`() {
+        val ep = endpoint(
+            method = HttpMethod.GET,
+            operationId = "listPets",
+            requestBody = null,
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val body = funSpec.body.toString()
+        assertFalse(body.contains("setBody"), "Should NOT contain setBody when no requestBody")
+        assertFalse(body.contains("contentType"), "Should NOT set contentType when no requestBody")
+        assertFalse(body.contains("if (body"), "Should NOT check body != null when no requestBody")
+    }
+
+    // -- URL interpolation: baseUrl must be interpolated, not literal --
+
+    @Test
+    fun `generated URL interpolates baseUrl property`() {
+        val ep = endpoint(
+            path = "/pets/{petId}",
+            operationId = "getPet",
+            parameters = listOf(
+                Parameter("petId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.LONG), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getPet" }
+        val body = funSpec.body.toString()
+        // Must contain ${baseUrl} as interpolation, not ${'$'}{baseUrl} (escaped/literal)
+        assertTrue(body.contains("\${baseUrl}"), "Expected \${baseUrl} interpolation in URL")
+        assertFalse(body.contains("\${'$'}{baseUrl}"), "baseUrl must not be escaped as literal text")
+    }
+
     // -- CONT-02: Form-urlencoded code generation --
 
     @Test

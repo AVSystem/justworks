@@ -82,9 +82,11 @@ internal object BodyGenerator {
         beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
         addCommonRequestParts(params)
 
-        optionalGuard(endpoint.requestBody?.required ?: false, BODY) {
-            addStatement("%M(%T.Json)", CONTENT_TYPE_FUN, CONTENT_TYPE_APPLICATION)
-            addStatement("%M(%L)", SET_BODY_FUN, BODY)
+        if (endpoint.requestBody != null) {
+            optionalGuard(endpoint.requestBody.required, BODY) {
+                addStatement("%M(%T.Json)", CONTENT_TYPE_FUN, CONTENT_TYPE_APPLICATION)
+                addStatement("%M(%L)", SET_BODY_FUN, BODY)
+            }
         }
 
         // Don't endControlFlow here — the outer buildFunctionBody closes with .toResult()
@@ -198,7 +200,7 @@ internal object BodyGenerator {
     private fun buildUrlString(endpoint: Endpoint, params: Map<ParameterLocation, List<Parameter>>): CodeBlock {
         val (format, args) = params[ParameterLocation.PATH]
             .orEmpty()
-            .fold($$"${'$'}{$$BASE_URL}" + endpoint.path to emptyList<Any>()) { (format, args), param ->
+            .fold($$"${%L}" + endpoint.path to listOf<Any>(BASE_URL)) { (format, args), param ->
                 format.replace("{${param.name}}", $$"${%M(%L)}") to args + ENCODE_PARAM_FUN + param.name.toCamelCase()
             }
         return CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
