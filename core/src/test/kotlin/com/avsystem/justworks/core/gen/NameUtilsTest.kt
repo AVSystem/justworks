@@ -91,6 +91,16 @@ class NameUtilsTest {
         assertEquals("GetUrlMapping", "getURLMapping".toPascalCase())
     }
 
+    @Test
+    fun `toPascalCase strips non-alphanumeric characters`() {
+        assertEquals("PaymentsApiV2", "Payments API (v2)".toPascalCase())
+    }
+
+    @Test
+    fun `toPascalCase handles brackets and special chars`() {
+        assertEquals("MyApi", "My @API!".toPascalCase())
+    }
+
     // -- toEnumConstantName --
 
     @Test

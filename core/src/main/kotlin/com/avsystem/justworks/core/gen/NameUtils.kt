@@ -1,6 +1,6 @@
 package com.avsystem.justworks.core.gen
 
-private val DELIMITERS = Regex("[_\\-.]+")
+private val DELIMITERS = Regex("[_\\-.\\s]+")
 private val CAMEL_BOUNDARY = Regex("(?<=[a-z0-9])(?=[A-Z])|(?<=[A-Z])(?=[A-Z][a-z])")
 
 /**
@@ -17,7 +17,9 @@ fun String.toCamelCase(): String = toPascalCase().replaceFirstChar { it.lowercas
 fun String.toPascalCase(): String = split(DELIMITERS)
     .filter { it.isNotEmpty() }
     .flatMap { it.split(CAMEL_BOUNDARY) }
-    .joinToString("") { it.lowercase().replaceFirstChar { c -> c.uppercaseChar() } }
+    .joinToString("") { segment ->
+        segment.filter { it.isLetterOrDigit() }.lowercase().replaceFirstChar { it.uppercaseChar() }
+    }
 
 /**
  * Converts any string to UPPER_SNAKE_CASE for use as an enum constant name.

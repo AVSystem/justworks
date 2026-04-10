@@ -1,15 +1,21 @@
 package com.avsystem.justworks.core.gen.client
 
 import com.avsystem.justworks.core.gen.API_CLIENT_BASE
+import com.avsystem.justworks.core.gen.APPLY_AUTH
 import com.avsystem.justworks.core.gen.ApiPackage
+import com.avsystem.justworks.core.gen.BASE64_CLASS
 import com.avsystem.justworks.core.gen.BASE_URL
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
 import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
-import com.avsystem.justworks.core.gen.HTTP_ERROR
+import com.avsystem.justworks.core.gen.HTTP_HEADERS
+import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
+import com.avsystem.justworks.core.gen.HTTP_RESULT
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
+import com.avsystem.justworks.core.gen.JSON_ELEMENT
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
@@ -17,12 +23,15 @@ import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParam
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.sanitizeKdoc
+import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
+import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
+import com.avsystem.justworks.core.model.SecurityScheme
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -50,7 +59,9 @@ internal object ClientGenerator {
     context(_: Hierarchy, _: ApiPackage, _: NameRegistry)
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
-        return grouped.map { (tag, endpoints) -> generateClientFile(tag, endpoints, hasPolymorphicTypes) }
+        return grouped.map { (tag, endpoints) ->
+            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes, spec.title)
+        }
     }
 
     context(hierarchy: Hierarchy, apiPackage: ApiPackage, nameRegistry: NameRegistry)
@@ -58,6 +69,8 @@ internal object ClientGenerator {
         tag: String,
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean,
+        securitySchemes: List<SecurityScheme>,
+        specTitle: String,
     ): FileSpec {
         val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
 
@@ -69,12 +82,48 @@ internal object ClientGenerator {
         }
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
+        val isSingleBearer = securitySchemes.singleOrNull() is SecurityScheme.Bearer
 
-        val primaryConstructor = FunSpec
+        val constructorBuilder = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
-            .addParameter(TOKEN, tokenType)
-            .build()
+
+        val classBuilder = TypeSpec
+            .classBuilder(className)
+            .superclass(API_CLIENT_BASE)
+            .addSuperclassConstructorParameter(BASE_URL)
+
+        if (isSingleBearer) {
+            // Single Bearer: use plain "token" param name for ergonomics
+            constructorBuilder.addParameter(TOKEN, tokenType)
+            classBuilder.addProperty(
+                PropertySpec
+                    .builder(TOKEN, tokenType)
+                    .initializer(TOKEN)
+                    .addModifiers(KModifier.PRIVATE)
+                    .build(),
+            )
+        } else if (securitySchemes.isNotEmpty()) {
+            // Multiple or non-Bearer schemes: generate named auth params
+            val authParamNames = securitySchemes.flatMap { scheme ->
+                when (scheme) {
+                    is SecurityScheme.Bearer -> listOf(scheme.toAuthParam(specTitle).name)
+                    is SecurityScheme.ApiKey -> listOf(scheme.toAuthParam(specTitle).name)
+                    is SecurityScheme.Basic -> scheme.toAuthParam(specTitle).let { listOf(it.username, it.password) }
+                }
+            }
+
+            for (paramName in authParamNames) {
+                constructorBuilder.addParameter(paramName, tokenType)
+                classBuilder.addProperty(
+                    PropertySpec
+                        .builder(paramName, tokenType)
+                        .initializer(paramName)
+                        .addModifiers(KModifier.PRIVATE)
+                        .build(),
+                )
+            }
+        }
 
         val httpClientProperty = PropertySpec
             .builder(CLIENT, HTTP_CLIENT)
@@ -82,13 +131,13 @@ internal object ClientGenerator {
             .initializer(clientInitializer)
             .build()
 
-        val classBuilder = TypeSpec
-            .classBuilder(className)
-            .superclass(API_CLIENT_BASE)
-            .addSuperclassConstructorParameter(BASE_URL)
-            .addSuperclassConstructorParameter(TOKEN)
-            .primaryConstructor(primaryConstructor)
+        classBuilder
+            .primaryConstructor(constructorBuilder.build())
             .addProperty(httpClientProperty)
+
+        if (securitySchemes.isNotEmpty()) {
+            classBuilder.addFunction(buildApplyAuth(securitySchemes, isSingleBearer, specTitle))
+        }
 
         context(NameRegistry()) {
             classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })
@@ -100,11 +149,83 @@ internal object ClientGenerator {
             .build()
     }
 
+    private fun buildApplyAuth(
+        securitySchemes: List<SecurityScheme>,
+        isSingleBearer: Boolean,
+        specTitle: String,
+    ): FunSpec {
+        val builder = FunSpec
+            .builder(APPLY_AUTH)
+            .addModifiers(KModifier.OVERRIDE, KModifier.PROTECTED)
+            .receiver(HTTP_REQUEST_BUILDER)
+
+        val headerSchemes = securitySchemes.filter { scheme ->
+            scheme is SecurityScheme.Bearer ||
+                scheme is SecurityScheme.Basic ||
+                (scheme is SecurityScheme.ApiKey && scheme.location == ApiKeyLocation.HEADER)
+        }
+        val querySchemes = securitySchemes
+            .filterIsInstance<SecurityScheme.ApiKey>()
+            .filter { scheme -> scheme.location == ApiKeyLocation.QUERY }
+
+        if (headerSchemes.isNotEmpty()) {
+            builder.beginControlFlow("%M", HEADERS_FUN)
+            for (scheme in headerSchemes) {
+                when (scheme) {
+                    is SecurityScheme.Bearer -> {
+                        val tokenRef = if (isSingleBearer) TOKEN else scheme.toAuthParam(specTitle).name
+                        builder.addStatement(
+                            "append(%T.Authorization, %P)",
+                            HTTP_HEADERS,
+                            CodeBlock.of($$"Bearer ${$$tokenRef()}"),
+                        )
+                    }
+
+                    is SecurityScheme.Basic -> {
+                        val authParam = scheme.toAuthParam(specTitle)
+                        builder.addStatement(
+                            "append(%T.Authorization, %P)",
+                            HTTP_HEADERS,
+                            CodeBlock.of(
+                                $$"Basic ${%T.getEncoder().encodeToString(\"${$${authParam.username}()}:${$${authParam.password}()}\".toByteArray(Charsets.UTF_8))}",
+                                BASE64_CLASS,
+                            ),
+                        )
+                    }
+
+                    is SecurityScheme.ApiKey -> {
+                        val authParam = scheme.toAuthParam(specTitle)
+                        builder.addStatement(
+                            "append(%S, ${authParam.name}())",
+                            scheme.parameterName,
+                        )
+                    }
+                }
+            }
+            builder.endControlFlow()
+        }
+
+        if (querySchemes.isNotEmpty()) {
+            builder.beginControlFlow("url")
+            for (scheme in querySchemes) {
+                val authParam = scheme.toAuthParam(specTitle)
+                builder.addStatement(
+                    "parameters.append(%S, ${authParam.name}())",
+                    scheme.parameterName,
+                )
+            }
+            builder.endControlFlow()
+        }
+
+        return builder.build()
+    }
+
     context(_: Hierarchy, methodRegistry: NameRegistry)
     private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
-        val returnType = HTTP_SUCCESS.parameterizedBy(returnBodyType)
+        val errorType = resolveErrorType(endpoint)
+        val returnType = HTTP_RESULT.parameterizedBy(errorType, returnBodyType)
 
         val funBuilder = FunSpec
             .builder(functionName)
@@ -153,6 +274,22 @@ internal object ClientGenerator {
         funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
 
         return funBuilder.build()
+    }
+
+    context(_: Hierarchy)
+    private fun resolveErrorType(endpoint: Endpoint): TypeName {
+        val errorSchemas = endpoint.responses.entries
+            .asSequence()
+            .filter { !it.key.startsWith("2") && it.key != "default" }
+            .mapNotNull { it.value.schema }
+            .map { it.toTypeName() }
+            .distinct()
+            .toList()
+
+        return when {
+            errorSchemas.size == 1 -> errorSchemas.single()
+            else -> JSON_ELEMENT
+        }
     }
 
     context(_: Hierarchy)

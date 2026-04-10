@@ -3,30 +3,27 @@ package com.avsystem.justworks.core.gen.shared
 import com.avsystem.justworks.core.gen.API_CLIENT_BASE
 import com.avsystem.justworks.core.gen.APPLY_AUTH
 import com.avsystem.justworks.core.gen.BASE_URL
-import com.avsystem.justworks.core.gen.BODY_AS_TEXT_FUN
 import com.avsystem.justworks.core.gen.BODY_FUN
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CLOSEABLE
 import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
+import com.avsystem.justworks.core.gen.DESERIALIZE_ERROR_BODY_FUN
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
 import com.avsystem.justworks.core.gen.ENCODE_TO_STRING_FUN
-import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
 import com.avsystem.justworks.core.gen.HTTP_ERROR
-import com.avsystem.justworks.core.gen.HTTP_ERROR_TYPE
-import com.avsystem.justworks.core.gen.HTTP_HEADERS
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_TIMEOUT_EXCEPTION
 import com.avsystem.justworks.core.gen.HTTP_RESPONSE
+import com.avsystem.justworks.core.gen.HTTP_RESULT
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.IO_EXCEPTION
 import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_FUN
 import com.avsystem.justworks.core.gen.SAFE_CALL
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
-import com.avsystem.justworks.core.gen.TOKEN
-import com.squareup.kotlinpoet.CodeBlock
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
@@ -42,9 +39,10 @@ import com.squareup.kotlinpoet.UNIT
 /**
  * Generates the shared `ApiClientBase.kt` file containing:
  * - `encodeParam<T>()` top-level utility function
- * - `HttpResponse.mapToResult<T>()` private extension with response mapping logic
- * - `HttpResponse.toResult<T>()` extension for typed response mapping
- * - `HttpResponse.toEmptyResult()` extension for Unit response mapping
+ * - `HttpResponse.deserializeErrorBody<E>()` internal helper for error body deserialization
+ * - `HttpResponse.mapToResult<E, T>()` private extension with response mapping logic
+ * - `HttpResponse.toResult<E, T>()` extension for typed response mapping
+ * - `HttpResponse.toEmptyResult<E>()` extension for Unit response mapping
  * - `ApiClientBase` abstract class with common client infrastructure
  */
 internal object ApiClientBaseGenerator {
@@ -52,17 +50,18 @@ internal object ApiClientBaseGenerator {
     private const val SUCCESS_BODY = "successBody"
     private const val MAP_TO_RESULT = "mapToResult"
     private const val BLOCK = "block"
-    private const val NETWORK_ERROR = "Network error"
 
     fun generate(): FileSpec {
         val t = TypeVariableName("T").copy(reified = true)
+        val e = TypeVariableName("E").copy(reified = true)
 
         return FileSpec
             .builder(API_CLIENT_BASE)
             .addFunction(buildEncodeParam(t))
-            .addFunction(buildMapToResult(t))
-            .addFunction(buildToResult(t))
-            .addFunction(buildToEmptyResult())
+            .addFunction(buildDeserializeErrorBody(e))
+            .addFunction(buildMapToResult(e, t))
+            .addFunction(buildToResult(e, t))
+            .addFunction(buildToEmptyResult(e))
             .addType(buildApiClientBaseClass())
             .build()
     }
@@ -76,70 +75,83 @@ internal object ApiClientBaseGenerator {
         .addStatement("return %T.%M(value).trim('\"')", JSON_CLASS, ENCODE_TO_STRING_FUN)
         .build()
 
-    private fun buildMapToResult(t: TypeVariableName): FunSpec = FunSpec
+    private fun buildDeserializeErrorBody(e: TypeVariableName): FunSpec = FunSpec
+        .builder("deserializeErrorBody")
+        .addAnnotation(PublishedApi::class)
+        .addModifiers(KModifier.INTERNAL, KModifier.SUSPEND, KModifier.INLINE)
+        .addTypeVariable(e)
+        .receiver(HTTP_RESPONSE)
+        .returns(TypeVariableName("E").copy(nullable = true))
+        .beginControlFlow("return try")
+        .addStatement("%M()", BODY_FUN)
+        .nextControlFlow("catch (e: %T)", Exception::class)
+        .addStatement("if (e is %T) throw e", ClassName("kotlinx.coroutines", "CancellationException"))
+        .addStatement("null")
+        .endControlFlow()
+        .build()
+
+    private fun buildMapToResult(e: TypeVariableName, t: TypeVariableName): FunSpec = FunSpec
         .builder(MAP_TO_RESULT)
         .addAnnotation(PublishedApi::class)
         .addModifiers(KModifier.INTERNAL, KModifier.SUSPEND, KModifier.INLINE)
+        .addTypeVariable(e)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
         .addParameter(SUCCESS_BODY, LambdaTypeName.get(returnType = TypeVariableName("T")))
-        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
+        .returns(HTTP_RESULT.parameterizedBy(TypeVariableName("E"), TypeVariableName("T")))
         .beginControlFlow("return when (status.value)")
-        .addStatement("in 200..299 -> %T(status.value, %L())", HTTP_SUCCESS, SUCCESS_BODY)
         .addStatement(
-            "in 300..399 -> throw %T(status.value, %M(), %T.Redirect)",
-            HTTP_ERROR,
-            BODY_AS_TEXT_FUN,
-            HTTP_ERROR_TYPE,
+            "in 200..299 -> %T(status.value, %L())",
+            HTTP_SUCCESS,
+            SUCCESS_BODY,
         ).addStatement(
-            "in 400..499 -> throw %T(status.value, %M(), %T.Client)",
+            "in 300..399 -> %T.Redirect(status.value, %M())",
             HTTP_ERROR,
-            BODY_AS_TEXT_FUN,
-            HTTP_ERROR_TYPE,
-        ).addStatement(
-            "else -> throw %T(status.value, %M(), %T.Server)",
+            DESERIALIZE_ERROR_BODY_FUN,
+        ).apply {
+            for ((name, code) in ApiResponseGenerator.HTTP_ERROR_SUBTYPES) {
+                addStatement(
+                    "$code -> %T.$name(%M())",
+                    HTTP_ERROR,
+                    DESERIALIZE_ERROR_BODY_FUN,
+                )
+            }
+        }.addStatement(
+            "else -> %T.Other(status.value, %M())",
             HTTP_ERROR,
-            BODY_AS_TEXT_FUN,
-            HTTP_ERROR_TYPE,
+            DESERIALIZE_ERROR_BODY_FUN,
         ).endControlFlow()
         .build()
 
-    private fun buildToResult(t: TypeVariableName): FunSpec = FunSpec
+    private fun buildToResult(e: TypeVariableName, t: TypeVariableName): FunSpec = FunSpec
         .builder("toResult")
         .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
+        .addTypeVariable(e)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
-        .returns(HTTP_SUCCESS.parameterizedBy(TypeVariableName("T")))
+        .returns(HTTP_RESULT.parameterizedBy(TypeVariableName("E"), TypeVariableName("T")))
         .addStatement("return %L { %M() }", MAP_TO_RESULT, BODY_FUN)
         .build()
 
-    private fun buildToEmptyResult(): FunSpec = FunSpec
+    private fun buildToEmptyResult(e: TypeVariableName): FunSpec = FunSpec
         .builder("toEmptyResult")
-        .addModifiers(KModifier.SUSPEND)
+        .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
+        .addTypeVariable(e)
         .receiver(HTTP_RESPONSE)
-        .returns(HTTP_SUCCESS.parameterizedBy(UNIT))
+        .returns(HTTP_RESULT.parameterizedBy(TypeVariableName("E"), UNIT))
         .addStatement("return %L { Unit }", MAP_TO_RESULT)
         .build()
 
     private fun buildApiClientBaseClass(): TypeSpec {
-        val tokenType = LambdaTypeName.get(returnType = STRING)
-
         val constructor = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
-            .addParameter(TOKEN, tokenType)
             .build()
 
         val baseUrlProp = PropertySpec
             .builder(BASE_URL, STRING)
             .initializer(BASE_URL)
             .addModifiers(KModifier.PROTECTED)
-            .build()
-
-        val tokenProp = PropertySpec
-            .builder(TOKEN, tokenType)
-            .initializer(TOKEN)
-            .addModifiers(KModifier.PRIVATE)
             .build()
 
         val clientProp = PropertySpec
@@ -159,7 +171,6 @@ internal object ApiClientBaseGenerator {
             .addSuperinterface(CLOSEABLE)
             .primaryConstructor(constructor)
             .addProperty(baseUrlProp)
-            .addProperty(tokenProp)
             .addProperty(clientProp)
             .addFunction(closeFun)
             .addFunction(buildApplyAuth())
@@ -170,37 +181,32 @@ internal object ApiClientBaseGenerator {
 
     private fun buildApplyAuth(): FunSpec = FunSpec
         .builder(APPLY_AUTH)
-        .addModifiers(KModifier.PROTECTED)
+        .addModifiers(KModifier.PROTECTED, KModifier.OPEN)
         .receiver(HTTP_REQUEST_BUILDER)
-        .beginControlFlow("%M", HEADERS_FUN)
-        .addStatement(
-            "append(%T.Authorization, %P)",
-            HTTP_HEADERS,
-            CodeBlock.of($$"Bearer ${'$'}{$$TOKEN()}"),
-        ).endControlFlow()
         .build()
 
-    private fun buildSafeCall(): FunSpec = FunSpec
-        .builder(SAFE_CALL)
-        .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND)
-        .addParameter(BLOCK, LambdaTypeName.get(returnType = HTTP_RESPONSE).copy(suspending = true))
-        .returns(HTTP_RESPONSE)
-        .beginControlFlow("return try")
-        .addStatement("%L()", BLOCK)
-        .nextControlFlow("catch (e: %T)", IO_EXCEPTION)
-        .addStatement(
-            "throw %T(0, e.message ?: %S, %T.Network)",
-            HTTP_ERROR,
-            NETWORK_ERROR,
-            HTTP_ERROR_TYPE,
-        ).nextControlFlow("catch (e: %T)", HTTP_REQUEST_TIMEOUT_EXCEPTION)
-        .addStatement(
-            "throw %T(0, e.message ?: %S, %T.Network)",
-            HTTP_ERROR,
-            NETWORK_ERROR,
-            HTTP_ERROR_TYPE,
-        ).endControlFlow()
-        .build()
+    private fun buildSafeCall(): FunSpec {
+        val e = TypeVariableName("E").copy(reified = true)
+        val t = TypeVariableName("T").copy(reified = true)
+        val resultType = HTTP_RESULT.parameterizedBy(TypeVariableName("E"), TypeVariableName("T"))
+        val blockType = LambdaTypeName.get(returnType = resultType).copy(suspending = true)
+
+        return FunSpec
+            .builder(SAFE_CALL)
+            .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND, KModifier.INLINE)
+            .addTypeVariable(e)
+            .addTypeVariable(t)
+            .addParameter(BLOCK, blockType)
+            .returns(resultType)
+            .beginControlFlow("return try")
+            .addStatement("%L()", BLOCK)
+            .nextControlFlow("catch (e: %T)", IO_EXCEPTION)
+            .addStatement("%T.Network(e)", HTTP_ERROR)
+            .nextControlFlow("catch (e: %T)", HTTP_REQUEST_TIMEOUT_EXCEPTION)
+            .addStatement("%T.Network(e)", HTTP_ERROR)
+            .endControlFlow()
+            .build()
+    }
 
     private fun buildCreateHttpClient(): FunSpec = FunSpec
         .builder(CREATE_HTTP_CLIENT)

@@ -23,7 +23,7 @@ class CodeGeneratorTest {
                 ?: fail("Spec fixture not found: $fixture")
             val specFile = File(specUrl.toURI())
             val spec = when (val result = SpecParser.parse(specFile)) {
-                is ParseResult.Success -> result.apiSpec
+                is ParseResult.Success -> result.value
                 is ParseResult.Failure -> fail("Failed to parse $fixture: ${result.error}")
             }
 
