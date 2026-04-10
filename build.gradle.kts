@@ -13,7 +13,7 @@ allprojects {
     version = System
         .getenv("RELEASE_VERSION")
         ?.let { Regex("""^v(\d+\.\d+\.\d+.*)$""").matchEntire(it)?.groupValues?.get(1) }
-        ?: "0.0.3-SNAPSHOT"
+        ?: "0.0.1-SNAPSHOT"
 
     repositories {
         mavenCentral()
