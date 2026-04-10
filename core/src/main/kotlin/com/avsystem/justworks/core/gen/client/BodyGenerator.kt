@@ -45,19 +45,26 @@ internal object BodyGenerator {
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
-    ): CodeBlock = CodeBlock
-        .builder()
-        .beginControlFlow("return $SAFE_CALL")
-        .apply {
-            val urlString = buildUrlString(endpoint, params)
-            when (endpoint.requestBody?.contentType) {
-                ContentType.MULTIPART_FORM_DATA -> buildMultipartBody(endpoint, params, urlString)
-                ContentType.FORM_URL_ENCODED -> buildFormUrlEncodedBody(endpoint, params, urlString)
-                ContentType.JSON_CONTENT_TYPE, null -> buildJsonBody(endpoint, params, urlString)
-            }
-        }.unindent()
-        .add("}.%M()\n", if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN)
-        .build()
+    ): CodeBlock {
+        val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
+        val code = CodeBlock.builder()
+
+        code.beginControlFlow("return $SAFE_CALL")
+
+        val urlString = buildUrlString(endpoint, params)
+        when (endpoint.requestBody?.contentType) {
+            ContentType.MULTIPART_FORM_DATA -> code.buildMultipartBody(endpoint, params, urlString)
+            ContentType.FORM_URL_ENCODED -> code.buildFormUrlEncodedBody(endpoint, params, urlString)
+            ContentType.JSON_CONTENT_TYPE, null -> code.buildJsonBody(endpoint, params, urlString)
+        }
+
+        // Close the HTTP call block and chain .toResult() / .toEmptyResult()
+        code.unindent()
+        code.add("}.%M()\n", resultFun)
+        code.endControlFlow() // safeCall
+
+        return code.build()
+    }
 
     private fun CodeBlock.Builder.buildJsonBody(
         endpoint: Endpoint,
@@ -80,7 +87,7 @@ internal object BodyGenerator {
             addStatement("%M(%L)", SET_BODY_FUN, BODY)
         }
 
-        endControlFlow() // client.METHOD
+        // Don't endControlFlow here — the outer buildFunctionBody closes with .toResult()
     }
 
     private fun CodeBlock.Builder.buildMultipartBody(
@@ -173,7 +180,7 @@ internal object BodyGenerator {
         beginControlFlow(")")
         addCommonRequestParts(params)
         addHttpMethodIfNeeded(endpoint.method)
-        endControlFlow()
+        // Don't endControlFlow here — the outer buildFunctionBody closes with .toResult()
     }
 
     private fun CodeBlock.Builder.addCommonRequestParts(params: Map<ParameterLocation, List<Parameter>>) {

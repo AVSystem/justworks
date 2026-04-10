@@ -13,7 +13,6 @@ val HTTP_HEADERS = ClassName("io.ktor.http", "HttpHeaders")
 
 val JSON_FUN = MemberName("io.ktor.serialization.kotlinx.json", "json")
 val BODY_FUN = MemberName("io.ktor.client.call", "body")
-val BODY_AS_TEXT_FUN = MemberName("io.ktor.client.statement", "bodyAsText")
 val SET_BODY_FUN = MemberName("io.ktor.client.request", "setBody")
 val CONTENT_TYPE_FUN = MemberName("io.ktor.http", "contentType")
 val CONTENT_TYPE_APPLICATION = ClassName("io.ktor.http", "ContentType", "Application")
@@ -84,11 +83,10 @@ val EXPERIMENTAL_UUID_API = ClassName("kotlin.uuid", "ExperimentalUuidApi")
 // Error Handling
 // ============================================================================
 
-val RUNTIME_EXCEPTION = ClassName("kotlin", "RuntimeException")
-
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
-val HTTP_ERROR_TYPE = ClassName("com.avsystem.justworks", "HttpErrorType")
 val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
+val HTTP_RESULT = ClassName("com.avsystem.justworks", "HttpResult")
+val DESERIALIZE_ERROR_BODY_FUN = MemberName("com.avsystem.justworks", "deserializeErrorBody")
 
 // ============================================================================
 // Kotlin stdlib

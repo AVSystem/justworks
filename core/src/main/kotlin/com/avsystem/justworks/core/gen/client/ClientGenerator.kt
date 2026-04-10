@@ -12,8 +12,10 @@ import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
 import com.avsystem.justworks.core.gen.HTTP_HEADERS
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
+import com.avsystem.justworks.core.gen.HTTP_RESULT
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
+import com.avsystem.justworks.core.gen.JSON_ELEMENT
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
@@ -222,7 +224,8 @@ internal object ClientGenerator {
     private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
-        val returnType = HTTP_SUCCESS.parameterizedBy(returnBodyType)
+        val errorType = resolveErrorType(endpoint)
+        val returnType = HTTP_RESULT.parameterizedBy(errorType, returnBodyType)
 
         val funBuilder = FunSpec
             .builder(functionName)
@@ -271,6 +274,22 @@ internal object ClientGenerator {
         funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
 
         return funBuilder.build()
+    }
+
+    context(_: Hierarchy)
+    private fun resolveErrorType(endpoint: Endpoint): TypeName {
+        val errorSchemas = endpoint.responses.entries
+            .asSequence()
+            .filter { !it.key.startsWith("2") }
+            .mapNotNull { it.value.schema }
+            .map { it.toTypeName() }
+            .distinct()
+            .toList()
+
+        return when {
+            errorSchemas.size == 1 -> errorSchemas.single()
+            else -> JSON_ELEMENT
+        }
     }
 
     context(_: Hierarchy)
