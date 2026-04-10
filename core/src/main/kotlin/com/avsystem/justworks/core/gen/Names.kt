@@ -23,6 +23,9 @@ val POST_FUN = MemberName("io.ktor.client.request", "post")
 val PUT_FUN = MemberName("io.ktor.client.request", "put")
 val DELETE_FUN = MemberName("io.ktor.client.request", "delete")
 val PATCH_FUN = MemberName("io.ktor.client.request", "patch")
+val HEAD_FUN = MemberName("io.ktor.client.request", "head")
+val OPTIONS_FUN = MemberName("io.ktor.client.request", "options")
+val REQUEST_FUN = MemberName("io.ktor.client.request", "request")
 
 // ============================================================================
 // Ktor Forms & Multipart
