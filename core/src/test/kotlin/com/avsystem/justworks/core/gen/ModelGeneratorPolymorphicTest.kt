@@ -35,6 +35,7 @@ class ModelGeneratorPolymorphicTest {
         endpoints = emptyList(),
         schemas = schemas,
         enums = enums,
+        securitySchemes = emptyList(),
     )
 
     private fun schema(
