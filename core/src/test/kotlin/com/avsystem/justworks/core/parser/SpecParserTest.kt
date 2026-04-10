@@ -180,7 +180,7 @@ class SpecParserTest : SpecParserTestBase() {
                       type: object
             """.trimIndent().toTempFile(),
         )
-        assertIs<ParseResult.Success>(result)
+        assertIs<ParseResult.Success<*>>(result)
         val warningMessages = result.warnings.map { it.message }
         assertTrue(
             warningMessages.any {
@@ -193,7 +193,7 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `parse spec without unknown schemas has no unknown-type warnings`() {
         val result = SpecParser.parse(loadResource("petstore.yaml"))
-        assertIs<ParseResult.Success>(result)
+        assertIs<ParseResult.Success<*>>(result)
         val unknownWarnings = result.warnings.filter {
             it.message.contains("JsonElement")
         }
@@ -272,14 +272,14 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `parse spec with missing info produces warnings`() {
         val result = SpecParser.parse(loadResource("invalid-spec.yaml"))
-        assertIs<ParseResult.Success>(result)
+        assertIs<ParseResult.Success<*>>(result)
         assertTrue(result.warnings.isNotEmpty(), "Spec with missing info should produce warnings")
     }
 
     @Test
     fun `parse spec with missing info has descriptive warning messages`() {
         val result = SpecParser.parse(loadResource("invalid-spec.yaml"))
-        assertIs<ParseResult.Success>(result)
+        assertIs<ParseResult.Success<*>>(result)
         assertTrue(result.warnings.isNotEmpty(), "Should have warning messages")
         result.warnings.forEach { warning ->
             assertTrue(warning.message.length > 5, "Warning message too short to be useful: '$warning'")
@@ -291,7 +291,7 @@ class SpecParserTest : SpecParserTestBase() {
     @Test
     fun `parse swagger 2 json returns Success`() {
         val result = SpecParser.parse(loadResource("petstore-v2.json"))
-        assertIs<ParseResult.Success>(result)
+        assertIs<ParseResult.Success<*>>(result)
     }
 
     @Test

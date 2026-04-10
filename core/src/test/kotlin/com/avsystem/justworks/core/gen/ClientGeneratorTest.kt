@@ -1,6 +1,7 @@
 package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.gen.client.ClientGenerator
+import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Endpoint
@@ -11,6 +12,7 @@ import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.RequestBody
 import com.avsystem.justworks.core.model.Response
+import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.ExperimentalKotlinPoetApi
 import com.squareup.kotlinpoet.FileSpec
@@ -37,12 +39,15 @@ class ClientGeneratorTest {
         ClientGenerator.generate(spec, hasPolymorphicTypes)
     }
 
-    private fun spec(vararg endpoints: Endpoint) = ApiSpec(
+    private fun spec(vararg endpoints: Endpoint) = spec(endpoints.toList())
+
+    private fun spec(endpoints: List<Endpoint>, securitySchemes: List<SecurityScheme> = emptyList()) = ApiSpec(
         title = "Test",
         version = "1.0",
         endpoints = endpoints.toList(),
         schemas = emptyList(),
         enums = emptyList(),
+        securitySchemes = securitySchemes,
     )
 
     private fun endpoint(
@@ -70,8 +75,10 @@ class ClientGeneratorTest {
         responses = responses,
     )
 
-    private fun clientClass(vararg endpoints: Endpoint): TypeSpec {
-        val files = generate(spec(*endpoints))
+    private fun clientClass(vararg endpoints: Endpoint): TypeSpec = clientClass(endpoints.toList())
+
+    private fun clientClass(endpoints: List<Endpoint>, securitySchemes: List<SecurityScheme> = emptyList()): TypeSpec {
+        val files = generate(spec(endpoints, securitySchemes))
         return files
             .first()
             .members
@@ -215,29 +222,36 @@ class ClientGeneratorTest {
         assertEquals("com.example.model.Pet", bodyParam.type.toString())
     }
 
-    // -- CLNT-08: Return type is Success parameterized --
+    // -- CLNT-08: Return type is HttpResult parameterized --
 
     @Test
-    fun `return type is Success parameterized`() {
+    fun `return type is HttpResult parameterized`() {
         val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         val returnType = funSpec.returnType
         assertNotNull(returnType)
         assertTrue(returnType is ParameterizedTypeName, "Expected ParameterizedTypeName")
-        assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
-        assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
+        assertEquals("com.avsystem.justworks.HttpResult", returnType.rawType.toString())
+        assertEquals(
+            "kotlinx.serialization.json.JsonElement",
+            returnType.typeArguments[0].toString(),
+            "Expected JsonElement as error type",
+        )
+        assertEquals(
+            "com.example.model.Pet",
+            returnType.typeArguments[1].toString(),
+            "Expected Pet as success body type",
+        )
     }
 
-    // -- Error handling: endpoint functions throw HttpError (no Arrow dependency) --
+    // -- ERR-01: No Raise context on endpoint functions --
 
+    @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
-    fun `endpoint functions do not have context parameters`() {
+    fun `endpoint functions have no context parameters`() {
         val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
-
-        @OptIn(ExperimentalKotlinPoetApi::class)
-        val contextParameters = funSpec.contextParameters
-        assertTrue(contextParameters.isEmpty(), "Expected no context parameters (Arrow removed)")
+        assertTrue(funSpec.contextParameters.isEmpty(), "Expected no context parameters")
     }
 
     // -- CLNT-09: Header parameters become function parameters --
@@ -295,14 +309,14 @@ class ClientGeneratorTest {
         assertEquals("kotlin.String", baseUrl.type.toString())
     }
 
-    // -- AUTH-01: Client constructor has token parameter --
+    // -- No security: constructor has only baseUrl --
 
     @Test
-    fun `client constructor has token provider parameter`() {
+    fun `no security schemes generates constructor with only baseUrl`() {
         val cls = clientClass(endpoint())
         val constructor = assertNotNull(cls.primaryConstructor)
-        val token = constructor.parameters.first { it.name == "token" }
-        assertEquals("() -> kotlin.String", token.type.toString(), "token should be a () -> String lambda")
+        val paramNames = constructor.parameters.map { it.name }
+        assertEquals(listOf("baseUrl"), paramNames)
     }
 
     // -- Pitfall 3: Untagged endpoints go to DefaultClient --
@@ -324,7 +338,7 @@ class ClientGeneratorTest {
     // -- Pitfall 5: Void response uses Unit type parameter --
 
     @Test
-    fun `void response uses Unit type parameter`() {
+    fun `void response uses HttpResult with Unit type parameter`() {
         val ep = endpoint(
             method = HttpMethod.DELETE,
             operationId = "deletePet",
@@ -333,8 +347,17 @@ class ClientGeneratorTest {
         val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "deletePet" }
         val returnType = funSpec.returnType as ParameterizedTypeName
-        assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
-        assertEquals("kotlin.Unit", returnType.typeArguments.first().toString())
+        assertEquals("com.avsystem.justworks.HttpResult", returnType.rawType.toString())
+        assertEquals(
+            "kotlinx.serialization.json.JsonElement",
+            returnType.typeArguments[0].toString(),
+            "Expected JsonElement as error type",
+        )
+        assertEquals(
+            "kotlin.Unit",
+            returnType.typeArguments[1].toString(),
+            "Expected Unit as success body type",
+        )
     }
 
     // -- CONT-03: Response code handling --
@@ -351,8 +374,8 @@ class ClientGeneratorTest {
         val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "createPet" }
         val returnType = funSpec.returnType as ParameterizedTypeName
-        assertEquals("com.avsystem.justworks.HttpSuccess", returnType.rawType.toString())
-        assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
+        assertEquals("com.avsystem.justworks.HttpResult", returnType.rawType.toString())
+        assertEquals("com.example.model.Pet", returnType.typeArguments[1].toString())
     }
 
     @Test
@@ -368,7 +391,7 @@ class ClientGeneratorTest {
         val cls = clientClass(ep)
         val funSpec = cls.funSpecs.first { it.name == "removePet" }
         val returnType = funSpec.returnType as ParameterizedTypeName
-        assertEquals("com.example.model.Pet", returnType.typeArguments.first().toString())
+        assertEquals("com.example.model.Pet", returnType.typeArguments[1].toString())
     }
 
     // -- Client class extends ApiClientBase --
@@ -513,6 +536,42 @@ class ClientGeneratorTest {
         assertFalse(body.contains("submitForm"), "Should NOT contain submitForm for JSON")
     }
 
+    // -- No body: endpoint without requestBody should not emit setBody or contentType --
+
+    @Test
+    fun `endpoint without requestBody does not generate body null check`() {
+        val ep = endpoint(
+            method = HttpMethod.GET,
+            operationId = "listPets",
+            requestBody = null,
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val body = funSpec.body.toString()
+        assertFalse(body.contains("setBody"), "Should NOT contain setBody when no requestBody")
+        assertFalse(body.contains("contentType"), "Should NOT set contentType when no requestBody")
+        assertFalse(body.contains("if (body"), "Should NOT check body != null when no requestBody")
+    }
+
+    // -- URL interpolation: baseUrl must be interpolated, not literal --
+
+    @Test
+    fun `generated URL interpolates baseUrl property`() {
+        val ep = endpoint(
+            path = "/pets/{petId}",
+            operationId = "getPet",
+            parameters = listOf(
+                Parameter("petId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.LONG), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getPet" }
+        val body = funSpec.body.toString()
+        // Must contain ${baseUrl} as interpolation, not ${'$'}{baseUrl} (escaped/literal)
+        assertTrue(body.contains("\${baseUrl}"), "Expected \${baseUrl} interpolation in URL")
+        assertFalse(body.contains("\${'$'}{baseUrl}"), "baseUrl must not be escaped as literal text")
+    }
+
     // -- CONT-02: Form-urlencoded code generation --
 
     @Test
@@ -650,6 +709,222 @@ class ClientGeneratorTest {
         val funSpec = cls.funSpecs.first { it.name == "deletePet" }
         val body = funSpec.body.toString()
         assertTrue(body.contains("toEmptyResult"), "Expected toEmptyResult call")
+    }
+
+    // -- SECU: Security-aware constructor generation --
+
+    @Test
+    fun `ApiKey HEADER scheme generates constructor with baseUrl and apiKey param`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.ApiKey("ApiKeyHeader", "X-API-Key", ApiKeyLocation.HEADER)),
+        )
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
+        assertTrue("apiKeyHeaderTest" in paramNames, "Expected apiKeyHeaderTest param")
+    }
+
+    @Test
+    fun `Basic scheme generates constructor with baseUrl, username, and password`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.Basic("BasicAuth")),
+        )
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
+        assertTrue("basicAuthTestUsername" in paramNames, "Expected basicAuthTestUsername param")
+        assertTrue("basicAuthTestPassword" in paramNames, "Expected basicAuthTestPassword param")
+    }
+
+    @Test
+    fun `multiple schemes generate all constructor params and pass all to super`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(
+                SecurityScheme.Bearer("BearerAuth"),
+                SecurityScheme.ApiKey("ApiKeyHeader", "X-API-Key", ApiKeyLocation.HEADER),
+            ),
+        )
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertTrue("baseUrl" in paramNames, "Expected baseUrl param")
+        assertTrue("bearerAuthTestToken" in paramNames, "Expected bearerAuthTestToken param")
+        assertTrue("apiKeyHeaderTest" in paramNames, "Expected apiKeyHeaderTest param")
+
+        // Verify only baseUrl is passed to super
+        val superParams = cls.superclassConstructorParameters.map { it.toString().trim() }
+        assertEquals(1, superParams.size, "Expected only baseUrl passed to super")
+        assertEquals("baseUrl", superParams[0])
+    }
+
+    @Test
+    fun `explicit empty securitySchemes generates constructor with only baseUrl`() {
+        // Explicit empty securitySchemes = spec has security: [] (no auth required)
+        val spec = ApiSpec(
+            title = "Test",
+            version = "1.0",
+            endpoints = listOf(endpoint()),
+            schemas = emptyList(),
+            enums = emptyList(),
+            securitySchemes = emptyList(),
+        )
+        val files = generate(spec)
+        val cls = files
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertEquals(
+            listOf("baseUrl"),
+            paramNames,
+            "Expected only baseUrl param when security is explicitly empty",
+        )
+    }
+
+    // -- ERR-01: Error type resolution from OpenAPI error response schemas --
+
+    @Test
+    fun `single error response schema generates typed error in HttpResult`() {
+        val ep = endpoint(
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "400" to Response("400", "Bad request", TypeRef.Reference("ValidationError")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals(
+            "com.example.model.ValidationError",
+            returnType.typeArguments[0].toString(),
+            "Expected typed error for single error schema",
+        )
+    }
+
+    @Test
+    fun `multiple error responses with same schema generates typed error`() {
+        val ep = endpoint(
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "400" to Response("400", "Bad request", TypeRef.Reference("ValidationError")),
+                "422" to Response("422", "Unprocessable", TypeRef.Reference("ValidationError")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals(
+            "com.example.model.ValidationError",
+            returnType.typeArguments[0].toString(),
+            "Expected typed error when all error schemas are the same",
+        )
+    }
+
+    @Test
+    fun `multiple error responses with different schemas falls back to JsonElement`() {
+        val ep = endpoint(
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "400" to Response("400", "Bad request", TypeRef.Reference("ValidationError")),
+                "404" to Response("404", "Not found", TypeRef.Reference("NotFoundError")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals(
+            "kotlinx.serialization.json.JsonElement",
+            returnType.typeArguments[0].toString(),
+            "Expected JsonElement fallback for different error schemas",
+        )
+    }
+
+    @Test
+    fun `error response with null schema falls back to JsonElement`() {
+        val ep = endpoint(
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "401" to Response("401", "Unauthorized", null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals(
+            "kotlinx.serialization.json.JsonElement",
+            returnType.typeArguments[0].toString(),
+            "Expected JsonElement fallback for null error schema",
+        )
+    }
+
+    @Test
+    fun `single Bearer scheme uses plain token param (no prefix)`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.Bearer("BearerAuth")),
+        )
+        val constructor = assertNotNull(cls.primaryConstructor)
+        val paramNames = constructor.parameters.map { it.name }
+        assertEquals(listOf("baseUrl", "token"), paramNames, "Single Bearer should use plain token param")
+    }
+
+    @Test
+    fun `single Bearer scheme overrides applyAuth with Bearer token`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.Bearer("BearerAuth")),
+        )
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("Authorization"), "Expected Authorization header")
+        assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
+        assertTrue(body.contains("token()"), "Expected token() invocation")
+    }
+
+    // -- SECU: applyAuth body assertions --
+
+    @Test
+    fun `Basic scheme applyAuth contains Authorization header with Base64 encoding`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.Basic("BasicAuth")),
+        )
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("Authorization"), "Expected Authorization header")
+        assertTrue(body.contains("Basic"), "Expected Basic prefix")
+        assertTrue(body.contains("Base64"), "Expected Base64 encoding")
+        assertTrue(body.contains("basicAuthTestUsername()"), "Expected username invocation")
+        assertTrue(body.contains("basicAuthTestPassword()"), "Expected password invocation")
+    }
+
+    @Test
+    fun `ApiKey HEADER scheme applyAuth appends header with spec parameter name`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.ApiKey("ApiKeyHeader", "X-API-Key", ApiKeyLocation.HEADER)),
+        )
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("X-API-Key"), "Expected X-API-Key header name")
+        assertTrue(body.contains("apiKeyHeaderTest()"), "Expected apiKeyHeaderTest() invocation")
+    }
+
+    @Test
+    fun `ApiKey QUERY scheme applyAuth appends query parameter`() {
+        val cls = clientClass(
+            listOf(endpoint()),
+            listOf(SecurityScheme.ApiKey("ApiKeyQuery", "api_key", ApiKeyLocation.QUERY)),
+        )
+        val applyAuth = cls.funSpecs.first { it.name == "applyAuth" }
+        val body = applyAuth.body.toString()
+        assertTrue(body.contains("parameters.append"), "Expected query parameters.append call")
+        assertTrue(body.contains("api_key"), "Expected api_key parameter name")
+        assertTrue(body.contains("apiKeyQueryTest()"), "Expected apiKeyQueryTest() invocation")
     }
 
     // -- DOCS-03: Endpoint KDoc generation --
