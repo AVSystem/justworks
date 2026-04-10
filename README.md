@@ -111,10 +111,36 @@ A `SerializersModule` is auto-generated when discriminated polymorphic types are
 | `application/json` request body | Supported         |
 | Form data / multipart           | Not supported     |
 
+### Security Schemes
+
+The plugin reads security schemes defined in the OpenAPI spec and generates authentication handling automatically.
+Only schemes referenced in the top-level `security` requirement are included.
+
+Parameter names are derived as `{schemeName}{specTitle}{Suffix}` where `schemeName` and `specTitle` are camel/PascalCased
+from the OpenAPI scheme key and `info.title` respectively. This scoping prevents collisions when multiple specs define
+schemes with the same name.
+
+| Scheme type | Location | Generated constructor parameter(s)                                             |
+|-------------|----------|--------------------------------------------------------------------------------|
+| HTTP Bearer | Header   | `{name}{title}Token: () -> String`                                             |
+| HTTP Basic  | Header   | `{name}{title}Username: () -> String`, `{name}{title}Password: () -> String`   |
+| API Key     | Header   | `{name}{title}: () -> String`                                                  |
+| API Key     | Query    | `{name}{title}: () -> String`                                                  |
+
+All auth parameters are `() -> String` lambdas, called on every request. This lets you supply providers that refresh
+credentials automatically.
+
+Each generated client overrides an `applyAuth()` method that applies all credentials to each request:
+
+- Bearer tokens are sent as `Authorization: Bearer {token}` headers
+- Basic auth is sent as `Authorization: Basic {base64(username:password)}` headers
+- Header API keys are appended to request headers using the parameter name from the spec
+- Query API keys are appended to URL query parameters
+
 ### Not Supported
 
-Callbacks, links, webhooks, XML content types, and OpenAPI vendor extensions (`x-*`) are not processed. The plugin logs
-warnings for callbacks and links found in a spec.
+Callbacks, links, webhooks, XML content types, OpenAPI vendor extensions (`x-*`), OAuth 2.0, OpenID Connect, and
+cookie-based API keys are not processed. The plugin logs warnings for callbacks and links found in a spec.
 
 ## Generated Code Structure
 
@@ -221,60 +247,75 @@ Here is how to use them.
 
 ### Dependencies
 
-Add the required runtime dependencies and enable the experimental context parameters compiler flag:
+Add the required runtime dependencies:
 
 ```kotlin
-kotlin {
-    compilerOptions {
-        freeCompilerArgs.add("-Xcontext-parameters")
-    }
-}
-
 dependencies {
     implementation("io.ktor:ktor-client-core:3.1.1")
     implementation("io.ktor:ktor-client-cio:3.1.1")       // or another engine (OkHttp, Apache, etc.)
     implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
     implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
     implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
-    implementation("io.arrow-kt:arrow-core:2.2.1.1")
 }
 ```
 
 ### Creating the Client
 
 Each generated client extends `ApiClientBase` and creates its own pre-configured `HttpClient` internally.
-You only need to provide the base URL and authentication credentials.
+You only need to provide the base URL and authentication credentials (if the spec defines security schemes).
 
 Class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). Untagged endpoints go
 to `DefaultApi`.
 
-```kotlin
-val client = PetsApi(
-    baseUrl = "https://api.example.com",
-    token = { "your-bearer-token" },
-)
-```
-
-The `token` parameter is a `() -> String` lambda called on every request and sent as a `Bearer` token in the
-`Authorization` header. This lets you supply a provider that refreshes automatically:
+**Bearer token** (spec title "Petstore", scheme name "BearerAuth"):
 
 ```kotlin
 val client = PetsApi(
     baseUrl = "https://api.example.com",
-    token = { tokenStore.getAccessToken() },
+    bearerAuthPetstoreToken = { "your-bearer-token" },
 )
 ```
+
+Auth parameters are `() -> String` lambdas called on every request, so you can supply a provider that refreshes
+automatically:
+
+```kotlin
+val client = PetsApi(
+    baseUrl = "https://api.example.com",
+    bearerAuthPetstoreToken = { tokenStore.getAccessToken() },
+)
+```
+
+**Multiple security schemes** -- parameters are scoped by scheme name and spec title:
+
+```kotlin
+val client = PetsApi(
+    baseUrl = "https://api.example.com",
+    bearerAuthPetstoreToken = { tokenStore.getAccessToken() },
+    internalApiKeyPetstore = { secrets.getApiKey() },
+)
+```
+
+**Basic auth** (scheme name "BasicAuth"):
+
+```kotlin
+val client = PetsApi(
+    baseUrl = "https://api.example.com",
+    basicAuthPetstoreUsername = { "user" },
+    basicAuthPetstorePassword = { "pass" },
+)
+```
+
+See [Security Schemes](#security-schemes) for the full mapping of scheme types to constructor parameters.
 
 The client implements `Closeable` -- call `client.close()` when done to release HTTP resources.
 
 ### Making Requests
 
-Every endpoint becomes a `suspend` function on the client. Functions use
-Arrow's [Raise](https://arrow-kt.io/docs/typed-errors/) for structured error handling -- they require a
-`context(Raise<HttpError>)` and return `HttpSuccess<T>` on success:
+Every endpoint becomes a `suspend` function on the client that returns `HttpSuccess<T>` on success and throws
+`HttpError` on failure:
 
 ```kotlin
-// Inside a Raise<HttpError> context (e.g., within either { ... })
 val result: HttpSuccess<List<Pet>> = client.listPets(limit = 10)
 println(result.body) // the deserialized response body
 println(result.code) // the HTTP status code
@@ -288,27 +329,21 @@ val result = client.findPets(status = "available", limit = 20)
 
 ### Error Handling
 
-Generated endpoints use [Arrow's Raise](https://arrow-kt.io/docs/typed-errors/) -- errors are raised, not returned as
-`Either`. Use Arrow's `either { ... }` block to obtain an `Either<HttpError, HttpSuccess<T>>`:
+Generated endpoints throw `HttpError` (a `RuntimeException` subclass) for non-2xx responses and network failures.
+Use standard `try`/`catch` to handle errors:
 
 ```kotlin
-val result: Either<HttpError, HttpSuccess<Pet>> = either {
-    client.getPet(petId = 123)
-}
-
-result.fold(
-    ifLeft = { error ->
-        when (error.type) {
-            HttpErrorType.Client -> println("Client error ${error.code}: ${error.message}")
-            HttpErrorType.Server -> println("Server error ${error.code}: ${error.message}")
-            HttpErrorType.Redirect -> println("Redirect ${error.code}")
-            HttpErrorType.Network -> println("Connection failed: ${error.message}")
-        }
-    },
-    ifRight = { success ->
-        println("Found: ${success.body.name}")
+try {
+    val success = client.getPet(petId = 123)
+    println("Found: ${success.body.name}")
+} catch (e: HttpError) {
+    when (e.type) {
+        HttpErrorType.Client -> println("Client error ${e.code}: ${e.message}")
+        HttpErrorType.Server -> println("Server error ${e.code}: ${e.message}")
+        HttpErrorType.Redirect -> println("Redirect ${e.code}")
+        HttpErrorType.Network -> println("Connection failed: ${e.message}")
     }
-)
+}
 ```
 
 `HttpError` is a data class with the following fields:
@@ -329,7 +364,7 @@ result.fold(
 | `Network`             | I/O failures, timeouts, DNS issues |
 
 Network errors (connection timeouts, DNS failures) are caught and reported as
-`HttpError(code = 0, ..., type = HttpErrorType.Network)` instead of propagating exceptions.
+`HttpError(code = 0, ..., type = HttpErrorType.Network)` instead of propagating raw exceptions.
 
 ## Publishing
 

@@ -33,13 +33,10 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has constructor with baseUrl and token provider`() {
+    fun `ApiClientBase has constructor with only baseUrl`() {
         val constructor = assertNotNull(classSpec.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
-        assertTrue("baseUrl" in paramNames)
-        assertTrue("token" in paramNames)
-        val tokenParam = constructor.parameters.first { it.name == "token" }
-        assertEquals("() -> kotlin.String", tokenParam.type.toString(), "token should be a () -> String lambda")
+        assertEquals(listOf("baseUrl"), paramNames)
     }
 
     @Test
@@ -58,14 +55,12 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has applyAuth function`() {
+    fun `ApiClientBase has empty applyAuth function`() {
         val applyAuth = classSpec.funSpecs.first { it.name == "applyAuth" }
         assertTrue(KModifier.PROTECTED in applyAuth.modifiers)
+        assertTrue(KModifier.OPEN in applyAuth.modifiers)
         assertNotNull(applyAuth.receiverType, "Expected HttpRequestBuilder receiver")
-        val body = applyAuth.body.toString()
-        assertTrue(body.contains("Authorization"), "Expected Authorization header")
-        assertTrue(body.contains("Bearer"), "Expected Bearer prefix")
-        assertTrue(body.contains("token()"), "Expected token() invocation")
+        assertTrue(applyAuth.body.toString().isBlank(), "Base applyAuth should be a no-op")
     }
 
     @OptIn(ExperimentalKotlinPoetApi::class)

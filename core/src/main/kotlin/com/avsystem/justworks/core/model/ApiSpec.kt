@@ -7,12 +7,29 @@ package com.avsystem.justworks.core.model
  * code generators. Bridges the raw Swagger Parser OAS model and the generated
  * Kotlin client/model source files.
  */
+sealed interface SecurityScheme {
+    val name: String
+
+    data class Bearer(override val name: String) : SecurityScheme
+
+    data class ApiKey(
+        override val name: String,
+        val parameterName: String,
+        val location: ApiKeyLocation,
+    ) : SecurityScheme
+
+    data class Basic(override val name: String) : SecurityScheme
+}
+
+enum class ApiKeyLocation { HEADER, QUERY }
+
 data class ApiSpec(
     val title: String,
     val version: String,
     val endpoints: List<Endpoint>,
     val schemas: List<SchemaModel>,
     val enums: List<EnumModel>,
+    val securitySchemes: List<SecurityScheme>,
 )
 
 data class Endpoint(
@@ -79,9 +96,7 @@ data class SchemaModel(
     val anyOf: List<TypeRef>?,
     val discriminator: Discriminator?,
     val underlyingType: TypeRef? = null,
-) {
-    val isNested get() = name.contains(".")
-}
+)
 
 data class PropertyModel(
     val name: String,

@@ -496,6 +496,129 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
+    fun `spec with security schemes generates ApiClientBase with applyAuth body`() {
+        writeFile(
+            "api/secured.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Secured API
+              version: '1.0'
+            paths:
+              /data:
+                get:
+                  operationId: getData
+                  summary: Get data
+                  tags:
+                    - data
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: object
+                            properties:
+                              value:
+                                type: string
+            components:
+              securitySchemes:
+                ApiKeyAuth:
+                  type: apiKey
+                  in: header
+                  name: X-API-Key
+                BasicAuth:
+                  type: http
+                  scheme: basic
+            security:
+              - ApiKeyAuth: []
+              - BasicAuth: []
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                implementation("io.arrow-kt:arrow-core:2.2.1.1")
+            }
+
+            kotlin {
+                compilerOptions {
+                    freeCompilerArgs.add("-Xcontext-parameters")
+                }
+            }
+
+            justworks {
+                specs {
+                    register("secured") {
+                        specFile = file("api/secured.yaml")
+                        packageName = "com.example.secured"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("justworksGenerateSecured").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateSecured")?.outcome,
+        )
+
+        // Auth params and applyAuth are generated in the per-spec client, not in ApiClientBase
+        val clientFile = projectDir
+            .resolve("build/generated/justworks/secured/com/example/secured/api/DataApi.kt")
+        assertTrue(clientFile.exists(), "DataApi.kt should exist")
+
+        val content = clientFile.readText()
+        assertTrue(content.contains("apiKeyAuthSecuredApi"), "Should contain apiKeyAuthSecuredApi param")
+        assertTrue(content.contains("basicAuthSecuredApiUsername"), "Should contain basicAuthSecuredApiUsername param")
+        assertTrue(content.contains("basicAuthSecuredApiPassword"), "Should contain basicAuthSecuredApiPassword param")
+        assertTrue(content.contains("X-API-Key"), "Should contain X-API-Key header name")
+        assertTrue(content.contains("applyAuth"), "Should contain applyAuth override")
+        assertTrue(content.contains("Authorization"), "Should contain Authorization header for Basic auth")
+
+        // ApiClientBase should NOT contain token — auth is per-client now
+        val apiClientBase = projectDir
+            .resolve("build/generated/justworks/shared/kotlin/com/avsystem/justworks/ApiClientBase.kt")
+        val baseContent = apiClientBase.readText()
+        assertFalse(baseContent.contains("token"), "ApiClientBase should not contain token param")
+        assertFalse(baseContent.contains("Bearer"), "ApiClientBase should not contain Bearer auth")
+    }
+
+    @Test
+    fun `spec without security schemes generates ApiClientBase without auth`() {
+        writeBuildFile()
+
+        runner("justworksGenerateMain").build()
+
+        val apiClientBase = projectDir
+            .resolve("build/generated/justworks/shared/kotlin/com/avsystem/justworks/ApiClientBase.kt")
+        assertTrue(apiClientBase.exists(), "ApiClientBase.kt should exist")
+
+        val content = apiClientBase.readText()
+        assertFalse(content.contains("token"), "Should not contain token param")
+        assertFalse(content.contains("Bearer"), "Should not contain Bearer auth")
+    }
+
+    @Test
     fun `empty specs container logs warning`() {
         writeFile(
             "build.gradle.kts",
@@ -516,5 +639,168 @@ class JustworksPluginFunctionalTest {
 
         assertEquals(TaskOutcome.UP_TO_DATE, result.task(":justworksGenerateAll")?.outcome)
         assertTrue(result.output.contains("justworks: no specs configured"))
+    }
+
+    @Test
+    fun `multiple specs with conflicting security schemes generate unique params in ApiClientBase`() {
+        writeFile(
+            "api/spec1.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: API 1
+              version: '1.0'
+            paths:
+              /health:
+                get:
+                  operationId: checkHealth
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              securitySchemes:
+                CommonAuth:
+                  type: apiKey
+                  in: header
+                  name: X-API-Key-1
+            security:
+              - CommonAuth: []
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "api/spec2.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: API 2
+              version: '1.0'
+            paths:
+              /health:
+                get:
+                  operationId: checkHealth
+                  responses:
+                    '200':
+                      description: OK
+            components:
+              securitySchemes:
+                CommonAuth:
+                  type: apiKey
+                  in: header
+                  name: X-API-Key-2
+            security:
+              - CommonAuth: []
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                id("com.avsystem.justworks")
+            }
+
+            justworks {
+                specs {
+                    register("spec1") {
+                        specFile = file("api/spec1.yaml")
+                        packageName = "com.example.spec1"
+                    }
+                    register("spec2") {
+                        specFile = file("api/spec2.yaml")
+                        packageName = "com.example.spec2"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        runner("justworksGenerateAll").build()
+
+        // Each client has its own auth param scoped by spec title — no cross-spec forwarding
+        val api1Client = projectDir
+            .resolve("build/generated/justworks/spec1/com/example/spec1/api/DefaultApi.kt")
+        assertTrue(api1Client.exists(), "DefaultApi for spec1 should exist")
+        val api1Content = api1Client.readText()
+        assertTrue(api1Content.contains("commonAuthApi1"), "Spec1 client should take commonAuthApi1")
+        assertTrue(api1Content.contains("X-API-Key-1"), "Spec1 client should reference X-API-Key-1")
+        assertTrue(
+            api1Content.contains("ApiClientBase(baseUrl)"),
+            "Spec1 client should pass only baseUrl to super",
+        )
+
+        val api2Client = projectDir
+            .resolve("build/generated/justworks/spec2/com/example/spec2/api/DefaultApi.kt")
+        assertTrue(api2Client.exists(), "DefaultApi for spec2 should exist")
+        val api2Content = api2Client.readText()
+        assertTrue(api2Content.contains("commonAuthApi2"), "Spec2 client should take commonAuthApi2")
+        assertTrue(api2Content.contains("X-API-Key-2"), "Spec2 client should reference X-API-Key-2")
+        assertTrue(
+            api2Content.contains("ApiClientBase(baseUrl)"),
+            "Spec2 client should pass only baseUrl to super",
+        )
+    }
+
+    @Test
+    fun `multiple specs with identical security schemes pass the build`() {
+        writeFile(
+            "api/spec1.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: API 1
+              version: '1.0'
+            components:
+              securitySchemes:
+                CommonAuth:
+                  type: apiKey
+                  in: header
+                  name: X-API-Key
+            security:
+              - CommonAuth: []
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "api/spec2.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: API 2
+              version: '1.0'
+            components:
+              securitySchemes:
+                CommonAuth:
+                  type: apiKey
+                  in: header
+                  name: X-API-Key
+            security:
+              - CommonAuth: []
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                id("com.avsystem.justworks")
+            }
+
+            justworks {
+                specs {
+                    register("spec1") {
+                        specFile = file("api/spec1.yaml")
+                        packageName = "com.example"
+                    }
+                    register("spec2") {
+                        specFile = file("api/spec2.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        runner("justworksSharedTypes").build()
     }
 }
