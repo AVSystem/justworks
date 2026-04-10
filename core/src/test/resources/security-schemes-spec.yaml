@@ -1,0 +1,54 @@
+openapi: "3.0.3"
+info:
+  title: Security Schemes Test API
+  version: "1.0.0"
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+    ApiKeyHeader:
+      type: apiKey
+      in: header
+      name: X-API-Key
+    ApiKeyQuery:
+      type: apiKey
+      in: query
+      name: api_key
+    BasicAuth:
+      type: http
+      scheme: basic
+    ApiKeyCookie:
+      type: apiKey
+      in: cookie
+      name: session_id
+    DigestAuth:
+      type: http
+      scheme: digest
+    OAuth2Auth:
+      type: oauth2
+      flows:
+        implicit:
+          authorizationUrl: https://example.com/oauth/authorize
+          scopes:
+            read: Read access
+
+security:
+  - BearerAuth: []
+  - ApiKeyHeader: []
+  - ApiKeyQuery: []
+  - BasicAuth: []
+  - ApiKeyCookie: []
+  - DigestAuth: []
+  - OAuth2Auth: []
+  - NonExistentScheme: []
+
+paths:
+  /health:
+    get:
+      operationId: getHealth
+      summary: Health check
+      responses:
+        "200":
+          description: OK

@@ -8,7 +8,7 @@ import org.gradle.api.tasks.OutputDirectory
 import org.gradle.api.tasks.TaskAction
 
 /**
- * Gradle task that generates shared types (HttpError, Success) once
+ * Gradle task that generates shared types (HttpError, Success, ApiClientBase) once
  * to a fixed output directory shared across all spec configurations.
  */
 @CacheableTask
@@ -20,9 +20,7 @@ abstract class JustworksSharedTypesTask : DefaultTask() {
     @TaskAction
     fun generate() {
         val outDir = outputDir.get().asFile.recreateDirectory()
-
         val count = CodeGenerator.generateSharedTypes(outDir)
-
         logger.lifecycle("Generated $count shared type files")
     }
 }
