@@ -4,7 +4,6 @@ import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.SecurityScheme
 import org.junit.jupiter.api.TestInstance
-import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertIs
@@ -12,14 +11,7 @@ import kotlin.test.assertTrue
 
 @TestInstance(TestInstance.Lifecycle.PER_CLASS)
 class SpecParserSecurityTest : SpecParserTestBase() {
-    private lateinit var apiSpec: ApiSpec
-
-    @BeforeTest
-    fun setUp() {
-        if (!::apiSpec.isInitialized) {
-            apiSpec = parseSpec(loadResource("security-schemes-spec.yaml"))
-        }
-    }
+    private val apiSpec: ApiSpec by lazy { parseSpec(loadResource("security-schemes-spec.yaml")) }
 
     @Test
     fun `parses exactly 4 security schemes from fixture`() {
