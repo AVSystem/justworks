@@ -394,6 +394,67 @@ class ClientGeneratorTest {
         assertEquals("com.example.model.Pet", returnType.typeArguments[1].toString())
     }
 
+    // -- CONT-03b: Default response fallback --
+
+    @Test
+    fun `default response is used when no 2xx response is defined`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "default" to Response("default", "Default response", TypeRef.Reference("Pet")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("com.example.model.Pet", returnType.typeArguments[1].toString())
+    }
+
+    @Test
+    fun `2xx response takes precedence over default response`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "default" to Response("default", "Error", TypeRef.Reference("Error")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("com.example.model.Pet", returnType.typeArguments[1].toString())
+    }
+
+    @Test
+    fun `default response without schema returns Unit`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "default" to Response("default", "No content", null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.Unit", returnType.typeArguments[1].toString())
+    }
+
+    @Test
+    fun `default response is ignored when 2xx exists but has no schema`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "204" to Response("204", "No content", null),
+                "default" to Response("default", "Fallback", TypeRef.Reference("Error")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.Unit", returnType.typeArguments[1].toString())
+        assertTrue(funSpec.body.toString().contains("toEmptyResult"), "Expected toEmptyResult for Unit success type")
+    }
+
     // -- Client class extends ApiClientBase --
 
     @Test
