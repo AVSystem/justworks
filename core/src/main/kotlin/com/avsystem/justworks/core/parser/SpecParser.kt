@@ -17,6 +17,7 @@ import com.avsystem.justworks.core.accumulate
 import com.avsystem.justworks.core.accumulateAndReturnNull
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.ensureOrAccumulate
+import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.ContentType
@@ -547,12 +548,14 @@ object SpecParser {
         }
     }
 
-    private fun containsUnknown(type: TypeRef): Boolean = when (type) {
-        TypeRef.Unknown -> true
-        is TypeRef.Array -> containsUnknown(type.items)
-        is TypeRef.Map -> containsUnknown(type.valueType)
-        is TypeRef.Inline -> type.properties.any { containsUnknown(it.type) }
-        is TypeRef.Primitive, is TypeRef.Reference -> false
+    private val containsUnknown = DeepRecursiveFunction<TypeRef, Boolean> { typeRef ->
+        when (typeRef) {
+            TypeRef.Unknown -> true
+            is TypeRef.Array -> callRecursive(typeRef.items)
+            is TypeRef.Map -> callRecursive(typeRef.valueType)
+            is TypeRef.Inline -> typeRef.properties.any { callRecursive(it.type) }
+            is TypeRef.Primitive, is TypeRef.Reference -> false
+        }
     }
 
     private fun generateOperationId(method: HttpMethod, path: String): String {
