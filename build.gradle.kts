@@ -2,7 +2,7 @@ import com.vanniktech.maven.publish.MavenPublishBaseExtension
 import com.vanniktech.maven.publish.SonatypeHost
 
 plugins {
-    kotlin("jvm") version "2.3.0" apply false
+    kotlin("jvm") version "2.3.20" apply false
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0" apply false
     id("org.jetbrains.kotlinx.kover") version "0.9.8" apply false
     id("com.vanniktech.maven.publish") version "0.30.0" apply false
