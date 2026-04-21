@@ -38,5 +38,19 @@ object SpecValidator {
                 Issue.Warning("Links are not supported in v1 and will be ignored")
             }
         }
+
+        openApi.paths
+            .orEmpty()
+            .asSequence()
+            .flatMap { (path, pathItem) ->
+                pathItem.readOperationsMap().map { (method, op) ->
+                    op.operationId to "${method.name} $path"
+                }
+            }.groupBy({ it.first }, { it.second })
+            .forEach { (opId, occurrences) ->
+                ensureOrAccumulate(occurrences.size == 1) {
+                    Issue.Warning("Duplicate operationId '$opId' found at: ${occurrences.joinToString()}")
+                }
+            }
     }
 }
