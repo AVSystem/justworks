@@ -23,7 +23,7 @@ mavenPublishing {
 }
 
 dependencies {
-    implementation("io.swagger.parser.v3:swagger-parser:2.1.39")
+    implementation("io.swagger.parser.v3:swagger-parser:2.1.40")
     implementation("com.squareup:kotlinpoet:2.2.0")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.7.1")
     implementation("io.arrow-kt:arrow-core:2.2.1.1")
