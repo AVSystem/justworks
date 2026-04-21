@@ -439,6 +439,22 @@ class ClientGeneratorTest {
         assertEquals("kotlin.Unit", returnType.typeArguments[1].toString())
     }
 
+    @Test
+    fun `default response is ignored when 2xx exists but has no schema`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "204" to Response("204", "No content", null),
+                "default" to Response("default", "Fallback", TypeRef.Reference("Error")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.Unit", returnType.typeArguments[1].toString())
+        assertTrue(funSpec.body.toString().contains("toEmptyResult"), "Expected toEmptyResult for Unit success type")
+    }
+
     // -- Client class extends ApiClientBase --
 
     @Test

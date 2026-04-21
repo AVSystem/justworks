@@ -294,12 +294,13 @@ internal object ClientGenerator {
 
     context(_: Hierarchy)
     private fun resolveReturnType(endpoint: Endpoint): TypeName {
-        val twoXxSchema = endpoint.responses.entries
+        val has2xxResponse = endpoint.responses.keys.any { it.startsWith("2") }
+        val twoXxSchema = endpoint.responses
             .asSequence()
             .filter { it.key.startsWith("2") }
             .firstNotNullOfOrNull { it.value.schema }
 
-        val schema = twoXxSchema ?: endpoint.responses["default"]?.schema
+        val schema = twoXxSchema ?: if (!has2xxResponse) endpoint.responses["default"]?.schema else null
 
         return schema?.toTypeName() ?: UNIT
     }
