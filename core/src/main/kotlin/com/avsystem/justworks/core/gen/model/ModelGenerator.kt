@@ -32,7 +32,6 @@ import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
 import com.avsystem.justworks.core.gen.resolveInlineTypes
 import com.avsystem.justworks.core.gen.resolveSerialName
 import com.avsystem.justworks.core.gen.resolveTypeRef
-import com.avsystem.justworks.core.gen.sanitizeKdoc
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
@@ -206,7 +205,7 @@ internal object ModelGenerator {
         }
 
         if (schema.description != null) {
-            parentBuilder.addKdoc("%L", schema.description.sanitizeKdoc())
+            parentBuilder.addKdoc("%L", schema.description)
         }
 
         // Generate nested subtypes
@@ -308,7 +307,7 @@ internal object ModelGenerator {
                 .builder(kotlinName, type)
                 .initializer(kotlinName)
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
-                .apply { prop.description?.let { addKdoc("%L", it.sanitizeKdoc()) } }
+                .apply { prop.description?.let { addKdoc("%L", it) } }
                 .build()
         }
 
@@ -316,7 +315,7 @@ internal object ModelGenerator {
         builder.addProperties(propertySpecs)
 
         if (schema.description != null) {
-            builder.addKdoc("%L", schema.description.sanitizeKdoc())
+            builder.addKdoc("%L", schema.description)
         }
     }
 
@@ -339,7 +338,7 @@ internal object ModelGenerator {
         )
 
         if (schema.description != null) {
-            typeSpec.addKdoc("%L", schema.description.sanitizeKdoc())
+            typeSpec.addKdoc("%L", schema.description)
         }
 
         return FileSpec.builder(className).addType(typeSpec.build()).build()
@@ -565,13 +564,13 @@ internal object ModelGenerator {
                         .builder(SERIAL_NAME)
                         .addMember("%S", value.name)
                         .build(),
-                ).apply { value.description?.let { addKdoc("%L", it.sanitizeKdoc()) } }
+                ).apply { value.description?.let { addKdoc("%L", it) } }
                 .build()
             typeSpec.addEnumConstant(enumRegistry.register(value.name.toEnumConstantName()), anonymousClass)
         }
 
         if (enum.description != null) {
-            typeSpec.addKdoc("%L", enum.description.sanitizeKdoc())
+            typeSpec.addKdoc("%L", enum.description)
         }
 
         return FileSpec
@@ -682,7 +681,7 @@ internal object ModelGenerator {
         val typeAlias = TypeAliasSpec.builder(schema.name, primitiveType)
 
         if (schema.description != null) {
-            typeAlias.addKdoc("%L", schema.description.sanitizeKdoc())
+            typeAlias.addKdoc("%L", schema.description)
         }
 
         return FileSpec
