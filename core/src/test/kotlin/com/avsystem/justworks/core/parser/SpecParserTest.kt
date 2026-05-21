@@ -160,6 +160,45 @@ class SpecParserTest : SpecParserTestBase() {
         assertEquals("Pet", itemType.schemaName)
     }
 
+    // -- SPEC-01b: HEAD, OPTIONS, TRACE parsing --
+
+    @Test
+    fun `parse spec with HEAD, OPTIONS and TRACE methods`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths:
+              /health:
+                head:
+                  operationId: healthHead
+                  tags: [Health]
+                  responses:
+                    '200':
+                      description: OK
+                options:
+                  operationId: healthOptions
+                  tags: [Health]
+                  responses:
+                    '200':
+                      description: OK
+                trace:
+                  operationId: healthTrace
+                  tags: [Health]
+                  responses:
+                    '200':
+                      description: OK
+            """.trimIndent().toTempFile(),
+        )
+
+        assertEquals(3, spec.endpoints.size)
+        assertEquals(HttpMethod.HEAD, spec.endpoints.find { it.operationId == "healthHead" }?.method)
+        assertEquals(HttpMethod.OPTIONS, spec.endpoints.find { it.operationId == "healthOptions" }?.method)
+        assertEquals(HttpMethod.TRACE, spec.endpoints.find { it.operationId == "healthTrace" }?.method)
+    }
+
     // -- SPEC-02: $ref resolution --
 
     @Test

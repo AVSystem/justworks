@@ -126,6 +126,9 @@ class ClientGeneratorTest {
             HttpMethod.PUT to "updatePet",
             HttpMethod.DELETE to "deletePet",
             HttpMethod.PATCH to "patchPet",
+            HttpMethod.HEAD to "headPet",
+            HttpMethod.OPTIONS to "optionsPet",
+            HttpMethod.TRACE to "tracePet",
         )
         val endpoints = methods.map { (method, opId) -> endpoint(method = method, operationId = opId) }.toTypedArray()
         val cls = clientClass(*endpoints)
@@ -150,6 +153,24 @@ class ClientGeneratorTest {
         assertTrue(
             funBodies["patchPet"]!!.contains("request.patch(") || funBodies["patchPet"]!!.contains("request.`patch`("),
             "PATCH method expected",
+        )
+        assertTrue(
+            funBodies["headPet"]!!.contains("request.head(") || funBodies["headPet"]!!.contains("request.`head`("),
+            "HEAD method expected",
+        )
+        assertTrue(
+            funBodies["optionsPet"]!!.contains("request.options(") ||
+                funBodies["optionsPet"]!!.contains("request.`options`("),
+            "OPTIONS method expected",
+        )
+        assertTrue(
+            funBodies["tracePet"]!!.contains("request.request(") ||
+                funBodies["tracePet"]!!.contains("request.`request`("),
+            "TRACE method expected (via request builder)",
+        )
+        assertTrue(
+            funBodies["tracePet"]!!.contains("HttpMethod(\"TRACE\")"),
+            "TRACE should set explicit HttpMethod",
         )
     }
 

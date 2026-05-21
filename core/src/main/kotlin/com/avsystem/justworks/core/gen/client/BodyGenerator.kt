@@ -12,12 +12,15 @@ import com.avsystem.justworks.core.gen.FORM_DATA_FUN
 import com.avsystem.justworks.core.gen.GET_FUN
 import com.avsystem.justworks.core.gen.HEADERS_CLASS
 import com.avsystem.justworks.core.gen.HEADERS_FUN
+import com.avsystem.justworks.core.gen.HEAD_FUN
 import com.avsystem.justworks.core.gen.HTTP_HEADERS
 import com.avsystem.justworks.core.gen.HTTP_METHOD_CLASS
+import com.avsystem.justworks.core.gen.OPTIONS_FUN
 import com.avsystem.justworks.core.gen.PARAMETERS_FUN
 import com.avsystem.justworks.core.gen.PATCH_FUN
 import com.avsystem.justworks.core.gen.POST_FUN
 import com.avsystem.justworks.core.gen.PUT_FUN
+import com.avsystem.justworks.core.gen.REQUEST_FUN
 import com.avsystem.justworks.core.gen.SAFE_CALL
 import com.avsystem.justworks.core.gen.SET_BODY_FUN
 import com.avsystem.justworks.core.gen.SUBMIT_FORM_FUN
@@ -77,9 +80,15 @@ internal object BodyGenerator {
             HttpMethod.PUT -> PUT_FUN
             HttpMethod.DELETE -> DELETE_FUN
             HttpMethod.PATCH -> PATCH_FUN
+            HttpMethod.HEAD -> HEAD_FUN
+            HttpMethod.OPTIONS -> OPTIONS_FUN
+            HttpMethod.TRACE -> REQUEST_FUN
         }
 
         beginControlFlow("$CLIENT.%M(%L)", httpMethodFun, urlString)
+        if (endpoint.method == HttpMethod.TRACE) {
+            addStatement("method = %T(%S)", HTTP_METHOD_CLASS, "TRACE")
+        }
         addCommonRequestParts(params)
 
         if (endpoint.requestBody != null) {
@@ -193,7 +202,11 @@ internal object BodyGenerator {
 
     private fun CodeBlock.Builder.addHttpMethodIfNeeded(method: HttpMethod) {
         if (method != HttpMethod.POST) {
-            addStatement("method = %T.%L", HTTP_METHOD_CLASS, method.name.toPascalCase())
+            if (method == HttpMethod.TRACE) {
+                addStatement("method = %T(%S)", HTTP_METHOD_CLASS, "TRACE")
+            } else {
+                addStatement("method = %T.%L", HTTP_METHOD_CLASS, method.name.toPascalCase())
+            }
         }
     }
 
