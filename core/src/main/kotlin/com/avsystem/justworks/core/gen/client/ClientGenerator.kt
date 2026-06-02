@@ -280,7 +280,7 @@ internal object ClientGenerator {
     private fun resolveErrorType(endpoint: Endpoint): TypeName {
         val errorSchemas = endpoint.responses.entries
             .asSequence()
-            .filter { !it.key.startsWith("2") }
+            .filter { !it.key.startsWith("2") && it.key != "default" }
             .mapNotNull { it.value.schema }
             .map { it.toTypeName() }
             .distinct()
@@ -293,10 +293,16 @@ internal object ClientGenerator {
     }
 
     context(_: Hierarchy)
-    private fun resolveReturnType(endpoint: Endpoint): TypeName = endpoint.responses.entries
-        .asSequence()
-        .filter { it.key.startsWith("2") }
-        .firstNotNullOfOrNull { it.value.schema }
-        ?.toTypeName()
-        ?: UNIT
+    private fun resolveReturnType(endpoint: Endpoint): TypeName {
+        val twoXxSchema = endpoint.responses
+            .asSequence()
+            .filter { it.key.startsWith("2") }
+            .firstNotNullOfOrNull { it.value.schema }
+
+        val schema = twoXxSchema ?: endpoint.responses["default"]?.schema.takeIf {
+            endpoint.responses.none { it.key.startsWith("2") }
+        }
+
+        return schema?.toTypeName() ?: UNIT
+    }
 }

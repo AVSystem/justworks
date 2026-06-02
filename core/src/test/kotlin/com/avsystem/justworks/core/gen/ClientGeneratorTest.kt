@@ -126,6 +126,9 @@ class ClientGeneratorTest {
             HttpMethod.PUT to "updatePet",
             HttpMethod.DELETE to "deletePet",
             HttpMethod.PATCH to "patchPet",
+            HttpMethod.HEAD to "headPet",
+            HttpMethod.OPTIONS to "optionsPet",
+            HttpMethod.TRACE to "tracePet",
         )
         val endpoints = methods.map { (method, opId) -> endpoint(method = method, operationId = opId) }.toTypedArray()
         val cls = clientClass(*endpoints)
@@ -150,6 +153,24 @@ class ClientGeneratorTest {
         assertTrue(
             funBodies["patchPet"]!!.contains("request.patch(") || funBodies["patchPet"]!!.contains("request.`patch`("),
             "PATCH method expected",
+        )
+        assertTrue(
+            funBodies["headPet"]!!.contains("request.head(") || funBodies["headPet"]!!.contains("request.`head`("),
+            "HEAD method expected",
+        )
+        assertTrue(
+            funBodies["optionsPet"]!!.contains("request.options(") ||
+                funBodies["optionsPet"]!!.contains("request.`options`("),
+            "OPTIONS method expected",
+        )
+        assertTrue(
+            funBodies["tracePet"]!!.contains("request.request(") ||
+                funBodies["tracePet"]!!.contains("request.`request`("),
+            "TRACE method expected (via request builder)",
+        )
+        assertTrue(
+            funBodies["tracePet"]!!.contains("HttpMethod(\"TRACE\")"),
+            "TRACE should set explicit HttpMethod",
         )
     }
 
@@ -392,6 +413,67 @@ class ClientGeneratorTest {
         val funSpec = cls.funSpecs.first { it.name == "removePet" }
         val returnType = funSpec.returnType as ParameterizedTypeName
         assertEquals("com.example.model.Pet", returnType.typeArguments[1].toString())
+    }
+
+    // -- CONT-03b: Default response fallback --
+
+    @Test
+    fun `default response is used when no 2xx response is defined`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "default" to Response("default", "Default response", TypeRef.Reference("Pet")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("com.example.model.Pet", returnType.typeArguments[1].toString())
+    }
+
+    @Test
+    fun `2xx response takes precedence over default response`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Reference("Pet")),
+                "default" to Response("default", "Error", TypeRef.Reference("Error")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("com.example.model.Pet", returnType.typeArguments[1].toString())
+    }
+
+    @Test
+    fun `default response without schema returns Unit`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "default" to Response("default", "No content", null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.Unit", returnType.typeArguments[1].toString())
+    }
+
+    @Test
+    fun `default response is ignored when 2xx exists but has no schema`() {
+        val ep = endpoint(
+            operationId = "getStatus",
+            responses = mapOf(
+                "204" to Response("204", "No content", null),
+                "default" to Response("default", "Fallback", TypeRef.Reference("Error")),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getStatus" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.Unit", returnType.typeArguments[1].toString())
+        assertTrue(funSpec.body.toString().contains("toEmptyResult"), "Expected toEmptyResult for Unit success type")
     }
 
     // -- Client class extends ApiClientBase --
