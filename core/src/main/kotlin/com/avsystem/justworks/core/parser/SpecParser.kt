@@ -16,6 +16,8 @@ import com.avsystem.justworks.core.Warnings
 import com.avsystem.justworks.core.accumulate
 import com.avsystem.justworks.core.accumulateAndReturnNull
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
+import com.avsystem.justworks.core.ensureOrAccumulate
+import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.ContentType
@@ -186,11 +188,15 @@ object SpecParser {
             }
 
             val syntheticModels = collectModels(emptySet(), emptyList())
+            val schemas = schemaModels + syntheticModels
+
+            warnOnUnknownTypes(endpoints, schemas)
+
             return ApiSpec(
                 title = title,
                 version = info?.version ?: "0.0.0",
                 endpoints = endpoints,
-                schemas = schemaModels + syntheticModels,
+                schemas = schemas,
                 enums = enumModels,
                 securitySchemes = securitySchemes,
             )
@@ -505,6 +511,52 @@ object SpecParser {
                     defaultValue = propSchema.default,
                 )
             }
+
+    context(_: Warnings)
+    private fun warnOnUnknownTypes(endpoints: List<Endpoint>, schemas: List<SchemaModel>) {
+        for (schema in schemas) {
+            for (prop in schema.properties) {
+                ensureOrAccumulate(!containsUnknown(prop.type)) {
+                    Issue.Warning(
+                        "Schema '${schema.name}', property '${prop.name}': unresolvable type mapped to JsonElement",
+                    )
+                }
+            }
+            if (schema.underlyingType != null) {
+                ensureOrAccumulate(!containsUnknown(schema.underlyingType)) {
+                    Issue.Warning(
+                        "Schema '${schema.name}': underlying type contains unresolvable type mapped to JsonElement",
+                    )
+                }
+            }
+        }
+        for (endpoint in endpoints) {
+            val op = endpoint.operationId
+            for ((code, response) in endpoint.responses) {
+                ensureOrAccumulate(response.schema == null || !containsUnknown(response.schema)) {
+                    Issue.Warning("Endpoint '$op', response '$code': unresolvable type mapped to JsonElement")
+                }
+            }
+            ensureOrAccumulate(endpoint.requestBody == null || !containsUnknown(endpoint.requestBody.schema)) {
+                Issue.Warning("Endpoint '$op', request body: unresolvable type mapped to JsonElement")
+            }
+            for (param in endpoint.parameters) {
+                ensureOrAccumulate(!containsUnknown(param.schema)) {
+                    Issue.Warning("Endpoint '$op', parameter '${param.name}': unresolvable type mapped to JsonElement")
+                }
+            }
+        }
+    }
+
+    private val containsUnknown = DeepRecursiveFunction<TypeRef, Boolean> { typeRef ->
+        when (typeRef) {
+            TypeRef.Unknown -> true
+            is TypeRef.Array -> callRecursive(typeRef.items)
+            is TypeRef.Map -> callRecursive(typeRef.valueType)
+            is TypeRef.Inline -> typeRef.properties.any { callRecursive(it.type) }
+            is TypeRef.Primitive, is TypeRef.Reference -> false
+        }
+    }
 
     private fun generateOperationId(method: HttpMethod, path: String): String {
         val segments = path
