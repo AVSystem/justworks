@@ -48,7 +48,7 @@ object SpecValidator {
                 }
             }.groupBy({ it.first }, { it.second })
             .forEach { (opId, occurrences) ->
-                ensureOrAccumulate(occurrences.size == 1) {
+                ensureOrAccumulate(occurrences.size <= 1) {
                     Issue.Warning("Duplicate operationId '$opId' found at: ${occurrences.joinToString()}")
                 }
             }
