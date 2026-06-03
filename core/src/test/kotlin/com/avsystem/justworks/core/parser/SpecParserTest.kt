@@ -160,6 +160,166 @@ class SpecParserTest : SpecParserTestBase() {
         assertEquals("Pet", itemType.schemaName)
     }
 
+    // -- SPEC-01b: Warnings for unknown schemas --
+
+    @Test
+    fun `parse spec with unresolvable schema emits warning`() {
+        val result = SpecParser.parse(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Container:
+                  type: object
+                  properties:
+                    data:
+                      type: object
+            """.trimIndent().toTempFile(),
+        )
+        assertIs<ParseResult.Success<*>>(result)
+        val warningMessages = result.warnings.map { it.message }
+        assertTrue(
+            warningMessages.any {
+                it.contains("Container") && it.contains("data") && it.contains("JsonElement")
+            },
+            "Expected warning about unresolvable type, got: $warningMessages",
+        )
+    }
+
+    @Test
+    fun `parse spec without unknown schemas has no unknown-type warnings`() {
+        val result = SpecParser.parse(loadResource("petstore.yaml"))
+        assertIs<ParseResult.Success<*>>(result)
+        val unknownWarnings = result.warnings.filter {
+            it.message.contains("JsonElement")
+        }
+        assertTrue(
+            unknownWarnings.isEmpty(),
+            "Petstore should have no unknown-type warnings, got: $unknownWarnings",
+        )
+    }
+
+    @Test
+    fun `parse spec with additionalProperties true emits underlying-type warning`() {
+        val result = SpecParser.parse(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                FreeForm:
+                  type: object
+                  additionalProperties: true
+            """.trimIndent().toTempFile(),
+        )
+        assertIs<ParseResult.Success<*>>(result)
+        val warningMessages = result.warnings.map { it.message }
+        assertTrue(
+            warningMessages.any { it.contains("FreeForm") && it.contains("JsonElement") },
+            "Expected underlying-type warning about Map(Unknown), got: $warningMessages",
+        )
+    }
+
+    @Test
+    fun `parse spec with array missing items emits underlying-type warning`() {
+        val result = SpecParser.parse(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                LooseList:
+                  type: array
+            """.trimIndent().toTempFile(),
+        )
+        assertIs<ParseResult.Success<*>>(result)
+        val warningMessages = result.warnings.map { it.message }
+        assertTrue(
+            warningMessages.any { it.contains("LooseList") && it.contains("JsonElement") },
+            "Expected underlying-type warning about Array(Unknown), got: $warningMessages",
+        )
+    }
+
+    @Test
+    fun `parse spec with unresolvable endpoint response emits warning`() {
+        val result = SpecParser.parse(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths:
+              /things:
+                get:
+                  operationId: listThings
+                  responses:
+                    '200':
+                      description: OK
+                      content:
+                        application/json:
+                          schema:
+                            type: array
+            """.trimIndent().toTempFile(),
+        )
+        assertIs<ParseResult.Success<*>>(result)
+        val warningMessages = result.warnings.map { it.message }
+        assertTrue(
+            warningMessages.any {
+                it.contains("listThings") && it.contains("200") && it.contains("JsonElement")
+            },
+            "Expected endpoint response warning, got: $warningMessages",
+        )
+    }
+
+    // -- SPEC-01b: HEAD, OPTIONS, TRACE parsing --
+
+    @Test
+    fun `parse spec with HEAD, OPTIONS and TRACE methods`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths:
+              /health:
+                head:
+                  operationId: healthHead
+                  tags: [Health]
+                  responses:
+                    '200':
+                      description: OK
+                options:
+                  operationId: healthOptions
+                  tags: [Health]
+                  responses:
+                    '200':
+                      description: OK
+                trace:
+                  operationId: healthTrace
+                  tags: [Health]
+                  responses:
+                    '200':
+                      description: OK
+            """.trimIndent().toTempFile(),
+        )
+
+        assertEquals(3, spec.endpoints.size)
+        assertEquals(HttpMethod.HEAD, spec.endpoints.find { it.operationId == "healthHead" }?.method)
+        assertEquals(HttpMethod.OPTIONS, spec.endpoints.find { it.operationId == "healthOptions" }?.method)
+        assertEquals(HttpMethod.TRACE, spec.endpoints.find { it.operationId == "healthTrace" }?.method)
+    }
+
     // -- SPEC-02: $ref resolution --
 
     @Test
