@@ -22,7 +22,6 @@ import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
-import com.avsystem.justworks.core.gen.sanitizeKdoc
 import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
@@ -253,15 +252,15 @@ internal object ClientGenerator {
         }
 
         val kdocParts = mutableListOf<String>()
-        endpoint.summary?.let { kdocParts.add(it.sanitizeKdoc()) }
+        endpoint.summary?.let { kdocParts.add(it) }
         endpoint.description?.let {
             if (kdocParts.isNotEmpty()) kdocParts.add("")
-            kdocParts.add(it.sanitizeKdoc())
+            kdocParts.add(it)
         }
         val paramDocs = endpoint.parameters.filter { it.description != null }
         if (paramDocs.isNotEmpty() && kdocParts.isNotEmpty()) kdocParts.add("")
         paramDocs.forEach { param ->
-            kdocParts.add("@param ${param.name.toCamelCase()} ${param.description?.sanitizeKdoc()}")
+            kdocParts.add("@param ${param.name.toCamelCase()} ${param.description}")
         }
         if (kdocParts.isNotEmpty()) {
             funBuilder.addKdoc("%L", kdocParts.joinToString("\n"))
