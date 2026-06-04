@@ -26,7 +26,7 @@ dependencies {
     implementation("io.swagger.parser.v3:swagger-parser:2.1.43")
     implementation("com.squareup:kotlinpoet:2.3.0")
     implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
-    implementation("io.arrow-kt:arrow-core:2.2.2.1")
+    implementation("io.arrow-kt:arrow-core:2.2.3")
     testImplementation(kotlin("test"))
 }
 
