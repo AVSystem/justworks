@@ -467,7 +467,10 @@ object SpecParser {
 
         "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-        "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
+        "array" -> TypeRef.Array(
+            items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown,
+            unique = uniqueItems == true,
+        )
 
         "object" -> when (val ap = additionalProperties) {
             is Schema<*> -> TypeRef.Map(ap.toTypeRef())

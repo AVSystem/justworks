@@ -42,7 +42,7 @@ internal data class InlineSchemaKey(val properties: Set<PropertyKey>) {
                 contextHint = "",
             )
 
-            is TypeRef.Array -> TypeRef.Array(normalizeType(type.items))
+            is TypeRef.Array -> TypeRef.Array(normalizeType(type.items), type.unique)
 
             is TypeRef.Map -> TypeRef.Map(normalizeType(type.valueType))
 
