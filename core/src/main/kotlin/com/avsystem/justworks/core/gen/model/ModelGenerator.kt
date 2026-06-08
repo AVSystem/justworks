@@ -27,6 +27,8 @@ import com.avsystem.justworks.core.gen.SERIAL_NAME
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
 import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
+import com.avsystem.justworks.core.gen.collectInlineEnums
+import com.avsystem.justworks.core.gen.collectInlineSchemas
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
 import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
@@ -77,8 +79,8 @@ internal object ModelGenerator {
     context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
     fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
         ensureReserved(spec, nameRegistry)
-        val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec)
-        val (inlineEnums, enumNameMap) = collectAllInlineEnums(spec)
+        val (inlineSchemas, nameMap) = spec.collectInlineSchemas()
+        val (inlineEnums, enumNameMap) = spec.collectInlineEnums()
         val resolvedSpec = spec.resolveInlineTypes(nameMap, enumNameMap)
 
         val resolvedInlineSchemas = inlineSchemas.map { schema ->
@@ -128,86 +130,6 @@ internal object ModelGenerator {
         nameRegistry.reserve(UUID_SERIALIZER.simpleName)
         nameRegistry.reserve(SERIALIZERS_MODULE.simpleName)
     }
-
-    /**
-     * Gathers all top-level [TypeRef]s from a spec's endpoints (request/response bodies)
-     * and component schema properties. Used as the traversal roots for inline collection.
-     */
-    private fun topLevelTypeRefs(spec: ApiSpec): List<TypeRef> {
-        val endpointRefs = spec.endpoints.flatMap { endpoint ->
-            val requestRef = endpoint.requestBody?.schema
-            val responseRefs = endpoint.responses.values.map { it.schema }
-            responseRefs + requestRef
-        }
-        val schemaPropertyRefs = spec.schemas.flatMap { schema -> schema.properties.map { it.type } }
-        return (endpointRefs + schemaPropertyRefs).filterNotNull()
-    }
-
-    /**
-     * Shared collect → deduplicate → name → model pipeline for inline definitions.
-     * [collect] traverses the type roots, [keyOf] gives the structural dedup key,
-     * and [modelOf] builds the output model.
-     */
-    context(nameRegistry: NameRegistry)
-    private fun <T : TypeRef.InlineType, K, M> collectInlineDefinitions(
-        spec: ApiSpec,
-        collect: (List<TypeRef>) -> List<T>,
-        keyOf: (T) -> K,
-        modelOf: (T, String) -> M,
-    ): Pair<List<M>, Map<K, String>> {
-        val nameMap = mutableMapOf<K, String>()
-        val models = collect(topLevelTypeRefs(spec))
-            .asSequence()
-            .sortedBy { it.contextHint }
-            .distinctBy(keyOf)
-            .map { ref ->
-                val generatedName = nameRegistry.register(ref.contextHint.toInlinedName())
-                nameMap[keyOf(ref)] = generatedName
-                modelOf(ref, generatedName)
-            }.toList()
-        return models to nameMap
-    }
-
-    context(_: NameRegistry)
-    private fun collectAllInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> =
-        collectInlineDefinitions(
-            spec = spec,
-            collect = { walkTypeRefs(it).filterIsInstance<TypeRef.Inline>() },
-            keyOf = { InlineSchemaKey.from(it.properties, it.requiredProperties) },
-            modelOf = { ref, name ->
-                SchemaModel(
-                    name = name,
-                    description = null,
-                    properties = ref.properties,
-                    requiredProperties = ref.requiredProperties,
-                    allOf = null,
-                    oneOf = null,
-                    anyOf = null,
-                    discriminator = null,
-                )
-            },
-        )
-
-    /**
-     * Collects all inline enums (enums declared in array items or inline on a property,
-     * i.e. not as named component schemas), deduplicates them structurally, registers a
-     * generated name for each, and builds the corresponding [EnumModel]s.
-     */
-    context(_: NameRegistry)
-    private fun collectAllInlineEnums(spec: ApiSpec): Pair<List<EnumModel>, Map<InlineEnumKey, String>> =
-        collectInlineDefinitions(
-            spec = spec,
-            collect = { walkTypeRefs(it).filterIsInstance<TypeRef.InlineEnum>() },
-            keyOf = InlineEnumKey::from,
-            modelOf = { ref, name ->
-                EnumModel(
-                    name = name,
-                    description = null,
-                    type = ref.backingType,
-                    values = ref.values.map { EnumModel.Value(it) },
-                )
-            },
-        )
 
     context(hierarchy: Hierarchy)
     private fun generateSchemaFiles(schema: SchemaModel): List<FileSpec> = when {
@@ -625,23 +547,6 @@ internal object ModelGenerator {
             .addType(typeSpec.build())
             .build()
     }
-
-    /**
-     * Walks a [TypeRef] tree, yielding every reachable node (self included),
-     * descending through arrays, maps, and inline object properties.
-     * Callers filter for the variant they need; structural deduplication happens downstream.
-     * Uses [DeepRecursiveFunction] for stack safety on deeply nested schemas.
-     */
-    private val descendants = DeepRecursiveFunction<TypeRef, List<TypeRef>> { type ->
-        listOf(type) + when (type) {
-            is TypeRef.Inline -> type.properties.flatMap { callRecursive(it.type) }
-            is TypeRef.Array -> callRecursive(type.items)
-            is TypeRef.Map -> callRecursive(type.valueType)
-            is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> emptyList()
-        }
-    }
-
-    private fun walkTypeRefs(roots: List<TypeRef>): List<TypeRef> = roots.flatMap { descendants(it) }
 
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
