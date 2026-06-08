@@ -173,7 +173,7 @@ internal object ModelGenerator {
     private fun collectAllInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> =
         collectInlineDefinitions(
             spec = spec,
-            collect = ::collectInlineTypeRefs,
+            collect = { walkTypeRefs(it).filterIsInstance<TypeRef.Inline>() },
             keyOf = { InlineSchemaKey.from(it.properties, it.requiredProperties) },
             contextHintOf = { it.contextHint },
             modelOf = { ref, name ->
@@ -199,7 +199,7 @@ internal object ModelGenerator {
     private fun collectAllInlineEnums(spec: ApiSpec): Pair<List<EnumModel>, Map<InlineEnumKey, String>> =
         collectInlineDefinitions(
             spec = spec,
-            collect = ::collectInlineEnumRefs,
+            collect = { walkTypeRefs(it).filterIsInstance<TypeRef.InlineEnum>() },
             keyOf = InlineEnumKey::from,
             contextHintOf = { it.contextHint },
             modelOf = { ref, name ->
@@ -630,49 +630,22 @@ internal object ModelGenerator {
     }
 
     /**
-     * Iteratively collects all [TypeRef.Inline] instances from a [TypeRef] tree.
+     * Iteratively walks a [TypeRef] tree, yielding every reachable node.
+     * Descends through arrays, maps, and inline object properties; a visited guard on
+     * [TypeRef.Inline] prevents infinite recursion on self-referential schemas.
+     * Callers filter for the variant they need; structural deduplication happens downstream.
      */
-    private fun collectInlineTypeRefs(initialTodo: List<TypeRef?>): List<TypeRef.Inline> {
-        val todo = ArrayDeque(initialTodo.filterNotNull())
-        val visited = linkedSetOf<TypeRef.Inline>()
-
-        while (todo.isNotEmpty()) {
-            when (val current = todo.removeFirst()) {
-                is TypeRef.Inline if visited.add(current) -> {
-                    todo.addAll(current.properties.map { it.type })
-                }
-
-                is TypeRef.Array -> {
-                    todo.addFirst(current.items)
-                }
-
-                is TypeRef.Map -> {
-                    todo.addFirst(current.valueType)
-                }
-
-                else -> {}
-            }
-        }
-        return visited.toList()
-    }
-
-    /**
-     * Iteratively collects all [TypeRef.InlineEnum] instances from a [TypeRef] tree,
-     * descending through arrays, maps, and inline object properties.
-     */
-    private fun collectInlineEnumRefs(initialTodo: List<TypeRef?>): List<TypeRef.InlineEnum> {
-        val todo = ArrayDeque(initialTodo.filterNotNull())
+    private fun walkTypeRefs(roots: List<TypeRef>): List<TypeRef> {
+        val todo = ArrayDeque(roots)
         val visitedInline = mutableSetOf<TypeRef.Inline>()
-        val enums = mutableSetOf<TypeRef.InlineEnum>()
+        val result = mutableListOf<TypeRef>()
 
         while (todo.isNotEmpty()) {
-            when (val current = todo.removeFirst()) {
-                is TypeRef.InlineEnum -> {
-                    enums += current
-                }
-
-                is TypeRef.Inline if visitedInline.add(current) -> {
-                    todo += current.properties.map { it.type }
+            val current = todo.removeFirst()
+            result += current
+            when (current) {
+                is TypeRef.Inline -> {
+                    if (visitedInline.add(current)) todo += current.properties.map { it.type }
                 }
 
                 is TypeRef.Array -> {
@@ -686,7 +659,7 @@ internal object ModelGenerator {
                 else -> {}
             }
         }
-        return enums.toList()
+        return result
     }
 
     private val SchemaModel.isPrimitiveOnly: Boolean
