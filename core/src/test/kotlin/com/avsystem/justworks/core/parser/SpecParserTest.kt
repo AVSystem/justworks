@@ -865,7 +865,7 @@ class SpecParserTest : SpecParserTestBase() {
                 }
             }
 
-            is TypeRef.Primitive, TypeRef.Unknown, null -> {}
+            is TypeRef.Primitive, is TypeRef.InlineEnum, TypeRef.Unknown, null -> {}
         }
     }
 }

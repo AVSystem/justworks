@@ -15,6 +15,12 @@ sealed interface TypeRef {
         val contextHint: String, // "request"|"response"|property name for context-aware naming
     ) : TypeRef
 
+    data class InlineEnum(
+        val values: List<String>,
+        val backingType: EnumBackingType,
+        val contextHint: String, // property/item name for context-aware naming
+    ) : TypeRef
+
     data object Unknown : TypeRef
 }
 

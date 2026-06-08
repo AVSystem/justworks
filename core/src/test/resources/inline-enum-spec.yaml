@@ -1,0 +1,33 @@
+openapi: 3.0.0
+info:
+  title: Inline Enum Test
+  version: 1.0.0
+paths:
+  /speedtest:
+    post:
+      operationId: executeSpeedTest
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ExecuteSpeedTestRequest'
+      responses:
+        '200':
+          description: ok
+components:
+  schemas:
+    ExecuteSpeedTestRequest:
+      type: object
+      properties:
+        measurements:
+          type: array
+          items:
+            type: string
+            enum:
+              - DownloadSpeed
+              - UploadSpeed
+          uniqueItems: true
+          default:
+            - DownloadSpeed
+            - UploadSpeed

@@ -46,6 +46,8 @@ internal data class InlineSchemaKey(val properties: Set<PropertyKey>) {
 
             is TypeRef.Map -> TypeRef.Map(normalizeType(type.valueType))
 
+            is TypeRef.InlineEnum -> type.copy(contextHint = "")
+
             else -> type
         }
     }
