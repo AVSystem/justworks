@@ -27,17 +27,16 @@ private val descendants = DeepRecursiveFunction<TypeRef, List<TypeRef>> { type -
     }
 }
 
-private inline fun <reified T : TypeRef.InlineType> ApiSpec.inlineRefs(): List<T> =
-    topLevelTypeRefs().flatMap { descendants(it) }.filterIsInstance<T>()
+private inline fun <reified T : TypeRef.InlineType> ApiSpec.inlineRefs(): Sequence<T> =
+    topLevelTypeRefs().asSequence().flatMap { descendants(it) }.filterIsInstance<T>()
 
 context(nameRegistry: NameRegistry)
-private fun <T : TypeRef.InlineType, K, M> Iterable<T>.toNamedModels(
+private fun <T : TypeRef.InlineType, K, M> Sequence<T>.toNamedModels(
     keyOf: (T) -> K,
     modelOf: (T, String) -> M,
 ): Pair<List<M>, Map<K, String>> {
     val nameMap = mutableMapOf<K, String>()
-    val models = asSequence()
-        .sortedBy { it.contextHint }
+    val models = sortedBy { it.contextHint }
         .distinctBy(keyOf)
         .map { ref ->
             val generatedName = nameRegistry.register(ref.contextHint.toInlinedName())
@@ -48,8 +47,8 @@ private fun <T : TypeRef.InlineType, K, M> Iterable<T>.toNamedModels(
 }
 
 context(_: NameRegistry)
-internal fun ApiSpec.collectInlineSchemas(): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> =
-    inlineRefs<TypeRef.Inline>().toNamedModels(
+internal fun collectInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> =
+    spec.inlineRefs<TypeRef.Inline>().toNamedModels(
         keyOf = { InlineSchemaKey.from(it.properties, it.requiredProperties) },
         modelOf = { ref, name ->
             SchemaModel(
@@ -66,8 +65,8 @@ internal fun ApiSpec.collectInlineSchemas(): Pair<List<SchemaModel>, Map<InlineS
     )
 
 context(_: NameRegistry)
-internal fun ApiSpec.collectInlineEnums(): Pair<List<EnumModel>, Map<InlineEnumKey, String>> =
-    inlineRefs<TypeRef.InlineEnum>().toNamedModels(
+internal fun collectInlineEnums(spec: ApiSpec): Pair<List<EnumModel>, Map<InlineEnumKey, String>> =
+    spec.inlineRefs<TypeRef.InlineEnum>().toNamedModels(
         keyOf = InlineEnumKey::from,
         modelOf = { ref, name ->
             EnumModel(

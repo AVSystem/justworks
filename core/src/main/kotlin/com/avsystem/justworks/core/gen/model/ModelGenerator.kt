@@ -7,8 +7,6 @@ import com.avsystem.justworks.core.gen.EXPERIMENTAL_SERIALIZATION_API
 import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.INSTANT
-import com.avsystem.justworks.core.gen.InlineEnumKey
-import com.avsystem.justworks.core.gen.InlineSchemaKey
 import com.avsystem.justworks.core.gen.JSON_CLASS_DISCRIMINATOR
 import com.avsystem.justworks.core.gen.JSON_CONTENT_POLYMORPHIC_SERIALIZER
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
@@ -38,7 +36,6 @@ import com.avsystem.justworks.core.gen.resolveTypeRef
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
-import com.avsystem.justworks.core.gen.toInlinedName
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiSpec
@@ -79,8 +76,8 @@ internal object ModelGenerator {
     context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
     fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
         ensureReserved(spec, nameRegistry)
-        val (inlineSchemas, nameMap) = spec.collectInlineSchemas()
-        val (inlineEnums, enumNameMap) = spec.collectInlineEnums()
+        val (inlineSchemas, nameMap) = collectInlineSchemas(spec)
+        val (inlineEnums, enumNameMap) = collectInlineEnums(spec)
         val resolvedSpec = spec.resolveInlineTypes(nameMap, enumNameMap)
 
         val resolvedInlineSchemas = inlineSchemas.map { schema ->
