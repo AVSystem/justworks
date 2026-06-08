@@ -146,23 +146,22 @@ internal object ModelGenerator {
     /**
      * Shared collect → deduplicate → name → model pipeline for inline definitions.
      * [collect] traverses the type roots, [keyOf] gives the structural dedup key,
-     * [contextHintOf] supplies the name seed, and [modelOf] builds the output model.
+     * and [modelOf] builds the output model.
      */
     context(nameRegistry: NameRegistry)
-    private fun <T, K, M> collectInlineDefinitions(
+    private fun <T : TypeRef.InlineType, K, M> collectInlineDefinitions(
         spec: ApiSpec,
         collect: (List<TypeRef>) -> List<T>,
         keyOf: (T) -> K,
-        contextHintOf: (T) -> String,
         modelOf: (T, String) -> M,
     ): Pair<List<M>, Map<K, String>> {
         val nameMap = mutableMapOf<K, String>()
         val models = collect(topLevelTypeRefs(spec))
             .asSequence()
-            .sortedBy(contextHintOf)
+            .sortedBy { it.contextHint }
             .distinctBy(keyOf)
             .map { ref ->
-                val generatedName = nameRegistry.register(contextHintOf(ref).toInlinedName())
+                val generatedName = nameRegistry.register(ref.contextHint.toInlinedName())
                 nameMap[keyOf(ref)] = generatedName
                 modelOf(ref, generatedName)
             }.toList()
@@ -175,7 +174,6 @@ internal object ModelGenerator {
             spec = spec,
             collect = { walkTypeRefs(it).filterIsInstance<TypeRef.Inline>() },
             keyOf = { InlineSchemaKey.from(it.properties, it.requiredProperties) },
-            contextHintOf = { it.contextHint },
             modelOf = { ref, name ->
                 SchemaModel(
                     name = name,
@@ -201,7 +199,6 @@ internal object ModelGenerator {
             spec = spec,
             collect = { walkTypeRefs(it).filterIsInstance<TypeRef.InlineEnum>() },
             keyOf = InlineEnumKey::from,
-            contextHintOf = { it.contextHint },
             modelOf = { ref, name ->
                 EnumModel(
                     name = name,
