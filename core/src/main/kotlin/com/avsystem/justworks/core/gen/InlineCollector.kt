@@ -8,13 +8,11 @@ import com.avsystem.justworks.core.model.TypeRef
 // Hoists anonymous TypeRef.InlineType nodes into named models, producing the
 // structural-key -> name maps consumed by resolveInlineTypes.
 
-private fun ApiSpec.topLevelTypeRefs(): List<TypeRef> {
-    val endpointRefs = endpoints.flatMap { endpoint ->
-        val requestRef = endpoint.requestBody?.schema
-        val responseRefs = endpoint.responses.values.map { it.schema }
-        responseRefs + requestRef
+private fun ApiSpec.topLevelTypeRefs(): Sequence<TypeRef> {
+    val endpointRefs = endpoints.asSequence().flatMap { endpoint ->
+        endpoint.responses.values.map { it.schema } + endpoint.requestBody?.schema
     }
-    val schemaPropertyRefs = schemas.flatMap { schema -> schema.properties.map { it.type } }
+    val schemaPropertyRefs = schemas.asSequence().flatMap { schema -> schema.properties.map { it.type } }
     return (endpointRefs + schemaPropertyRefs).filterNotNull()
 }
 
@@ -28,7 +26,7 @@ private val descendants = DeepRecursiveFunction<TypeRef, List<TypeRef>> { type -
 }
 
 private inline fun <reified T : TypeRef.InlineType> ApiSpec.inlineRefs(): Sequence<T> =
-    topLevelTypeRefs().asSequence().flatMap { descendants(it) }.filterIsInstance<T>()
+    topLevelTypeRefs().flatMap { descendants(it) }.filterIsInstance<T>()
 
 context(nameRegistry: NameRegistry)
 private fun <T : TypeRef.InlineType, K, M> Sequence<T>.toNamedModels(
