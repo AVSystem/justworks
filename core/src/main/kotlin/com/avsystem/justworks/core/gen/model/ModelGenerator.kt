@@ -630,37 +630,21 @@ internal object ModelGenerator {
     }
 
     /**
-     * Iteratively walks a [TypeRef] tree, yielding every reachable node.
-     * Descends through arrays, maps, and inline object properties; a visited guard on
-     * [TypeRef.Inline] prevents infinite recursion on self-referential schemas.
+     * Walks a [TypeRef] tree, yielding every reachable node (self included),
+     * descending through arrays, maps, and inline object properties.
      * Callers filter for the variant they need; structural deduplication happens downstream.
+     * Uses [DeepRecursiveFunction] for stack safety on deeply nested schemas.
      */
-    private fun walkTypeRefs(roots: List<TypeRef>): List<TypeRef> {
-        val todo = ArrayDeque(roots)
-        val visitedInline = mutableSetOf<TypeRef.Inline>()
-        val result = mutableListOf<TypeRef>()
-
-        while (todo.isNotEmpty()) {
-            val current = todo.removeFirst()
-            result += current
-            when (current) {
-                is TypeRef.Inline -> {
-                    if (visitedInline.add(current)) todo += current.properties.map { it.type }
-                }
-
-                is TypeRef.Array -> {
-                    todo += current.items
-                }
-
-                is TypeRef.Map -> {
-                    todo += current.valueType
-                }
-
-                else -> {}
-            }
+    private val descendants = DeepRecursiveFunction<TypeRef, List<TypeRef>> { type ->
+        listOf(type) + when (type) {
+            is TypeRef.Inline -> type.properties.flatMap { callRecursive(it.type) }
+            is TypeRef.Array -> callRecursive(type.items)
+            is TypeRef.Map -> callRecursive(type.valueType)
+            is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> emptyList()
         }
-        return result
     }
+
+    private fun walkTypeRefs(roots: List<TypeRef>): List<TypeRef> = roots.flatMap { descendants(it) }
 
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
