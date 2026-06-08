@@ -676,11 +676,11 @@ internal object ModelGenerator {
                 }
 
                 is TypeRef.Array -> {
-                    todo.addFirst(current.items)
+                    todo.add(current.items)
                 }
 
                 is TypeRef.Map -> {
-                    todo.addFirst(current.valueType)
+                    todo.add(current.valueType)
                 }
 
                 else -> {}
