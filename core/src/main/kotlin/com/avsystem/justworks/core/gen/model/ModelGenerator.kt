@@ -662,25 +662,25 @@ internal object ModelGenerator {
      */
     private fun collectInlineEnumRefs(initialTodo: List<TypeRef?>): List<TypeRef.InlineEnum> {
         val todo = ArrayDeque(initialTodo.filterNotNull())
-        val visitedInline = linkedSetOf<TypeRef.Inline>()
-        val enums = linkedSetOf<TypeRef.InlineEnum>()
+        val visitedInline = mutableSetOf<TypeRef.Inline>()
+        val enums = mutableSetOf<TypeRef.InlineEnum>()
 
         while (todo.isNotEmpty()) {
             when (val current = todo.removeFirst()) {
                 is TypeRef.InlineEnum -> {
-                    enums.add(current)
+                    enums += current
                 }
 
                 is TypeRef.Inline if visitedInline.add(current) -> {
-                    todo.addAll(current.properties.map { it.type })
+                    todo += current.properties.map { it.type }
                 }
 
                 is TypeRef.Array -> {
-                    todo.add(current.items)
+                    todo += current.items
                 }
 
                 is TypeRef.Map -> {
-                    todo.add(current.valueType)
+                    todo += current.valueType
                 }
 
                 else -> {}
