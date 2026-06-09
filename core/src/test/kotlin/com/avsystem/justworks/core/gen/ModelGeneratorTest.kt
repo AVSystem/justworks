@@ -23,10 +23,11 @@ import kotlin.test.assertTrue
 class ModelGeneratorTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = context(
+    private fun generate(spec: ApiSpec, generateKdoc: Boolean = true) = context(
         Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(spec.schemas)
         },
+        OutputOptions(generateKdoc = generateKdoc),
         NameRegistry(),
     ) {
         ModelGenerator.generate(spec)
@@ -144,6 +145,13 @@ class ModelGeneratorTest {
         val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         assertTrue(typeSpec.kdoc.toString().contains("A pet in the store"), "Expected KDoc from description")
+    }
+
+    @Test
+    fun `generateKdoc false suppresses schema KDoc`() {
+        val files = generate(spec(schemas = listOf(petSchema)), generateKdoc = false)
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        assertTrue(typeSpec.kdoc.toString().isEmpty(), "Expected no KDoc when generateKdoc=false")
     }
 
     @Test

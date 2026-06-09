@@ -16,6 +16,7 @@ import com.avsystem.justworks.core.gen.K_SERIALIZER
 import com.avsystem.justworks.core.gen.LOCAL_DATE
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.OPT_IN
+import com.avsystem.justworks.core.gen.OutputOptions
 import com.avsystem.justworks.core.gen.PRIMITIVE_KIND
 import com.avsystem.justworks.core.gen.PRIMITIVE_SERIAL_DESCRIPTOR_FUN
 import com.avsystem.justworks.core.gen.SERIALIZABLE
@@ -70,10 +71,10 @@ import kotlin.time.Instant
 internal object ModelGenerator {
     data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
 
-    context(_: Hierarchy, _: NameRegistry)
+    context(_: Hierarchy, _: OutputOptions, _: NameRegistry)
     fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
 
-    context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
+    context(hierarchy: Hierarchy, _: OutputOptions, nameRegistry: NameRegistry)
     fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
         ensureReserved(spec, nameRegistry)
         val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec)
@@ -162,7 +163,7 @@ internal object ModelGenerator {
         return schemas to nameMap
     }
 
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, _: OutputOptions)
     private fun generateSchemaFiles(schema: SchemaModel): List<FileSpec> = when {
         !schema.anyOf.isNullOrEmpty() || !schema.oneOf.isNullOrEmpty() -> {
             if (schema.name in hierarchy.anyOfWithoutDiscriminator) {
@@ -188,7 +189,7 @@ internal object ModelGenerator {
     /**
      * Generates a sealed interface with nested subtypes for oneOf or anyOf-with-discriminator schemas.
      */
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, options: OutputOptions)
     private fun generateSealedHierarchy(schema: SchemaModel): FileSpec {
         val className = ClassName(hierarchy.modelPackage, schema.name)
 
@@ -204,7 +205,7 @@ internal object ModelGenerator {
             )
         }
 
-        if (schema.description != null) {
+        if (options.generateKdoc && schema.description != null) {
             parentBuilder.addKdoc("%L", schema.description)
         }
 
@@ -239,7 +240,7 @@ internal object ModelGenerator {
      * Builds a nested TypeSpec for a variant inside a sealed interface hierarchy.
      * Generates an `object` when there are no properties, or a `data class` otherwise.
      */
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, _: OutputOptions)
     private fun buildNestedVariant(
         variantSchema: SchemaModel?,
         variantName: String,
@@ -281,7 +282,7 @@ internal object ModelGenerator {
      * Builds primary constructor and data class properties from a schema's property list.
      * Shared by [generateDataClass] and [buildNestedVariant].
      */
-    context(_: Hierarchy)
+    context(hierarchy: Hierarchy, options: OutputOptions)
     private fun buildConstructorAndProperties(schema: SchemaModel, builder: TypeSpec.Builder) {
         val sortedProps = schema.properties.sortedBy { prop ->
             when {
@@ -307,14 +308,14 @@ internal object ModelGenerator {
                 .builder(kotlinName, type)
                 .initializer(kotlinName)
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
-                .apply { prop.description?.let { addKdoc("%L", it) } }
+                .apply { if (options.generateKdoc) prop.description?.let { addKdoc("%L", it) } }
                 .build()
         }
 
         builder.primaryConstructor(constructorBuilder.build())
         builder.addProperties(propertySpecs)
 
-        if (schema.description != null) {
+        if (options.generateKdoc && schema.description != null) {
             builder.addKdoc("%L", schema.description)
         }
     }
@@ -323,7 +324,7 @@ internal object ModelGenerator {
      * Generates a sealed interface for anyOf without discriminator schemas.
      * Only used for the JsonContentPolymorphicSerializer pattern.
      */
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, options: OutputOptions)
     private fun generateSealedInterface(schema: SchemaModel): FileSpec {
         val className = ClassName(hierarchy.modelPackage, schema.name)
 
@@ -337,7 +338,7 @@ internal object ModelGenerator {
                 .build(),
         )
 
-        if (schema.description != null) {
+        if (options.generateKdoc && schema.description != null) {
             typeSpec.addKdoc("%L", schema.description)
         }
 
@@ -347,7 +348,7 @@ internal object ModelGenerator {
     /**
      * Generates a JsonContentPolymorphicSerializer object for an anyOf schema without discriminator.
      */
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, _: OutputOptions)
     private fun generatePolymorphicSerializer(schema: SchemaModel): FileSpec {
         val sealedClassName = ClassName(hierarchy.modelPackage, schema.name)
         val serializerClassName = ClassName(hierarchy.modelPackage, "${schema.name}Serializer")
@@ -405,7 +406,7 @@ internal object ModelGenerator {
     /**
      * Builds the body code for selectDeserializer using field-presence heuristics.
      */
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, _: OutputOptions)
     private fun buildSelectDeserializerBody(
         parentName: String,
         uniqueFieldsPerVariant: Map<String, String?>,
@@ -449,7 +450,7 @@ internal object ModelGenerator {
      * Generates a data class FileSpec, with superinterfaces and @SerialName resolved from hierarchy.
      * Used for: standalone schemas, allOf composed classes, and anyOf-without-discriminator variants.
      */
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, _: OutputOptions)
     private fun generateDataClass(schema: SchemaModel): FileSpec {
         val className = ClassName(hierarchy.modelPackage, schema.name)
 
@@ -502,7 +503,7 @@ internal object ModelGenerator {
      * Formats a default value from a PropertyModel for use in KotlinPoet ParameterSpec.defaultValue().
      */
 
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, _: OutputOptions)
     private fun formatDefaultValue(prop: PropertyModel): CodeBlock = when (prop.type) {
         is TypeRef.Primitive -> {
             when (prop.type.type) {
@@ -549,7 +550,7 @@ internal object ModelGenerator {
         }
     }
 
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, options: OutputOptions)
     private fun generateEnumClass(enum: EnumModel): FileSpec {
         val className = ClassName(hierarchy.modelPackage, enum.name)
 
@@ -564,12 +565,12 @@ internal object ModelGenerator {
                         .builder(SERIAL_NAME)
                         .addMember("%S", value.name)
                         .build(),
-                ).apply { value.description?.let { addKdoc("%L", it) } }
+                ).apply { if (options.generateKdoc) value.description?.let { addKdoc("%L", it) } }
                 .build()
             typeSpec.addEnumConstant(enumRegistry.register(value.name.toEnumConstantName()), anonymousClass)
         }
 
-        if (enum.description != null) {
+        if (options.generateKdoc && enum.description != null) {
             typeSpec.addKdoc("%L", enum.description)
         }
 
@@ -674,13 +675,13 @@ internal object ModelGenerator {
             .build()
     }
 
-    context(hierarchy: Hierarchy)
+    context(hierarchy: Hierarchy, options: OutputOptions)
     private fun generateTypeAlias(schema: SchemaModel, primitiveType: TypeName): FileSpec {
         val className = ClassName(hierarchy.modelPackage, schema.name)
 
         val typeAlias = TypeAliasSpec.builder(schema.name, primitiveType)
 
-        if (schema.description != null) {
+        if (options.generateKdoc && schema.description != null) {
             typeAlias.addKdoc("%L", schema.description)
         }
 
