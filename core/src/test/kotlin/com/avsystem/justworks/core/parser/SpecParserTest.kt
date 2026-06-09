@@ -13,6 +13,7 @@ import java.io.File
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -138,6 +139,44 @@ class SpecParserTest : SpecParserTestBase() {
 
         val bodyType = assertIs<TypeRef.Reference>(body.schema)
         assertEquals("NewPet", bodyType.schemaName)
+    }
+
+    @Test
+    fun `schema-level nullable controls property nullability independent of required`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Nullable API
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Thing:
+                  type: object
+                  required:
+                    - requiredNullable
+                    - requiredPlain
+                  properties:
+                    requiredNullable:
+                      type: string
+                      nullable: true
+                    requiredPlain:
+                      type: string
+                    optionalNullable:
+                      type: string
+                      nullable: true
+                    optionalPlain:
+                      type: string
+            """.trimIndent().toTempFile(),
+        )
+        val thing = spec.schemas.find { it.name == "Thing" } ?: fail("Thing not found")
+        val props = thing.properties.associateBy { it.name }
+
+        assertTrue(props.getValue("requiredNullable").nullable, "required + nullable:true should be nullable")
+        assertFalse(props.getValue("requiredPlain").nullable, "required without nullable should be non-nullable")
+        assertTrue(props.getValue("optionalNullable").nullable, "optional + nullable:true should be nullable")
+        assertTrue(props.getValue("optionalPlain").nullable, "optional should be nullable")
     }
 
     @Test

@@ -396,7 +396,10 @@ object SpecParser {
 
         val topLevelProperties = schema.propertyModels(required, contextCreator)
         val finalProperties =
-            properties.plus(topLevelProperties).values.map { prop -> prop.copy(nullable = prop.name !in required) }
+            properties.plus(topLevelProperties).values.map { prop ->
+                // Recompute against the union of required sets, but keep schema-level `nullable: true`.
+                prop.copy(nullable = prop.name !in required || prop.nullable)
+            }
 
         return finalProperties to required
     }
@@ -507,7 +510,8 @@ object SpecParser {
                     name = propName,
                     type = propSchema.toTypeRef(createContext(propName)),
                     description = propSchema.description,
-                    nullable = propName !in required,
+                    // OpenAPI 3.0 `nullable: true` makes a property nullable independent of `required`.
+                    nullable = propName !in required || propSchema.nullable == true,
                     defaultValue = propSchema.default,
                 )
             }
