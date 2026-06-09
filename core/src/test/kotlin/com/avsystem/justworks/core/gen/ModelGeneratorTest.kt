@@ -69,6 +69,51 @@ class ModelGeneratorTest {
     }
 
     @Test
+    fun `deprecated schema gets Deprecated annotation on data class`() {
+        val files = generate(spec(schemas = listOf(petSchema.copy(deprecated = true))))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val annotations = typeSpec.annotations.map { it.typeName.toString() }
+        assertTrue("kotlin.Deprecated" in annotations, "Expected @Deprecated on deprecated schema")
+    }
+
+    @Test
+    fun `non-deprecated schema has no Deprecated annotation`() {
+        val files = generate(spec(schemas = listOf(petSchema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val annotations = typeSpec.annotations.map { it.typeName.toString() }
+        assertTrue("kotlin.Deprecated" !in annotations, "Did not expect @Deprecated")
+    }
+
+    @Test
+    fun `deprecated property gets Deprecated annotation`() {
+        val schema = SchemaModel(
+            name = "Thing",
+            description = null,
+            properties = listOf(
+                PropertyModel("legacy", TypeRef.Primitive(PrimitiveType.STRING), null, false, deprecated = true),
+                PropertyModel("current", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+            ),
+            requiredProperties = setOf("legacy", "current"),
+            allOf = null,
+            oneOf = null,
+            anyOf = null,
+            discriminator = null,
+        )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val legacy = typeSpec.propertySpecs.first { it.name == "legacy" }
+        val current = typeSpec.propertySpecs.first { it.name == "current" }
+        assertTrue(
+            legacy.annotations.any { it.typeName.toString() == "kotlin.Deprecated" },
+            "Expected @Deprecated on deprecated property",
+        )
+        assertTrue(
+            current.annotations.none { it.typeName.toString() == "kotlin.Deprecated" },
+            "Did not expect @Deprecated on normal property",
+        )
+    }
+
+    @Test
     fun `generates class with Serializable annotation`() {
         val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]

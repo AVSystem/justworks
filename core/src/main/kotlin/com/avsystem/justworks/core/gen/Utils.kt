@@ -5,8 +5,10 @@ import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
+import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.BOOLEAN
 import com.squareup.kotlinpoet.BYTE_ARRAY
+import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.DOUBLE
 import com.squareup.kotlinpoet.FLOAT
 import com.squareup.kotlinpoet.INT
@@ -16,6 +18,12 @@ import com.squareup.kotlinpoet.MAP
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
+
+internal val DEPRECATED = ClassName("kotlin", "Deprecated")
+
+/** Builds a `@Deprecated("<message>")` annotation. */
+internal fun deprecatedAnnotation(message: String): AnnotationSpec =
+    AnnotationSpec.builder(DEPRECATED).addMember("%S", message).build()
 
 internal val TypeRef.properties: List<PropertyModel>
     get() = when (this) {

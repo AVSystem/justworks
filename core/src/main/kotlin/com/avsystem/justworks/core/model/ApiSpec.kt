@@ -42,6 +42,7 @@ data class Endpoint(
     val parameters: List<Parameter>,
     val requestBody: RequestBody?,
     val responses: Map<String, Response>,
+    val deprecated: Boolean = false,
 )
 
 enum class HttpMethod {
@@ -61,6 +62,7 @@ data class Parameter(
     val required: Boolean,
     val schema: TypeRef,
     val description: String?,
+    val deprecated: Boolean = false,
 )
 
 // todo: add cookie
@@ -99,6 +101,7 @@ data class SchemaModel(
     val anyOf: List<TypeRef>?,
     val discriminator: Discriminator?,
     val underlyingType: TypeRef? = null,
+    val deprecated: Boolean = false,
 )
 
 data class PropertyModel(
@@ -107,6 +110,7 @@ data class PropertyModel(
     val description: String?,
     val nullable: Boolean,
     val defaultValue: Any? = null,
+    val deprecated: Boolean = false,
 )
 
 data class EnumModel(

@@ -26,6 +26,7 @@ import com.avsystem.justworks.core.gen.SERIAL_NAME
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
 import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
+import com.avsystem.justworks.core.gen.deprecatedAnnotation
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
 import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
@@ -195,6 +196,10 @@ internal object ModelGenerator {
         val parentBuilder = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
         parentBuilder.addAnnotation(SERIALIZABLE)
 
+        if (schema.deprecated) {
+            parentBuilder.addAnnotation(deprecatedAnnotation("This schema is deprecated."))
+        }
+
         if (schema.discriminator != null) {
             parentBuilder.addAnnotation(
                 AnnotationSpec
@@ -307,8 +312,10 @@ internal object ModelGenerator {
                 .builder(kotlinName, type)
                 .initializer(kotlinName)
                 .addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", prop.name).build())
-                .apply { prop.description?.let { addKdoc("%L", it) } }
-                .build()
+                .apply {
+                    if (prop.deprecated) addAnnotation(deprecatedAnnotation("This property is deprecated."))
+                    prop.description?.let { addKdoc("%L", it) }
+                }.build()
         }
 
         builder.primaryConstructor(constructorBuilder.build())
@@ -336,6 +343,10 @@ internal object ModelGenerator {
                 .addMember("with = %T::class", serializerClassName)
                 .build(),
         )
+
+        if (schema.deprecated) {
+            typeSpec.addAnnotation(deprecatedAnnotation("This schema is deprecated."))
+        }
 
         if (schema.description != null) {
             typeSpec.addKdoc("%L", schema.description)
@@ -465,6 +476,10 @@ internal object ModelGenerator {
             .addModifiers(KModifier.DATA)
             .addAnnotation(SERIALIZABLE)
             .addSuperinterfaces(superinterfaces)
+
+        if (schema.deprecated) {
+            typeSpec.addAnnotation(deprecatedAnnotation("This schema is deprecated."))
+        }
 
         if (serialName != null) {
             typeSpec.addAnnotation(
@@ -679,6 +694,10 @@ internal object ModelGenerator {
         val className = ClassName(hierarchy.modelPackage, schema.name)
 
         val typeAlias = TypeAliasSpec.builder(schema.name, primitiveType)
+
+        if (schema.deprecated) {
+            typeAlias.addAnnotation(deprecatedAnnotation("This schema is deprecated."))
+        }
 
         if (schema.description != null) {
             typeAlias.addKdoc("%L", schema.description)
