@@ -276,14 +276,15 @@ object SpecParser {
                     val responses = operation.responses
                         .orEmpty()
                         .mapValues { (code, resp) ->
-                            val content = resp.content
-                            val responseContentType = ContentType.entries.find { content != null && it in content }
+                            val content: Content? = resp.content
+                            val responseContentType = content?.let { ContentType.entries.find { it in content } }
                             val typeName = "${operationId.replaceFirstChar { it.uppercase() }}Response"
                             val schema = responseContentType
-                                ?.let { content?.get(it) }
+                                ?.let { content[it] }
                                 ?.schema
                                 ?.toTypeRef(typeName)
                                 ?: defaultResponseSchema(responseContentType)
+
                             Response(
                                 statusCode = code,
                                 description = resp.description,
