@@ -99,6 +99,7 @@ class JustworksPluginFunctionalTest {
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
                 implementation("io.ktor:ktor-client-core:3.1.1")
                 implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
@@ -189,6 +190,125 @@ class JustworksPluginFunctionalTest {
         val content = clientFile.readText()
         assertTrue(content.contains("suspend fun"), "PetsApi should contain suspend functions")
         assertTrue(content.contains("class PetsApi"), "PetsApi should define PetsApi class")
+    }
+
+    @Test
+    fun `generated code for a feature-rich spec compiles`() {
+        // Exercises models, enums, oneOf polymorphism, allOf, all parameter locations,
+        // a JSON request body, UUID / date / date-time formats, and bearer security.
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Featureful
+              version: '1.0'
+            security:
+              - bearerAuth: []
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  summary: List pets
+                  tags: [pets]
+                  parameters:
+                    - { name: limit, in: query, schema: { type: integer, format: int32 } }
+                    - { name: X-Trace, in: header, schema: { type: string } }
+                  responses:
+                    '200':
+                      description: ok
+                      content:
+                        application/json:
+                          schema: { type: array, items: { ${'$'}ref: '#/components/schemas/Pet' } }
+                post:
+                  operationId: createPet
+                  tags: [pets]
+                  requestBody:
+                    required: true
+                    content:
+                      application/json:
+                        schema: { ${'$'}ref: '#/components/schemas/NewPet' }
+                  responses:
+                    '201':
+                      description: created
+                      content:
+                        application/json:
+                          schema: { ${'$'}ref: '#/components/schemas/Pet' }
+              /pets/{petId}:
+                get:
+                  operationId: getPet
+                  tags: [pets]
+                  parameters:
+                    - { name: petId, in: path, required: true, schema: { type: integer, format: int64 } }
+                  responses:
+                    '200':
+                      description: ok
+                      content:
+                        application/json:
+                          schema: { ${'$'}ref: '#/components/schemas/Pet' }
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+              schemas:
+                Pet:
+                  type: object
+                  required: [id, name]
+                  properties:
+                    id: { type: integer, format: int64 }
+                    uuid: { type: string, format: uuid }
+                    birthday: { type: string, format: date }
+                    name: { type: string }
+                    status: { ${'$'}ref: '#/components/schemas/PetStatus' }
+                NewPet:
+                  type: object
+                  required: [name]
+                  properties:
+                    name: { type: string }
+                Identified:
+                  type: object
+                  required: [id]
+                  properties:
+                    id: { type: integer, format: int64 }
+                NamedPet:
+                  allOf:
+                    - ${'$'}ref: '#/components/schemas/Identified'
+                    - type: object
+                      properties:
+                        name: { type: string }
+                PetStatus:
+                  type: string
+                  enum: [available, pending, sold]
+                Shape:
+                  oneOf:
+                    - ${'$'}ref: '#/components/schemas/Circle'
+                    - ${'$'}ref: '#/components/schemas/Square'
+                  discriminator:
+                    propertyName: kind
+                Circle:
+                  type: object
+                  required: [kind, radius]
+                  properties:
+                    kind: { type: string }
+                    radius: { type: number, format: double }
+                Square:
+                  type: object
+                  required: [kind, side]
+                  properties:
+                    kind: { type: string }
+                    side: { type: number, format: double }
+            """.trimIndent(),
+        )
+        writeBuildFile()
+
+        val result = runner("compileKotlin").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":compileKotlin")?.outcome,
+            "Generated code from a feature-rich spec should compile",
+        )
     }
 
     @Test
@@ -551,6 +671,7 @@ class JustworksPluginFunctionalTest {
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
                 implementation("io.ktor:ktor-client-core:3.1.1")
                 implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
