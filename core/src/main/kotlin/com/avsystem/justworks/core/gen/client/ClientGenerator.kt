@@ -73,14 +73,9 @@ internal object ClientGenerator {
     ): List<FileSpec> {
         val baseName = "${options.apiClassPrefix}${tag.toPascalCase()}${options.apiClassSuffix}"
 
-        // When interfaces are enabled the public type keeps the base name and the
-        // concrete client gets an `Impl` suffix; otherwise the client uses the base name.
-        val interfaceClass = if (options.generateInterfaces) {
-            ClassName(apiPackage, nameRegistry.register(baseName))
-        } else {
-            null
-        }
-        val classSimpleName = if (interfaceClass != null) "${baseName}Impl" else baseName
+        val interfaceClass =
+            ClassName(apiPackage, nameRegistry.register(baseName)).takeIf { options.generateInterfaces }
+        val classSimpleName = if (options.generateInterfaces) "${baseName}Impl" else baseName
         val className = ClassName(apiPackage, nameRegistry.register(classSimpleName))
 
         val clientInitializer = if (hasPolymorphicTypes) {
@@ -152,16 +147,14 @@ internal object ClientGenerator {
             classBuilder.addFunction(buildApplyAuth(securitySchemes, isSingleBearer, specTitle))
         }
 
-        val implementsInterface = interfaceClass != null
         context(NameRegistry()) {
             classBuilder.addFunctions(
                 endpoints.map {
                     generateEndpointFunction(
                         it,
-                        override = implementsInterface,
+                        override = options.generateInterfaces,
                         includeBody = true,
-                        // KDoc lives on the interface when one is generated.
-                        includeKdoc = options.generateKdoc && !implementsInterface,
+                        includeKdoc = options.generateKdoc && !options.generateInterfaces,
                     )
                 },
             )
@@ -172,27 +165,27 @@ internal object ClientGenerator {
             .addType(classBuilder.build())
             .build()
 
-        if (interfaceClass == null) return listOf(classFile)
-
-        val interfaceBuilder = TypeSpec.interfaceBuilder(interfaceClass)
-        context(NameRegistry()) {
-            interfaceBuilder.addFunctions(
-                endpoints.map {
-                    generateEndpointFunction(
-                        it,
-                        override = false,
-                        includeBody = false,
-                        includeKdoc = options.generateKdoc,
-                    )
-                },
-            )
+        val interfaceFile = interfaceClass?.let {
+            val interfaceBuilder = TypeSpec.interfaceBuilder(interfaceClass)
+            context(NameRegistry()) {
+                interfaceBuilder.addFunctions(
+                    endpoints.map {
+                        generateEndpointFunction(
+                            it,
+                            override = false,
+                            includeBody = false,
+                            includeKdoc = options.generateKdoc,
+                        )
+                    },
+                )
+            }
+            FileSpec
+                .builder(interfaceClass)
+                .addType(interfaceBuilder.build())
+                .build()
         }
-        val interfaceFile = FileSpec
-            .builder(interfaceClass)
-            .addType(interfaceBuilder.build())
-            .build()
 
-        return listOf(interfaceFile, classFile)
+        return listOfNotNull(interfaceFile, classFile)
     }
 
     private fun buildApplyAuth(
@@ -338,7 +331,6 @@ internal object ClientGenerator {
         if (includeBody) {
             funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
         } else {
-            // Interface member: abstract so KotlinPoet omits the body.
             funBuilder.addModifiers(KModifier.ABSTRACT)
         }
 
