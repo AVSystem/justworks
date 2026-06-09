@@ -52,15 +52,16 @@ extra configuration needed.
 
 ### Configuration options
 
-| Property       | Required | Default              | Description                            |
-|----------------|----------|----------------------|----------------------------------------|
-| `specFile`     | Yes      | --                   | Path to the OpenAPI spec (.yaml/.json) |
-| `packageName`  | Yes      | --                   | Base package for generated code        |
-| `apiPackage`     | No     | `$packageName.api`   | Package for API client classes         |
-| `modelPackage`   | No     | `$packageName.model` | Package for model/data classes         |
-| `generateKdoc`   | No     | `true`               | Emit KDoc comments in generated code   |
-| `apiClassPrefix` | No     | `""`                 | Prefix for generated API client class names |
-| `apiClassSuffix` | No     | `"Api"`              | Suffix for generated API client class names |
+| Property             | Required | Default              | Description                                                           |
+|----------------------|----------|----------------------|-----------------------------------------------------------------------|
+| `specFile`           | Yes      | --                   | Path to the OpenAPI spec (.yaml/.json)                                |
+| `packageName`        | Yes      | --                   | Base package for generated code                                       |
+| `apiPackage`         | No       | `$packageName.api`   | Package for API client classes                                        |
+| `modelPackage`       | No       | `$packageName.model` | Package for model/data classes                                        |
+| `generateKdoc`       | No       | `true`               | Emit KDoc comments in generated code                                  |
+| `apiClassPrefix`     | No       | `""`                 | Prefix for generated API client class names                           |
+| `apiClassSuffix`     | No       | `"Api"`              | Suffix for generated API client class names                           |
+| `generateInterfaces` | No       | `false`              | Generate an interface per tag implemented by the client (for mocking) |
 
 ## Supported OpenAPI Features
 
@@ -231,6 +232,24 @@ justworks {
             packageName = "com.example.petstore"
             apiClassPrefix = "My"        // default: ""
             apiClassSuffix = "Client"    // default: "Api"  ->  tag `pets` -> MyPetsClient
+        }
+    }
+}
+```
+
+### Interfaces for Testing
+
+Set `generateInterfaces = true` to emit an interface per tag that the client implements. The interface keeps the
+configured name (e.g. `PetsApi`) and the concrete client gets an `Impl` suffix (`PetsApiImpl`). Depend on the interface
+in your code and supply a hand-written fake in tests — no mocking library required.
+
+```kotlin
+justworks {
+    specs {
+        register("petstore") {
+            specFile = file("api/petstore.yaml")
+            packageName = "com.example.petstore"
+            generateInterfaces = true    // default: false  ->  PetsApi (interface) + PetsApiImpl (client)
         }
     }
 }

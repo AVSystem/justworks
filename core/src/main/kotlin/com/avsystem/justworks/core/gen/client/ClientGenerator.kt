@@ -58,21 +58,30 @@ internal object ClientGenerator {
     context(_: Hierarchy, _: OutputOptions, _: ApiPackage, _: NameRegistry)
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
-        return grouped.map { (tag, endpoints) ->
-            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes, spec.title)
+        return grouped.flatMap { (tag, endpoints) ->
+            generateClientFiles(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes, spec.title)
         }
     }
 
     context(hierarchy: Hierarchy, options: OutputOptions, apiPackage: ApiPackage, nameRegistry: NameRegistry)
-    private fun generateClientFile(
+    private fun generateClientFiles(
         tag: String,
         endpoints: List<Endpoint>,
         hasPolymorphicTypes: Boolean,
         securitySchemes: List<SecurityScheme>,
         specTitle: String,
-    ): FileSpec {
-        val simpleName = "${options.apiClassPrefix}${tag.toPascalCase()}${options.apiClassSuffix}"
-        val className = ClassName(apiPackage, nameRegistry.register(simpleName))
+    ): List<FileSpec> {
+        val baseName = "${options.apiClassPrefix}${tag.toPascalCase()}${options.apiClassSuffix}"
+
+        // When interfaces are enabled the public type keeps the base name and the
+        // concrete client gets an `Impl` suffix; otherwise the client uses the base name.
+        val interfaceClass = if (options.generateInterfaces) {
+            ClassName(apiPackage, nameRegistry.register(baseName))
+        } else {
+            null
+        }
+        val classSimpleName = if (interfaceClass != null) "${baseName}Impl" else baseName
+        val className = ClassName(apiPackage, nameRegistry.register(classSimpleName))
 
         val clientInitializer = if (hasPolymorphicTypes) {
             val generatedSerializersModule = MemberName(hierarchy.modelPackage, GENERATED_SERIALIZERS_MODULE)
@@ -92,6 +101,10 @@ internal object ClientGenerator {
             .classBuilder(className)
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
+
+        if (interfaceClass != null) {
+            classBuilder.addSuperinterface(interfaceClass)
+        }
 
         if (isSingleBearer) {
             // Single Bearer: use plain "token" param name for ergonomics
@@ -139,14 +152,47 @@ internal object ClientGenerator {
             classBuilder.addFunction(buildApplyAuth(securitySchemes, isSingleBearer, specTitle))
         }
 
+        val implementsInterface = interfaceClass != null
         context(NameRegistry()) {
-            classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })
+            classBuilder.addFunctions(
+                endpoints.map {
+                    generateEndpointFunction(
+                        it,
+                        override = implementsInterface,
+                        includeBody = true,
+                        // KDoc lives on the interface when one is generated.
+                        includeKdoc = options.generateKdoc && !implementsInterface,
+                    )
+                },
+            )
         }
 
-        return FileSpec
+        val classFile = FileSpec
             .builder(className)
             .addType(classBuilder.build())
             .build()
+
+        if (interfaceClass == null) return listOf(classFile)
+
+        val interfaceBuilder = TypeSpec.interfaceBuilder(interfaceClass)
+        context(NameRegistry()) {
+            interfaceBuilder.addFunctions(
+                endpoints.map {
+                    generateEndpointFunction(
+                        it,
+                        override = false,
+                        includeBody = false,
+                        includeKdoc = options.generateKdoc,
+                    )
+                },
+            )
+        }
+        val interfaceFile = FileSpec
+            .builder(interfaceClass)
+            .addType(interfaceBuilder.build())
+            .build()
+
+        return listOf(interfaceFile, classFile)
     }
 
     private fun buildApplyAuth(
@@ -220,8 +266,21 @@ internal object ClientGenerator {
         return builder.build()
     }
 
-    context(_: Hierarchy, options: OutputOptions, methodRegistry: NameRegistry)
-    private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
+    /**
+     * Builds a suspend function for an endpoint.
+     *
+     * @param override emit an `override` modifier (the client implements an interface)
+     * @param includeBody emit the request-building body; when false the function is abstract
+     *   (used for interface members)
+     * @param includeKdoc emit KDoc on the function
+     */
+    context(_: Hierarchy, _: OutputOptions, methodRegistry: NameRegistry)
+    private fun generateEndpointFunction(
+        endpoint: Endpoint,
+        override: Boolean,
+        includeBody: Boolean,
+        includeKdoc: Boolean,
+    ): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
         val errorType = resolveErrorType(endpoint)
@@ -230,6 +289,7 @@ internal object ClientGenerator {
         val funBuilder = FunSpec
             .builder(functionName)
             .addModifiers(KModifier.SUSPEND)
+            .apply { if (override) addModifiers(KModifier.OVERRIDE) }
             .returns(returnType)
 
         val params = endpoint.parameters.groupBy { it.location }
@@ -246,13 +306,15 @@ internal object ClientGenerator {
             buildNullableParameter(param.schema, param.name, param.required)
         }
 
-        funBuilder.addParameters(pathParams + queryParams + headerParams)
+        val bodyParams = endpoint.requestBody?.let { buildBodyParams(it) }.orEmpty()
+        val allParams = pathParams + queryParams + headerParams + bodyParams
 
-        if (endpoint.requestBody != null) {
-            funBuilder.addParameters(buildBodyParams(endpoint.requestBody))
-        }
+        // An overriding function may not repeat default values; defaults live on the interface.
+        funBuilder.addParameters(
+            if (override) allParams.map { it.toBuilder().defaultValue(null as CodeBlock?).build() } else allParams,
+        )
 
-        if (options.generateKdoc) {
+        if (includeKdoc) {
             val kdocParts = mutableListOf<String>()
             endpoint.summary?.let { kdocParts.add(it) }
             endpoint.description?.let {
@@ -273,7 +335,12 @@ internal object ClientGenerator {
             }
         }
 
-        funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
+        if (includeBody) {
+            funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
+        } else {
+            // Interface member: abstract so KotlinPoet omits the body.
+            funBuilder.addModifiers(KModifier.ABSTRACT)
+        }
 
         return funBuilder.build()
     }
