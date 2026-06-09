@@ -245,7 +245,11 @@ internal object ClientGenerator {
             buildNullableParameter(param.schema, param.name, param.required)
         }
 
-        funBuilder.addParameters(pathParams + queryParams + headerParams)
+        val cookieParams = params[ParameterLocation.COOKIE].orEmpty().map { param ->
+            buildNullableParameter(param.schema, param.name, param.required)
+        }
+
+        funBuilder.addParameters(pathParams + queryParams + headerParams + cookieParams)
 
         if (endpoint.requestBody != null) {
             funBuilder.addParameters(buildBodyParams(endpoint.requestBody))

@@ -125,6 +125,41 @@ class SpecParserTest : SpecParserTestBase() {
     }
 
     @Test
+    fun `parses cookie parameter location`() {
+        val spec = File.createTempFile("cookie-spec", ".yaml").apply { deleteOnExit() }
+        spec.writeText(
+            """
+            openapi: 3.0.0
+            info:
+              title: Cookie API
+              version: 1.0.0
+            paths:
+              /session:
+                get:
+                  operationId: getSession
+                  parameters:
+                    - name: session
+                      in: cookie
+                      required: true
+                      schema:
+                        type: string
+                  responses:
+                    '200':
+                      description: ok
+            """.trimIndent(),
+        )
+        val parsed = parseSpec(spec)
+        val getSession =
+            parsed.endpoints.find { it.operationId == "getSession" }
+                ?: fail("getSession endpoint not found")
+        val sessionParam =
+            getSession.parameters.find { it.name == "session" }
+                ?: fail("session parameter not found")
+        assertEquals(ParameterLocation.COOKIE, sessionParam.location)
+        assertTrue(sessionParam.required, "Cookie parameter should be required")
+    }
+
+    @Test
     fun `parsed POST pets has requestBody referencing NewPet`() {
         val createPet =
             petstore.endpoints.find { it.operationId == "createPet" }

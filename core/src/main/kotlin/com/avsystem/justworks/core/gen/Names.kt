@@ -17,6 +17,7 @@ val SET_BODY_FUN = MemberName("io.ktor.client.request", "setBody")
 val CONTENT_TYPE_FUN = MemberName("io.ktor.http", "contentType")
 val CONTENT_TYPE_APPLICATION = ClassName("io.ktor.http", "ContentType", "Application")
 val HEADERS_FUN = MemberName("io.ktor.client.request", "headers")
+val COOKIE_FUN = MemberName("io.ktor.client.request", "cookie")
 
 val GET_FUN = MemberName("io.ktor.client.request", "get")
 val POST_FUN = MemberName("io.ktor.client.request", "post")

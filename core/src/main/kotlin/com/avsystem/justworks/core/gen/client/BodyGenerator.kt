@@ -6,6 +6,7 @@ import com.avsystem.justworks.core.gen.BODY
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CONTENT_TYPE_APPLICATION
 import com.avsystem.justworks.core.gen.CONTENT_TYPE_FUN
+import com.avsystem.justworks.core.gen.COOKIE_FUN
 import com.avsystem.justworks.core.gen.DELETE_FUN
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
 import com.avsystem.justworks.core.gen.FORM_DATA_FUN
@@ -197,6 +198,7 @@ internal object BodyGenerator {
     private fun CodeBlock.Builder.addCommonRequestParts(params: Map<ParameterLocation, List<Parameter>>) {
         addStatement("${APPLY_AUTH}()")
         addHeaderParams(params)
+        addCookieParams(params)
         addQueryParams(params)
     }
 
@@ -230,6 +232,18 @@ internal object BodyGenerator {
                 }
             }
             endControlFlow()
+        }
+    }
+
+    private fun CodeBlock.Builder.addCookieParams(params: Map<ParameterLocation, List<Parameter>>) {
+        val cookieParams = params[ParameterLocation.COOKIE]
+        if (!cookieParams.isNullOrEmpty()) {
+            for (param in cookieParams) {
+                val paramName = param.name.toCamelCase()
+                optionalGuard(param.required, paramName) {
+                    addStatement("%M(%S, %M(%L))", COOKIE_FUN, param.name, ENCODE_PARAM_FUN, paramName)
+                }
+            }
         }
     }
 
