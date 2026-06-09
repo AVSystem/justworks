@@ -400,6 +400,34 @@ class ClientGeneratorTest {
     }
 
     @Test
+    fun `text plain response returns String`() {
+        val ep = endpoint(
+            operationId = "getText",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.STRING), ContentType.TEXT_PLAIN),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getText" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.String", returnType.typeArguments[1].toString())
+    }
+
+    @Test
+    fun `octet stream response returns ByteArray`() {
+        val ep = endpoint(
+            operationId = "getBinary",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getBinary" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString())
+    }
+
+    @Test
     fun `mixed 200 and 204 responses uses 200 schema type`() {
         val ep = endpoint(
             method = HttpMethod.DELETE,

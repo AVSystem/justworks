@@ -76,17 +76,26 @@ data class RequestBody(
     val schema: TypeRef,
 )
 
-// the order is important!!!
+// the order is important!!! (used for priority when matching content)
 enum class ContentType(val value: String) {
     MULTIPART_FORM_DATA("multipart/form-data"),
     FORM_URL_ENCODED("application/x-www-form-urlencoded"),
     JSON_CONTENT_TYPE("application/json"),
+    TEXT_PLAIN("text/plain"),
+    OCTET_STREAM("application/octet-stream"),
+    ;
+
+    companion object {
+        /** Content types accepted as request bodies. */
+        val REQUEST_TYPES = listOf(MULTIPART_FORM_DATA, FORM_URL_ENCODED, JSON_CONTENT_TYPE)
+    }
 }
 
 data class Response(
     val statusCode: String,
     val description: String?,
     val schema: TypeRef?,
+    val contentType: ContentType? = null,
 )
 
 data class SchemaModel(
