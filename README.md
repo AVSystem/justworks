@@ -57,6 +57,89 @@ extra configuration needed.
 | `apiPackage`   | No       | `$packageName.api`   | Package for API client classes         |
 | `modelPackage` | No       | `$packageName.model` | Package for model/data classes         |
 
+## What Gets Generated
+
+Given this slice of an OpenAPI spec:
+
+```yaml
+components:
+  schemas:
+    Pet:
+      type: object
+      required: [id, name]
+      properties:
+        id:        { type: integer, format: int64 }
+        name:      { type: string }
+        tag:       { type: string }
+        status:    { $ref: '#/components/schemas/PetStatus' }
+    PetStatus:
+      type: string
+      enum: [available, pending, sold]
+paths:
+  /pets:
+    get:
+      operationId: listPets
+      summary: List all pets
+      tags: [pets]
+      parameters:
+        - { name: limit, in: query, schema: { type: integer, format: int32 } }
+      responses:
+        '200':
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: '#/components/schemas/Pet' } }
+```
+
+the plugin generates:
+
+**A data class** (`model/Pet.kt`) — properties sorted required-first; optional ones are nullable with a `null`
+default; wire names preserved via `@SerialName`:
+
+```kotlin
+@Serializable
+public data class Pet(
+  @SerialName("id")
+  public val id: Long,
+  @SerialName("name")
+  public val name: String,
+  @SerialName("tag")
+  public val tag: String? = null,
+  @SerialName("status")
+  public val status: PetStatus? = null,
+)
+```
+
+**An enum** (`model/PetStatus.kt`) — one constant per value, each with its wire name:
+
+```kotlin
+@Serializable
+public enum class PetStatus {
+  @SerialName("available")
+  AVAILABLE,
+  @SerialName("pending")
+  PENDING,
+  @SerialName("sold")
+  SOLD,
+}
+```
+
+**An API client method** — one `suspend` function per operation, grouped into a client class per tag
+(`api/PetsApi.kt`). Optional parameters default to `null`; the function returns `HttpResult<E, T>`:
+
+```kotlin
+/**
+ * List all pets
+ *
+ * @return [com.avsystem.justworks.HttpSuccess] containing [List<Pet>] on success
+ */
+public suspend fun listPets(limit: Int? = null): HttpResult<JsonElement, List<Pet>>
+```
+
+(The generated body builds and sends the Ktor request, then maps the response to `HttpResult`.)
+
+See [Generated Code Structure](#generated-code-structure) for the full output layout and
+[Generated Client Usage](#generated-client-usage) for how to call the client.
+
 ## Supported OpenAPI Features
 
 ### Schema Types
