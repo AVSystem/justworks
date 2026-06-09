@@ -10,6 +10,7 @@ import com.squareup.kotlinpoet.FileSpec
 import java.io.File
 import kotlin.test.Test
 import kotlin.test.assertFalse
+import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 import kotlin.test.fail
@@ -27,6 +28,13 @@ class IntegrationTest {
         private val SPEC_FIXTURES = listOf(
             "/fixtures/platform-api.json",
             "/fixtures/analytics-api.json",
+        )
+
+        /** Vendored popular public OpenAPI specs (see fixtures/public/SOURCES.md). */
+        private val PUBLIC_SPECS = listOf(
+            "/fixtures/public/swagger-petstore.json",
+            "/fixtures/public/petstore-expanded.yaml",
+            "/fixtures/public/uspto.yaml",
         )
     }
 
@@ -205,6 +213,51 @@ class IntegrationTest {
                 assertFalse(
                     source.contains("FIXME"),
                     "$fixture: Generated file ${file.name} should not contain FIXME markers",
+                )
+            }
+        }
+    }
+
+    // -- Popular public OpenAPI specs (issue #47) --
+
+    @Test
+    fun `public specs parse without errors`() {
+        for (fixture in PUBLIC_SPECS) {
+            val specUrl = javaClass.getResource(fixture) ?: fail("Public spec fixture not found: $fixture")
+            val result = SpecParser.parse(File(specUrl.toURI()))
+
+            val failureError = (result as? ParseResult.Failure)?.error
+            assertIs<ParseResult.Success<*>>(
+                result,
+                "$fixture should parse successfully, but failed: $failureError",
+            )
+
+            // Known limitations surface as warnings, never silent failures or hard errors.
+            if (result.warnings.isNotEmpty()) {
+                println("$fixture parsed with ${result.warnings.size} warning(s):")
+                result.warnings.forEach { println("  - ${it.message}") }
+            }
+        }
+    }
+
+    @Test
+    fun `public specs generate non-empty model and client code`() {
+        for (fixture in PUBLIC_SPECS) {
+            val spec = parseSpec(fixture).value
+
+            val (modelFiles, resolvedSpec) = generateModelWithResolvedSpec(spec)
+            assertTrue(modelFiles.isNotEmpty(), "$fixture: should produce model files")
+            assertTrue(
+                modelFiles.all { it.toString().isNotBlank() },
+                "$fixture: generated model files should not be blank",
+            )
+
+            if (spec.endpoints.isNotEmpty()) {
+                val clientFiles = generateClient(resolvedSpec)
+                assertTrue(clientFiles.isNotEmpty(), "$fixture: should produce client files for a spec with endpoints")
+                assertTrue(
+                    clientFiles.all { it.toString().contains("suspend fun") },
+                    "$fixture: each client class should contain suspend functions",
                 )
             }
         }
