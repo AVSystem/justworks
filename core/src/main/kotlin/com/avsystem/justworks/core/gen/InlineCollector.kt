@@ -28,28 +28,29 @@ private fun ApiSpec.topLevelTypeRefs(): Sequence<TypeRef> {
  * (see [com.avsystem.justworks.core.gen.resolveSerialName]), so dropping the field is lossless.
  */
 internal fun ApiSpec.stripDiscriminatorProperties(): ApiSpec {
-    val discriminatorProps = discriminatorPropertyByVariant()
-    if (discriminatorProps.isEmpty()) return this
-    return copy(
-        schemas = schemas.map { schema ->
-            val discriminatorProp = discriminatorProps[schema.name] ?: return@map schema
-            schema.copy(properties = schema.properties.filterNot { it.name == discriminatorProp })
-        },
-    )
-}
+    val discriminatorProps = schemas
+        .asSequence()
+        .mapNotNull { parent -> parent.discriminator?.propertyName?.let { it to parent } }
+        .flatMap { (propertyName, parent) ->
+            (parent.oneOf.orEmpty() + parent.anyOf.orEmpty())
+                .asSequence()
+                .filterIsInstance<TypeRef.Reference>()
+                .map { it.schemaName to propertyName }
+        }.toMap()
 
-/**
- * Maps each polymorphic variant schema name to the discriminator property it carries.
- */
-private fun ApiSpec.discriminatorPropertyByVariant(): Map<String, String> = schemas
-    .asSequence()
-    .mapNotNull { parent -> parent.discriminator?.propertyName?.let { it to parent } }
-    .flatMap { (propertyName, parent) ->
-        (parent.oneOf.orEmpty() + parent.anyOf.orEmpty())
-            .asSequence()
-            .filterIsInstance<TypeRef.Reference>()
-            .map { it.schemaName to propertyName }
-    }.toMap()
+    return if (discriminatorProps.isEmpty()) {
+        this
+    } else {
+        copy(
+            schemas = schemas.map { schema ->
+                when (val discriminatorProp = discriminatorProps[schema.name]) {
+                    null -> schema
+                    else -> schema.copy(properties = schema.properties.filterNot { it.name == discriminatorProp })
+                }
+            },
+        )
+    }
+}
 
 private val descendants = DeepRecursiveFunction<TypeRef, List<TypeRef>> { type ->
     listOf(type) + when (type) {
