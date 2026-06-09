@@ -4,6 +4,7 @@ import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
+import com.avsystem.justworks.core.model.EnumBackingType
 import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
@@ -947,6 +948,67 @@ class ModelGeneratorPolymorphicTest {
             ClassName(modelPackage, "Circle"),
             result,
             "Should resolve Circle to flat ClassName without hierarchy entry",
+        )
+    }
+
+    @Test
+    fun `discriminator property is not hoisted into a standalone enum`() {
+        val animal =
+            schema(
+                name = "Animal",
+                oneOf = listOf(TypeRef.Reference("Cat")),
+                discriminator =
+                    Discriminator(
+                        propertyName = "type",
+                        mapping = mapOf("Cat" to "#/components/schemas/Cat"),
+                    ),
+            )
+        val cat =
+            schema(
+                name = "Cat",
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "type",
+                            TypeRef.InlineEnum(listOf("Cat"), EnumBackingType.STRING, "Cat.Type"),
+                            null,
+                            false,
+                        ),
+                        PropertyModel(
+                            "sound",
+                            TypeRef.InlineEnum(listOf("MEOW", "PURR"), EnumBackingType.STRING, "Cat.Sound"),
+                            null,
+                            false,
+                        ),
+                    ),
+            )
+
+        val files = generate(spec(schemas = listOf(animal, cat)))
+        val enumNames = files
+            .flatMap { it.members }
+            .filterIsInstance<TypeSpec>()
+            .filter { it.kind == TypeSpec.Kind.CLASS && KModifier.ENUM in it.modifiers }
+            .mapNotNull { it.name }
+
+        // The single-value `type` discriminator enum must NOT be generated...
+        assertTrue(
+            enumNames.none { it.contains("Type", ignoreCase = true) },
+            "Discriminator enum must not be hoisted, found: $enumNames",
+        )
+        // ...while a genuine non-discriminator inline enum on the variant still is.
+        assertTrue(
+            enumNames.any { it.contains("Sound", ignoreCase = true) },
+            "Non-discriminator inline enum should still be generated, found: $enumNames",
+        )
+
+        // The variant carries no `type` field (it is expressed via @SerialName instead).
+        val catType = findType(files, "Cat")
+        assertTrue(
+            catType.primaryConstructor
+                ?.parameters
+                .orEmpty()
+                .none { it.name == "type" },
+            "Variant must not declare the discriminator property as a field",
         )
     }
 }

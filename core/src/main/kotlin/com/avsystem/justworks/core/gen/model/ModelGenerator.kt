@@ -34,6 +34,7 @@ import com.avsystem.justworks.core.gen.resolveInlineTypes
 import com.avsystem.justworks.core.gen.resolveSerialName
 import com.avsystem.justworks.core.gen.resolveTypeRef
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
+import com.avsystem.justworks.core.gen.stripDiscriminatorProperties
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
 import com.avsystem.justworks.core.gen.toPascalCase
@@ -74,7 +75,8 @@ internal object ModelGenerator {
     fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
 
     context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
-    fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
+    fun generateWithResolvedSpec(rawSpec: ApiSpec): GenerateResult {
+        val spec = rawSpec.stripDiscriminatorProperties()
         ensureReserved(spec, nameRegistry)
         val (inlineSchemas, nameMap) = collectInlineSchemas(spec)
         val (inlineEnums, enumNameMap) = collectInlineEnums(spec)
