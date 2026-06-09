@@ -193,6 +193,23 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
+    fun `custom apiClassPrefix and apiClassSuffix change generated client class name`() {
+        writeBuildFile(
+            """
+            apiClassPrefix = "My"
+            apiClassSuffix = "Client"
+            """.trimIndent(),
+        )
+
+        runner("justworksGenerateMain").build()
+
+        val apiDir = projectDir.resolve("build/generated/justworks/main/com/example/api")
+        val clientFile = apiDir.resolve("MyPetsClient.kt")
+        assertTrue(clientFile.exists(), "Expected MyPetsClient.kt; files: ${apiDir.listFiles()?.map { it.name }}")
+        assertTrue(clientFile.readText().contains("class MyPetsClient"), "Expected class MyPetsClient")
+    }
+
+    @Test
     fun `generateKdoc true by default emits KDoc in generated code`() {
         writeBuildFile()
 

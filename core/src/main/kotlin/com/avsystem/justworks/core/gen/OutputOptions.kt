@@ -6,4 +6,8 @@ package com.avsystem.justworks.core.gen
  *
  * Threaded through the generators as a context receiver.
  */
-internal data class OutputOptions(val generateKdoc: Boolean = true,)
+data class OutputOptions(
+    val generateKdoc: Boolean = true,
+    val apiClassPrefix: String = "",
+    val apiClassSuffix: String = "Api",
+)

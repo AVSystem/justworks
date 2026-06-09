@@ -56,9 +56,11 @@ extra configuration needed.
 |----------------|----------|----------------------|----------------------------------------|
 | `specFile`     | Yes      | --                   | Path to the OpenAPI spec (.yaml/.json) |
 | `packageName`  | Yes      | --                   | Base package for generated code        |
-| `apiPackage`   | No       | `$packageName.api`   | Package for API client classes         |
-| `modelPackage` | No       | `$packageName.model` | Package for model/data classes         |
-| `generateKdoc` | No       | `true`               | Emit KDoc comments in generated code   |
+| `apiPackage`     | No     | `$packageName.api`   | Package for API client classes         |
+| `modelPackage`   | No     | `$packageName.model` | Package for model/data classes         |
+| `generateKdoc`   | No     | `true`               | Emit KDoc comments in generated code   |
+| `apiClassPrefix` | No     | `""`                 | Prefix for generated API client class names |
+| `apiClassSuffix` | No     | `"Api"`              | Suffix for generated API client class names |
 
 ## Supported OpenAPI Features
 
@@ -212,6 +214,23 @@ justworks {
             packageName = "com.example.petstore"
             apiPackage = "com.example.petstore.client"   // default: packageName.api
             modelPackage = "com.example.petstore.dto"     // default: packageName.model
+        }
+    }
+}
+```
+
+### API Client Class Names
+
+Generated client class names default to `<Tag>Api` (e.g. tag `pets` -> `PetsApi`). Customize with a prefix and/or suffix:
+
+```kotlin
+justworks {
+    specs {
+        register("petstore") {
+            specFile = file("api/petstore.yaml")
+            packageName = "com.example.petstore"
+            apiClassPrefix = "My"        // default: ""
+            apiClassSuffix = "Client"    // default: "Api"  ->  tag `pets` -> MyPetsClient
         }
     }
 }
