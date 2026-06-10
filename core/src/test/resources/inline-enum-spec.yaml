@@ -31,3 +31,20 @@ components:
           default:
             - DownloadSpeed
             - UploadSpeed
+    SpeedTestResult:
+      type: object
+      properties:
+        flagsByRegion:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+              - ENABLED
+              - DISABLED
+        tiersByUser:
+          type: object
+          additionalProperties:
+            type: string
+            enum:
+              - FREE
+              - PRO

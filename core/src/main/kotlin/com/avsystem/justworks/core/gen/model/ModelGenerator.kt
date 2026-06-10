@@ -34,6 +34,7 @@ import com.avsystem.justworks.core.gen.resolveInlineTypes
 import com.avsystem.justworks.core.gen.resolveSerialName
 import com.avsystem.justworks.core.gen.resolveTypeRef
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
+import com.avsystem.justworks.core.gen.stripDiscriminatorProperties
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
 import com.avsystem.justworks.core.gen.toPascalCase
@@ -76,7 +77,8 @@ internal object ModelGenerator {
     fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
 
     context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
-    fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
+    fun generateWithResolvedSpec(rawSpec: ApiSpec): GenerateResult {
+        val spec = rawSpec.stripDiscriminatorProperties()
         ensureReserved(spec, nameRegistry)
         val (inlineSchemas, nameMap) = collectInlineSchemas(spec)
         val (inlineEnums, enumNameMap) = collectInlineEnums(spec)
@@ -184,7 +186,6 @@ internal object ModelGenerator {
                 variantName = variantName,
                 parentClassName = className,
                 serialName = schema.resolveSerialName(variantName),
-                discriminatorProperty = schema.discriminator?.propertyName,
             )
             parentBuilder.addType(nestedType)
         }
@@ -213,22 +214,10 @@ internal object ModelGenerator {
         variantName: String,
         parentClassName: ClassName,
         serialName: String,
-        discriminatorProperty: String?,
     ): TypeSpec {
         val variantClassName = parentClassName.nestedClass(variantName.toPascalCase())
 
-        val filteredSchema = variantSchema?.let { schema ->
-            val properties = discriminatorProperty?.let { discriminatorProperty ->
-                schema.properties.filter { it.name != discriminatorProperty }
-            }
-            if (properties != null) {
-                schema.copy(properties = properties)
-            } else {
-                schema
-            }
-        }
-
-        val builder = if (filteredSchema?.properties.isNullOrEmpty()) {
+        val builder = if (variantSchema?.properties.isNullOrEmpty()) {
             TypeSpec.objectBuilder(variantClassName)
         } else {
             TypeSpec.classBuilder(variantClassName).addModifiers(KModifier.DATA)
@@ -238,8 +227,8 @@ internal object ModelGenerator {
         builder.addAnnotation(SERIALIZABLE)
         builder.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
 
-        if (!filteredSchema?.properties.isNullOrEmpty()) {
-            buildConstructorAndProperties(filteredSchema, builder)
+        if (!variantSchema?.properties.isNullOrEmpty()) {
+            buildConstructorAndProperties(variantSchema, builder)
         }
 
         return builder.build()

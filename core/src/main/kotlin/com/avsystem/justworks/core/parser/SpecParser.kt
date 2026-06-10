@@ -284,6 +284,7 @@ object SpecParser {
                                 schema = resp.content
                                     ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
+                                    ?.takeUnless { it.isEmptyContent }
                                     ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                             )
                         }
@@ -473,10 +474,13 @@ object SpecParser {
 
         "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-        "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
+        "array" -> TypeRef.Array(
+            items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown,
+            unique = uniqueItems == true,
+        )
 
         "object" -> when (val ap = additionalProperties) {
-            is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+            is Schema<*> -> TypeRef.Map(ap.toTypeRef(contextName?.let { "${it}Value" }))
             is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
             else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
         }
@@ -545,6 +549,22 @@ object SpecParser {
 
         else -> default
     }
+
+    /**
+     * True when the schema carries no structure at all — no `type`, `$ref`, properties, items,
+     * combinators, enum, or additionalProperties (e.g. `{}` or `{ "nullable": true }`). As a
+     * response body this means "no content", which is generated as a `Unit` return type.
+     */
+    private val Schema<*>.isEmptyContent: Boolean
+        get() = `$ref` == null &&
+            type == null &&
+            properties.isNullOrEmpty() &&
+            allOf.isNullOrEmpty() &&
+            oneOf.isNullOrEmpty() &&
+            anyOf.isNullOrEmpty() &&
+            enum.isNullOrEmpty() &&
+            additionalProperties == null &&
+            items == null
 
     /**
      * Builds a [TypeRef.InlineEnum] for an enum schema that is not a named component

@@ -27,4 +27,31 @@ class SpecParserInlineEnumTest : SpecParserTestBase() {
         assertEquals(listOf("DownloadSpeed", "UploadSpeed"), inlineEnum.values)
         assertEquals(EnumBackingType.STRING, inlineEnum.backingType)
     }
+
+    @Test
+    fun `inline enum as a map value carries a context-derived hint`() {
+        val spec = parseSpec(loadResource("inline-enum-spec.yaml"))
+
+        val schema = assertNotNull(
+            spec.schemas.find { it.name == "SpeedTestResult" },
+            "SpeedTestResult schema missing",
+        )
+
+        fun mapValueEnum(propName: String): TypeRef.InlineEnum {
+            val prop = assertNotNull(
+                schema.properties.find { it.name == propName },
+                "$propName property missing",
+            )
+            val map = assertIs<TypeRef.Map>(prop.type)
+            return assertIs<TypeRef.InlineEnum>(map.valueType)
+        }
+
+        val flags = mapValueEnum("flagsByRegion")
+        assertEquals(listOf("ENABLED", "DISABLED"), flags.values)
+        assertEquals("SpeedTestResult.FlagsByRegionValue", flags.contextHint)
+
+        val tiers = mapValueEnum("tiersByUser")
+        assertEquals(listOf("FREE", "PRO"), tiers.values)
+        assertEquals("SpeedTestResult.TiersByUserValue", tiers.contextHint)
+    }
 }
