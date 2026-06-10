@@ -184,7 +184,6 @@ internal object ModelGenerator {
                 variantName = variantName,
                 parentClassName = className,
                 serialName = schema.resolveSerialName(variantName),
-                discriminatorProperty = schema.discriminator?.propertyName,
             )
             parentBuilder.addType(nestedType)
         }
@@ -213,22 +212,10 @@ internal object ModelGenerator {
         variantName: String,
         parentClassName: ClassName,
         serialName: String,
-        discriminatorProperty: String?,
     ): TypeSpec {
         val variantClassName = parentClassName.nestedClass(variantName.toPascalCase())
 
-        val filteredSchema = variantSchema?.let { schema ->
-            val properties = discriminatorProperty?.let { discriminatorProperty ->
-                schema.properties.filter { it.name != discriminatorProperty }
-            }
-            if (properties != null) {
-                schema.copy(properties = properties)
-            } else {
-                schema
-            }
-        }
-
-        val builder = if (filteredSchema?.properties.isNullOrEmpty()) {
+        val builder = if (variantSchema?.properties.isNullOrEmpty()) {
             TypeSpec.objectBuilder(variantClassName)
         } else {
             TypeSpec.classBuilder(variantClassName).addModifiers(KModifier.DATA)
@@ -238,8 +225,8 @@ internal object ModelGenerator {
         builder.addAnnotation(SERIALIZABLE)
         builder.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
 
-        if (!filteredSchema?.properties.isNullOrEmpty()) {
-            buildConstructorAndProperties(filteredSchema, builder)
+        if (!variantSchema?.properties.isNullOrEmpty()) {
+            buildConstructorAndProperties(variantSchema, builder)
         }
 
         return builder.build()
