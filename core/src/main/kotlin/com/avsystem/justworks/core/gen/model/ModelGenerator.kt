@@ -27,6 +27,7 @@ import com.avsystem.justworks.core.gen.TransformedSchema
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
 import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
+import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
 import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
 import com.avsystem.justworks.core.gen.resolveSerialName
@@ -54,7 +55,9 @@ import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
+import com.squareup.kotlinpoet.joinToCode
 import kotlinx.datetime.LocalDate
+import java.util.Base64
 import kotlin.time.Instant
 
 /**
@@ -77,10 +80,13 @@ internal object ModelGenerator {
             .flatMap { (_, names) -> names }
             .toSet()
 
+        // Inline types to nest, keyed by owner schema name — variants need their owner's lookup too.
+        val inlineByName = spec.schemas.associate { it.schema.name to it.inlineTypes }
+
         val schemaFiles = spec.schemas
             .asSequence()
             .filterNot { it.schema.name in nestedVariantNames }
-            .flatMap { generateSchemaFiles(it) }
+            .flatMap { generateSchemaFiles(it, inlineByName) }
             .toList()
 
         val enumFiles = spec.enums.map { generateEnumClass(it) }
@@ -109,20 +115,31 @@ internal object ModelGenerator {
         val className = parentClass.nestedClass(name)
         hierarchy.registerInlineRef(planned.id, className)
 
-        val childNames = NameRegistry()
-        val childSpecs = planned.children.map { emitNestedInline(className, it, childNames) }
+        return when (planned) {
+            is PlannedInlineType.Obj -> {
+                val childNames = NameRegistry()
+                val childSpecs = planned.children.map { emitNestedInline(className, it, childNames) }
 
-        val builder = TypeSpec
-            .classBuilder(name)
-            .addModifiers(KModifier.DATA)
-            .addAnnotation(SERIALIZABLE)
-        buildConstructorAndProperties(planned.schema, builder)
-        childSpecs.forEach { builder.addType(it) }
-        return builder.build()
+                val builder = TypeSpec
+                    .classBuilder(name)
+                    .addModifiers(KModifier.DATA)
+                    .addAnnotation(SERIALIZABLE)
+                buildConstructorAndProperties(planned.schema, builder)
+                childSpecs.forEach { builder.addType(it) }
+                builder.build()
+            }
+
+            is PlannedInlineType.Enum -> {
+                buildEnumType(name, planned.model)
+            }
+        }
     }
 
     context(hierarchy: Hierarchy)
-    private fun generateSchemaFiles(transformed: TransformedSchema): List<FileSpec> = when {
+    private fun generateSchemaFiles(
+        transformed: TransformedSchema,
+        inlineByName: Map<String, List<PlannedInlineType>>,
+    ): List<FileSpec> = when {
         !transformed.schema.anyOf.isNullOrEmpty() || !transformed.schema.oneOf.isNullOrEmpty() -> {
             if (transformed.schema.name in hierarchy.anyOfWithoutDiscriminator) {
                 listOf(
@@ -130,7 +147,7 @@ internal object ModelGenerator {
                     generatePolymorphicSerializer(transformed.schema),
                 )
             } else {
-                listOf(generateSealedHierarchy(transformed.schema))
+                listOf(generateSealedHierarchy(transformed.schema, inlineByName))
             }
         }
 
@@ -148,7 +165,10 @@ internal object ModelGenerator {
      * Generates a sealed interface with nested subtypes for oneOf or anyOf-with-discriminator schemas.
      */
     context(hierarchy: Hierarchy)
-    private fun generateSealedHierarchy(schema: SchemaModel): FileSpec {
+    private fun generateSealedHierarchy(
+        schema: SchemaModel,
+        inlineByName: Map<String, List<PlannedInlineType>>,
+    ): FileSpec {
         val className = hierarchy.classNameFor(schema.name)
 
         val parentBuilder = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
@@ -175,7 +195,7 @@ internal object ModelGenerator {
                 variantName = variantName,
                 parentClassName = className,
                 serialName = schema.resolveSerialName(variantName),
-                discriminatorProperty = schema.discriminator?.propertyName,
+                inlineTypes = inlineByName[variantName].orEmpty(),
             )
             parentBuilder.addType(nestedType)
         }
@@ -204,22 +224,11 @@ internal object ModelGenerator {
         variantName: String,
         parentClassName: ClassName,
         serialName: String,
-        discriminatorProperty: String?,
+        inlineTypes: List<PlannedInlineType>,
     ): TypeSpec {
         val variantClassName = parentClassName.nestedClass(variantName.toPascalCase())
 
-        val filteredSchema = variantSchema?.let { schema ->
-            val properties = discriminatorProperty?.let { discriminatorProperty ->
-                schema.properties.filter { it.name != discriminatorProperty }
-            }
-            if (properties != null) {
-                schema.copy(properties = properties)
-            } else {
-                schema
-            }
-        }
-
-        val builder = if (filteredSchema?.properties.isNullOrEmpty()) {
+        val builder = if (variantSchema?.properties.isNullOrEmpty()) {
             TypeSpec.objectBuilder(variantClassName)
         } else {
             TypeSpec.classBuilder(variantClassName).addModifiers(KModifier.DATA)
@@ -229,9 +238,14 @@ internal object ModelGenerator {
         builder.addAnnotation(SERIALIZABLE)
         builder.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
 
-        if (!filteredSchema?.properties.isNullOrEmpty()) {
-            buildConstructorAndProperties(filteredSchema, builder)
+        // Nest the variant's own inline types, registering their ids before resolving properties.
+        val nestedNames = NameRegistry()
+        val nestedSpecs = inlineTypes.map { emitNestedInline(variantClassName, it, nestedNames) }
+
+        if (!variantSchema?.properties.isNullOrEmpty()) {
+            buildConstructorAndProperties(variantSchema, builder)
         }
+        nestedSpecs.forEach { builder.addType(it) }
 
         return builder.build()
     }
@@ -468,57 +482,118 @@ internal object ModelGenerator {
      */
 
     context(hierarchy: Hierarchy)
-    private fun formatDefaultValue(prop: PropertyModel): CodeBlock = when (prop.type) {
+    private fun formatDefaultValue(prop: PropertyModel): CodeBlock =
+        formatDefaultValue(prop.type, prop.defaultValue, prop.name)
+
+    context(hierarchy: Hierarchy)
+    private fun formatDefaultValue(
+        type: TypeRef,
+        value: Any?,
+        propName: String,
+    ): CodeBlock = when (type) {
         is TypeRef.Primitive -> {
-            when (prop.type.type) {
-                PrimitiveType.STRING -> CodeBlock.of("%S", prop.defaultValue)
+            when (type.type) {
+                PrimitiveType.STRING -> {
+                    CodeBlock.of("%S", value)
+                }
 
                 PrimitiveType.INT,
                 PrimitiveType.LONG,
                 PrimitiveType.DOUBLE,
-                PrimitiveType.FLOAT,
                 PrimitiveType.BOOLEAN,
-                -> CodeBlock.of("%L", prop.defaultValue)
+                -> {
+                    CodeBlock.of("%L", value)
+                }
 
-                PrimitiveType.DATE_TIME -> catch(
-                    { Instant.parse(prop.defaultValue as String) },
-                    { CodeBlock.of("%T.parse(%S)", INSTANT, prop.defaultValue) },
-                    { e ->
-                        throw IllegalArgumentException(
-                            "Invalid ISO-8601 date-time default '${prop.defaultValue}' for property ${prop.name}: ${e.message}",
+                PrimitiveType.FLOAT -> {
+                    CodeBlock.of("%Lf", value)
+                }
+
+                PrimitiveType.DATE_TIME -> {
+                    catch(
+                        { Instant.parse(value as String) },
+                        { CodeBlock.of("%T.parse(%S)", INSTANT, value) },
+                        { e ->
+                            throw IllegalArgumentException(
+                                "Invalid ISO-8601 date-time default '$value' for property $propName: ${e.message}",
+                            )
+                        },
+                    )
+                }
+
+                PrimitiveType.DATE -> {
+                    catch(
+                        { LocalDate.parse(value as String) },
+                        { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, value) },
+                        { e ->
+                            throw IllegalArgumentException(
+                                "Invalid ISO-8601 date default '$value' for property $propName: ${e.message}",
+                            )
+                        },
+                    )
+                }
+
+                PrimitiveType.BYTE_ARRAY -> {
+                    val bytes = when (value) {
+                        is ByteArray -> value
+
+                        is String -> catch(
+                            {
+                                Base64.getDecoder().decode(value)
+                            },
+                            { it },
+                            { e ->
+                                throw IllegalArgumentException(
+                                    "Invalid base64 byte default '$value' for property $propName: ${e.message}",
+                                )
+                            },
                         )
-                    },
-                )
 
-                PrimitiveType.DATE -> catch(
-                    { LocalDate.parse(prop.defaultValue as String) },
-                    { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, prop.defaultValue) },
-                    { e ->
-                        throw IllegalArgumentException(
-                            "Invalid ISO-8601 date default '${prop.defaultValue}' for property ${prop.name}: ${e.message}",
+                        else -> throw IllegalArgumentException(
+                            "Unsupported byte-array default '$value' for property $propName",
                         )
-                    },
-                )
+                    }
+                    CodeBlock.of("byteArrayOf(%L)", bytes.joinToString(", "))
+                }
 
-                else -> throw IllegalArgumentException("Unsupported default value type: ${prop.type}")
+                PrimitiveType.UUID -> {
+                    throw IllegalArgumentException("Unsupported default value type: $type")
+                }
             }
         }
 
         is TypeRef.Reference -> {
-            val constantName = prop.defaultValue.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", hierarchy.classNameFor(prop.type.schemaName), constantName)
+            val constantName = value.toString().toEnumConstantName()
+            CodeBlock.of("%T.%L", hierarchy.classNameFor(type.schemaName), constantName)
+        }
+
+        is TypeRef.Array -> {
+            val elements = (value as? List<*>).orEmpty()
+            if (elements.isEmpty()) {
+                CodeBlock.of("emptyList()")
+            } else {
+                val items = elements.map { formatDefaultValue(type.items, it, propName) }
+                CodeBlock.of("listOf(%L)", items.joinToCode(separator = ", "))
+            }
         }
 
         else -> {
-            throw IllegalArgumentException("Unsupported default value type: ${prop.type}")
+            throw IllegalArgumentException("Unsupported default value type: $type")
         }
     }
 
     context(hierarchy: Hierarchy)
     private fun generateEnumClass(enum: EnumModel): FileSpec {
         val className = hierarchy.classNameFor(enum.name)
+        return FileSpec
+            .builder(className)
+            .addType(buildEnumType(className.simpleName, enum))
+            .build()
+    }
 
-        val typeSpec = TypeSpec.enumBuilder(className).addAnnotation(SERIALIZABLE)
+    /** Builds an `@Serializable enum class` [TypeSpec] with the given simple [name]. */
+    private fun buildEnumType(name: String, enum: EnumModel): TypeSpec {
+        val typeSpec = TypeSpec.enumBuilder(name).addAnnotation(SERIALIZABLE)
 
         val enumRegistry = NameRegistry()
         enum.values.forEach { value ->
@@ -538,10 +613,7 @@ internal object ModelGenerator {
             typeSpec.addKdoc("%L", enum.description)
         }
 
-        return FileSpec
-            .builder(className)
-            .addType(typeSpec.build())
-            .build()
+        return typeSpec.build()
     }
 
     private val SchemaModel.isPrimitiveOnly: Boolean
@@ -552,7 +624,7 @@ internal object ModelGenerator {
         is TypeRef.Array -> items.containsUuid()
         is TypeRef.Map -> valueType.containsUuid()
         is TypeRef.Inline -> properties.any { it.type.containsUuid() }
-        is TypeRef.Reference, TypeRef.Unknown -> false
+        is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> false
     }
 
     private fun TransformedApiSpec.usesUuid(): Boolean {
