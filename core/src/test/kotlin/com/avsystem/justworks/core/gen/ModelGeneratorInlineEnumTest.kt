@@ -17,6 +17,7 @@ class ModelGeneratorInlineEnumTest {
 
     private fun generate(spec: ApiSpec) = context(
         Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) },
+        OutputOptions(),
         NameRegistry(),
     ) {
         ModelGenerator.generate(spec)

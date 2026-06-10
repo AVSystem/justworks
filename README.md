@@ -34,6 +34,8 @@ justworks {
             // Optional: override default sub-packages
             apiPackage = "com.example.payments.client"
             modelPackage = "com.example.payments.dto"
+            // Optional: suppress KDoc in generated code (default true)
+            generateKdoc = false
         }
     }
 }
@@ -56,6 +58,7 @@ extra configuration needed.
 | `packageName`  | Yes      | --                   | Base package for generated code        |
 | `apiPackage`   | No       | `$packageName.api`   | Package for API client classes         |
 | `modelPackage` | No       | `$packageName.model` | Package for model/data classes         |
+| `generateKdoc` | No       | `true`               | Emit KDoc comments in generated code   |
 
 ## Supported OpenAPI Features
 

@@ -19,12 +19,14 @@ object CodeGenerator {
         modelPackage: String,
         apiPackage: String,
         outputDir: File,
+        generateKdoc: Boolean = true,
     ): Result {
         val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(spec.schemas)
         }
+        val options = OutputOptions(generateKdoc = generateKdoc)
 
-        val (modelFiles, resolvedSpec) = context(hierarchy, NameRegistry()) {
+        val (modelFiles, resolvedSpec) = context(hierarchy, options, NameRegistry()) {
             ModelGenerator.generateWithResolvedSpec(spec)
         }
 
@@ -32,7 +34,7 @@ object CodeGenerator {
 
         val hasPolymorphicTypes = modelFiles.any { it.name == SERIALIZERS_MODULE.simpleName }
 
-        val clientFiles = context(hierarchy, ApiPackage(apiPackage), NameRegistry()) {
+        val clientFiles = context(hierarchy, options, ApiPackage(apiPackage), NameRegistry()) {
             ClientGenerator.generate(resolvedSpec, hasPolymorphicTypes)
         }
 

@@ -17,6 +17,7 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
 import com.avsystem.justworks.core.gen.NameRegistry
+import com.avsystem.justworks.core.gen.OutputOptions
 import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
@@ -55,7 +56,7 @@ internal object ClientGenerator {
     private const val DEFAULT_TAG = "Default"
     private const val API_SUFFIX = "Api"
 
-    context(_: Hierarchy, _: ApiPackage, _: NameRegistry)
+    context(_: Hierarchy, _: OutputOptions, _: ApiPackage, _: NameRegistry)
     fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
@@ -63,7 +64,7 @@ internal object ClientGenerator {
         }
     }
 
-    context(hierarchy: Hierarchy, apiPackage: ApiPackage, nameRegistry: NameRegistry)
+    context(hierarchy: Hierarchy, _: OutputOptions, apiPackage: ApiPackage, nameRegistry: NameRegistry)
     private fun generateClientFile(
         tag: String,
         endpoints: List<Endpoint>,
@@ -219,7 +220,7 @@ internal object ClientGenerator {
         return builder.build()
     }
 
-    context(_: Hierarchy, methodRegistry: NameRegistry)
+    context(_: Hierarchy, options: OutputOptions, methodRegistry: NameRegistry)
     private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
@@ -251,23 +252,25 @@ internal object ClientGenerator {
             funBuilder.addParameters(buildBodyParams(endpoint.requestBody))
         }
 
-        val kdocParts = mutableListOf<String>()
-        endpoint.summary?.let { kdocParts.add(it) }
-        endpoint.description?.let {
-            if (kdocParts.isNotEmpty()) kdocParts.add("")
-            kdocParts.add(it)
-        }
-        val paramDocs = endpoint.parameters.filter { it.description != null }
-        if (paramDocs.isNotEmpty() && kdocParts.isNotEmpty()) kdocParts.add("")
-        paramDocs.forEach { param ->
-            kdocParts.add("@param ${param.name.toCamelCase()} ${param.description}")
-        }
-        if (kdocParts.isNotEmpty()) {
-            funBuilder.addKdoc("%L", kdocParts.joinToString("\n"))
-        }
-        if (returnBodyType != UNIT) {
-            if (kdocParts.isNotEmpty()) funBuilder.addKdoc("\n\n")
-            funBuilder.addKdoc("@return [%T] containing [%T] on success", HTTP_SUCCESS, returnBodyType)
+        if (options.generateKdoc) {
+            val kdocParts = mutableListOf<String>()
+            endpoint.summary?.let { kdocParts.add(it) }
+            endpoint.description?.let {
+                if (kdocParts.isNotEmpty()) kdocParts.add("")
+                kdocParts.add(it)
+            }
+            val paramDocs = endpoint.parameters.filter { it.description != null }
+            if (paramDocs.isNotEmpty() && kdocParts.isNotEmpty()) kdocParts.add("")
+            paramDocs.forEach { param ->
+                kdocParts.add("@param ${param.name.toCamelCase()} ${param.description}")
+            }
+            if (kdocParts.isNotEmpty()) {
+                funBuilder.addKdoc("%L", kdocParts.joinToString("\n"))
+            }
+            if (returnBodyType != UNIT) {
+                if (kdocParts.isNotEmpty()) funBuilder.addKdoc("\n\n")
+                funBuilder.addKdoc("@return [%T] containing [%T] on success", HTTP_SUCCESS, returnBodyType)
+            }
         }
 
         funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
