@@ -278,6 +278,21 @@ internal object ModelGenerator {
     }
 
     /**
+     * Builds a `@Serializable data class` [TypeSpec] for an inline operation body schema,
+     * suitable for nesting inside a client class. Carries no superinterfaces or discriminator
+     * wiring — operation bodies are plain anonymous objects.
+     */
+    context(_: Hierarchy)
+    internal fun buildNestedBodyType(simpleName: String, schema: SchemaModel): TypeSpec {
+        val builder = TypeSpec
+            .classBuilder(simpleName)
+            .addModifiers(KModifier.DATA)
+            .addAnnotation(SERIALIZABLE)
+        buildConstructorAndProperties(schema, builder)
+        return builder.build()
+    }
+
+    /**
      * Builds primary constructor and data class properties from a schema's property list.
      * Shared by [generateDataClass] and [buildNestedVariant].
      */

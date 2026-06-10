@@ -17,11 +17,13 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
 import com.avsystem.justworks.core.gen.NameRegistry
+import com.avsystem.justworks.core.gen.PlannedInlineType
 import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
@@ -56,10 +58,21 @@ internal object ClientGenerator {
     private const val API_SUFFIX = "Api"
 
     context(_: Hierarchy, _: ApiPackage, _: NameRegistry)
-    fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
+    fun generate(
+        spec: ApiSpec,
+        hasPolymorphicTypes: Boolean,
+        operationInlineTypes: Map<String, List<PlannedInlineType>> = emptyMap(),
+    ): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
-            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes, spec.title)
+            generateClientFile(
+                tag,
+                endpoints,
+                hasPolymorphicTypes,
+                spec.securitySchemes,
+                spec.title,
+                operationInlineTypes,
+            )
         }
     }
 
@@ -70,6 +83,7 @@ internal object ClientGenerator {
         hasPolymorphicTypes: Boolean,
         securitySchemes: List<SecurityScheme>,
         specTitle: String,
+        operationInlineTypes: Map<String, List<PlannedInlineType>>,
     ): FileSpec {
         val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
 
@@ -137,6 +151,18 @@ internal object ClientGenerator {
         if (securitySchemes.isNotEmpty()) {
             classBuilder.addFunction(buildApplyAuth(securitySchemes, isSingleBearer, specTitle))
         }
+
+        // Nest each operation's inline request/response body types inside the client class,
+        // registering their reference ids so endpoint signatures resolve to the nested classes.
+        // Done before generating functions so type resolution sees the registered names.
+        val nestedNameRegistry = NameRegistry()
+        endpoints
+            .flatMap { operationInlineTypes[it.operationId].orEmpty() }
+            .forEach { planned ->
+                val nestedName = nestedNameRegistry.register(planned.simpleName)
+                hierarchy.registerInlineRef(planned.id, className.nestedClass(nestedName))
+                classBuilder.addType(ModelGenerator.buildNestedBodyType(nestedName, planned.schema))
+            }
 
         context(NameRegistry()) {
             classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })

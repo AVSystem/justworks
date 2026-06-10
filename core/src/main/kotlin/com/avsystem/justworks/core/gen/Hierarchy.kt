@@ -11,6 +11,17 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
     private val memoScope = MemoScope()
 
     /**
+     * Resolution overrides for inline operation body types nested inside client classes,
+     * keyed by the reference id assigned by [planOperationInlineTypes].
+     */
+    private val inlineRefs = mutableMapOf<String, ClassName>()
+
+    /** Registers the nested [ClassName] an inline-operation reference id resolves to. */
+    fun registerInlineRef(id: String, className: ClassName) {
+        inlineRefs[id] = className
+    }
+
+    /**
      * Updates the underlying schemas and invalidates all cached derived views.
      * This is necessary when schemas are updated (e.g., after inlining types).
      */
@@ -72,8 +83,8 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
             }.toMap()
     }
 
-    /** Resolves a schema name to its [ClassName], falling back to a flat top-level class. */
-    operator fun get(name: String): ClassName = lookup[name] ?: ClassName(modelPackage, name)
+    /** Resolves a schema name (or inline-ref id) to its [ClassName], falling back to a flat top-level class. */
+    operator fun get(name: String): ClassName = inlineRefs[name] ?: lookup[name] ?: ClassName(modelPackage, name)
 }
 
 private fun SchemaModel.variants() = oneOf ?: anyOf
