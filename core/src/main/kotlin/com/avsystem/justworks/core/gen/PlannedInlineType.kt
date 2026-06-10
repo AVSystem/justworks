@@ -60,17 +60,23 @@ internal fun planOperationInlineTypes(spec: ApiSpec): Pair<ApiSpec, Map<String, 
         val opName = endpoint.operationId.toPascalCase()
 
         val newRequestBody = endpoint.requestBody?.let { body ->
-            (body.schema as? TypeRef.Inline)
-                ?.let { body.copy(schema = lift(endpoint.operationId, "request", "${opName}Request", it)) }
-                ?: body
+            val schema = body.schema
+            if (schema is TypeRef.Inline) {
+                body.copy(schema = lift(endpoint.operationId, "request", "${opName}Request", schema))
+            } else {
+                body
+            }
         }
 
         val newResponses = endpoint.responses.mapValues { (code, response) ->
-            (response.schema as? TypeRef.Inline)?.let { inline ->
+            val schema = response.schema
+            if (schema is TypeRef.Inline) {
                 response.copy(
-                    schema = lift(endpoint.operationId, "response#$code", responseTypeName(opName, code), inline),
+                    schema = lift(endpoint.operationId, "response#$code", responseTypeName(opName, code), schema),
                 )
-            } ?: response
+            } else {
+                response
+            }
         }
 
         endpoint.copy(requestBody = newRequestBody, responses = newResponses)
