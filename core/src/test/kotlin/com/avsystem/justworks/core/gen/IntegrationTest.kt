@@ -9,6 +9,7 @@ import com.avsystem.justworks.core.parser.SpecParser
 import com.squareup.kotlinpoet.FileSpec
 import java.io.File
 import kotlin.test.Test
+import kotlin.test.assertContains
 import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
@@ -220,6 +221,25 @@ class IntegrationTest {
 
     // -- Popular public OpenAPI specs (issue #47) --
 
+    /** All generated sources for a fixture, indexed by KotlinPoet file name. */
+    private class Generated(val modelByName: Map<String, String>, val clientByName: Map<String, String>,) {
+        fun model(name: String): String =
+            modelByName[name] ?: fail("Expected model file '$name', available: ${modelByName.keys}")
+
+        fun client(name: String): String =
+            clientByName[name] ?: fail("Expected client file '$name', available: ${clientByName.keys}")
+    }
+
+    private fun generateAll(fixture: String): Generated {
+        val spec = parseSpec(fixture).value
+        val (modelFiles, resolvedSpec) = generateModelWithResolvedSpec(spec)
+        val clientFiles = if (spec.endpoints.isNotEmpty()) generateClient(resolvedSpec) else emptyList()
+        return Generated(
+            modelFiles.associate { it.name to it.toString() },
+            clientFiles.associate { it.name to it.toString() },
+        )
+    }
+
     @Test
     fun `public specs parse without errors`() {
         for (fixture in PUBLIC_SPECS) {
@@ -241,25 +261,86 @@ class IntegrationTest {
     }
 
     @Test
-    fun `public specs generate non-empty model and client code`() {
-        for (fixture in PUBLIC_SPECS) {
-            val spec = parseSpec(fixture).value
+    fun `swagger-petstore generates expected model and client code`() {
+        val gen = generateAll("/fixtures/public/swagger-petstore.json")
 
-            val (modelFiles, resolvedSpec) = generateModelWithResolvedSpec(spec)
-            assertTrue(modelFiles.isNotEmpty(), "$fixture: should produce model files")
-            assertTrue(
-                modelFiles.all { it.toString().isNotBlank() },
-                "$fixture: generated model files should not be blank",
-            )
+        // Pet model: required props non-null, optional props nullable with defaults,
+        // object refs become typed references, @SerialName preserves wire names.
+        val pet = gen.model("Pet")
+        assertContains(pet, "public data class Pet(")
+        assertContains(pet, "public val name: String,") // required -> non-null, no default
+        assertContains(pet, "public val photoUrls: List<String>,") // required array -> non-null List
+        assertContains(pet, "public val id: Long? = null") // optional -> nullable with default
+        assertContains(pet, "public val category: Category? = null") // $ref -> typed reference
+        assertContains(pet, "public val tags: List<Tag>? = null") // array of $ref
+        assertContains(pet, """@SerialName("photoUrls")""")
 
-            if (spec.endpoints.isNotEmpty()) {
-                val clientFiles = generateClient(resolvedSpec)
-                assertTrue(clientFiles.isNotEmpty(), "$fixture: should produce client files for a spec with endpoints")
-                assertTrue(
-                    clientFiles.all { it.toString().contains("suspend fun") },
-                    "$fixture: each client class should contain suspend functions",
-                )
-            }
-        }
+        // StoreApi.getInventory: object with additionalProperties: integer -> Map<String, Int>.
+        val storeApi = gen.client("StoreApi")
+        assertContains(
+            storeApi,
+            "public suspend fun getInventory(): HttpResult<JsonElement, Map<String, Int>>",
+        )
+
+        // PetApi.getPetById: int64 path param -> Long, path templated via encodeParam.
+        val petApi = gen.client("PetApi")
+        assertContains(
+            petApi,
+            "public suspend fun getPetById(petId: Long): HttpResult<JsonElement, Pet>",
+        )
+        assertContains(petApi, "/pet/\${encodeParam(petId)}")
+    }
+
+    @Test
+    fun `petstore-expanded generates expected model and client code`() {
+        val gen = generateAll("/fixtures/public/petstore-expanded.yaml")
+
+        // Pet uses allOf(NewPet, {id}) -> flattened: name (from NewPet, required),
+        // tag (from NewPet, optional), id (required in the inline part).
+        val pet = gen.model("Pet")
+        assertContains(pet, "public data class Pet(")
+        assertContains(pet, "public val name: String,")
+        assertContains(pet, "public val id: Long,") // required -> non-null
+        assertContains(pet, "public val tag: String? = null")
+
+        val error = gen.model("Error")
+        assertContains(error, "public val code: Int,")
+        assertContains(error, "public val message: String,")
+
+        val api = gen.client("DefaultApi")
+        // Optional query params -> nullable with default, appended only when non-null.
+        assertContains(
+            api,
+            "public suspend fun findPets(tags: List<String>? = null, limit: Int? = null): " +
+                "HttpResult<JsonElement, List<Pet>>",
+        )
+        // requestBody $ref -> typed body param + JSON content type + setBody.
+        assertContains(api, "public suspend fun addPet(body: NewPet): HttpResult<JsonElement, Pet>")
+        assertContains(api, "contentType(ContentType.Application.Json)")
+        assertContains(api, "setBody(body)")
+        // 204 No Content response -> Unit result via toEmptyResult().
+        assertContains(api, "public suspend fun deletePet(id: Long): HttpResult<JsonElement, Unit>")
+        assertContains(api, ".toEmptyResult()")
+    }
+
+    @Test
+    fun `uspto generates expected model and degrades freeform response`() {
+        val gen = generateAll("/fixtures/public/uspto.yaml")
+
+        // Nested inline object array item gets a synthesized name.
+        val dataSetList = gen.model("dataSetList")
+        assertContains(dataSetList, "public val total: Int? = null")
+        assertContains(dataSetList, "public val apis: List<dataSetList_ApisItem>? = null")
+
+        val metadataApi = gen.client("MetadataApi")
+        assertContains(
+            metadataApi,
+            "public suspend fun listDataSets(): HttpResult<JsonElement, dataSetList>",
+        )
+
+        // Freeform search response (no schema) degrades to JsonElement, never a hard failure.
+        val searchApi = gen.client("SearchApi")
+        assertContains(searchApi, "import kotlinx.serialization.json.JsonElement")
+        assertContains(searchApi, "public suspend fun performSearch(")
     }
 }
