@@ -16,6 +16,7 @@ import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.TypeSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFailsWith
 import kotlin.test.assertFalse
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -673,6 +674,294 @@ class ModelGeneratorTest {
             param.defaultValue.toString().contains("Status.ACTIVE"),
             "Expected Status.ACTIVE, got: ${param.defaultValue}",
         )
+    }
+
+    @Test
+    fun `array property with default emits listOf with element literals`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "tags",
+                            TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING)),
+                            null,
+                            false,
+                            listOf("X", "Y"),
+                        ),
+                    ),
+                requiredProperties = setOf("tags"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "tags" }
+        assertEquals("listOf(\"X\", \"Y\")", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `array property with empty default emits emptyList`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "tags",
+                            TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING)),
+                            null,
+                            false,
+                            emptyList<String>(),
+                        ),
+                    ),
+                requiredProperties = setOf("tags"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "tags" }
+        assertEquals("emptyList()", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `long default generates default parameter with literal`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("count", TypeRef.Primitive(PrimitiveType.LONG), null, false, 9999999999L),
+                    ),
+                requiredProperties = setOf("count"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "count" }
+        assertEquals("9_999_999_999", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `float default generates default parameter with literal`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("ratio", TypeRef.Primitive(PrimitiveType.FLOAT), null, false, 1.5f),
+                    ),
+                requiredProperties = setOf("ratio"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "ratio" }
+        assertEquals("1.5f", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `array of enum references default emits listOf with enum constants`() {
+        val statusEnum =
+            EnumModel(
+                name = "Status",
+                description = null,
+                type = EnumBackingType.STRING,
+                values = listOf(EnumModel.Value("active"), EnumModel.Value("closed")),
+            )
+        val schema =
+            SchemaModel(
+                name = "Task",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "statuses",
+                            TypeRef.Array(TypeRef.Reference("Status")),
+                            null,
+                            false,
+                            listOf("active", "closed"),
+                        ),
+                    ),
+                requiredProperties = setOf("statuses"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema), enums = listOf(statusEnum)))
+        val typeSpec = files.first { it.name == "Task" }.members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "statuses" }
+        assertEquals(
+            "listOf(com.example.model.Status.ACTIVE, com.example.model.Status.CLOSED)",
+            param.defaultValue.toString(),
+        )
+    }
+
+    @Test
+    fun `invalid date-time default throws IllegalArgumentException`() {
+        val schema =
+            SchemaModel(
+                name = "Event",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "createdAt",
+                            TypeRef.Primitive(PrimitiveType.DATE_TIME),
+                            null,
+                            false,
+                            "not-a-date",
+                        ),
+                    ),
+                requiredProperties = setOf("createdAt"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val ex = assertFailsWith<IllegalArgumentException> { generate(spec(schemas = listOf(schema))) }
+        assertTrue(ex.message!!.contains("createdAt"), "Expected property name in message, got: ${ex.message}")
+    }
+
+    @Test
+    fun `invalid date default throws IllegalArgumentException`() {
+        val schema =
+            SchemaModel(
+                name = "Event",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("eventDate", TypeRef.Primitive(PrimitiveType.DATE), null, false, "not-a-date"),
+                    ),
+                requiredProperties = setOf("eventDate"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val ex = assertFailsWith<IllegalArgumentException> { generate(spec(schemas = listOf(schema))) }
+        assertTrue(ex.message!!.contains("eventDate"), "Expected property name in message, got: ${ex.message}")
+    }
+
+    @Test
+    fun `unsupported primitive default type throws IllegalArgumentException`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("id", TypeRef.Primitive(PrimitiveType.UUID), null, false, "some-uuid"),
+                    ),
+                requiredProperties = setOf("id"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        assertFailsWith<IllegalArgumentException> { generate(spec(schemas = listOf(schema))) }
+    }
+
+    @Test
+    fun `byte array default from base64 string emits byteArrayOf literal`() {
+        // "AAEC" base64-decodes to bytes 0, 1, 2
+        val schema =
+            SchemaModel(
+                name = "Blob",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("data", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false, "AAEC"),
+                    ),
+                requiredProperties = setOf("data"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "data" }
+        assertEquals("byteArrayOf(0, 1, 2)", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `byte array default from decoded ByteArray emits byteArrayOf literal`() {
+        // Jackson binary nodes arrive already decoded as a ByteArray
+        val schema =
+            SchemaModel(
+                name = "Blob",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "data",
+                            TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+                            null,
+                            false,
+                            byteArrayOf(10, -1, 127),
+                        ),
+                    ),
+                requiredProperties = setOf("data"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "data" }
+        assertEquals("byteArrayOf(10, -1, 127)", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `invalid base64 byte array default throws IllegalArgumentException`() {
+        val schema =
+            SchemaModel(
+                name = "Blob",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "data",
+                            TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+                            null,
+                            false,
+                            "!!!not-base64!!!",
+                        ),
+                    ),
+                requiredProperties = setOf("data"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val ex = assertFailsWith<IllegalArgumentException> { generate(spec(schemas = listOf(schema))) }
+        assertTrue(ex.message!!.contains("data"), "Expected property name in message, got: ${ex.message}")
     }
 
     // -- Primitive-only type alias tests --

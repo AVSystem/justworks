@@ -36,6 +36,8 @@ import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import com.avsystem.justworks.core.toEnumOrNull
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ArrayNode
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
@@ -282,6 +284,7 @@ object SpecParser {
                                 schema = resp.content
                                     ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
+                                    ?.takeUnless { it.isEmptyContent }
                                     ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                             )
                         }
@@ -462,18 +465,25 @@ object SpecParser {
     /** Resolves a [TypeRef] based on the schema's structural type/format, ignoring component identity. */
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.resolveByType(contextName: String? = null): TypeRef = when (type) {
-        "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
+        "string" -> inlineEnum(contextName, EnumBackingType.STRING)
+            ?: STRING_FORMAT_MAP[format]
+            ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-        "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
+        "integer" -> inlineEnum(contextName, EnumBackingType.INTEGER)
+            ?: INTEGER_FORMAT_MAP[format]
+            ?: TypeRef.Primitive(PrimitiveType.INT)
 
         "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
 
         "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-        "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
+        "array" -> TypeRef.Array(
+            items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown,
+            unique = uniqueItems == true,
+        )
 
         "object" -> when (val ap = additionalProperties) {
-            is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+            is Schema<*> -> TypeRef.Map(ap.toTypeRef(contextName?.let { "${it}Value" }))
             is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
             else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
         }
@@ -501,17 +511,90 @@ object SpecParser {
 
     private val Schema<*>.isEnumSchema get(): Boolean = !enum.isNullOrEmpty()
 
+    /**
+     * True when a property of this type declares a `default` that should be honored, i.e. the
+     * property is not optional-null but carries a concrete value and must be generated as a
+     * non-nullable field initialized to that default rather than as `T? = null`.
+     *
+     * Honored for scalar/enum types (primitives, inline enums, references — the latter typically
+     * a named enum) and for arrays of such element types (emitted as `listOf(...)`/`emptyList()`).
+     * Object/map defaults are intentionally excluded and keep the previous nullable-null behavior.
+     */
+    private fun TypeRef.honorsDefault(default: Any?): Boolean = default != null &&
+        when (this) {
+            is TypeRef.Primitive, is TypeRef.InlineEnum, is TypeRef.Reference -> true
+            is TypeRef.Array -> items.honorsDefault(default)
+            is TypeRef.Inline, is TypeRef.Map, TypeRef.Unknown -> false
+        }
+
+    /**
+     * Normalizes a raw Swagger default into a plain Kotlin value the model layer can format
+     * without depending on Jackson. Array defaults arrive as a Jackson [ArrayNode]; unwrap them
+     * into a `List` of plain scalar values. Scalar defaults are already plain and pass through.
+     */
+    private fun normalizeDefault(default: Any?): Any? = when (default) {
+        is ArrayNode -> default.map { normalizeDefault(it) }
+
+        is JsonNode -> when {
+            default.isShort -> default.shortValue()
+            default.isInt -> default.intValue()
+            default.isLong -> default.longValue()
+            default.isFloat -> default.floatValue()
+            default.isDouble -> default.doubleValue()
+            default.isBigDecimal -> default.decimalValue()
+            default.isBigInteger -> default.bigIntegerValue()
+            default.isNumber -> default.numberValue()
+            default.isBoolean -> default.booleanValue()
+            default.isNull -> null
+            default.isBinary -> default.binaryValue()
+            else -> default.asText()
+        }
+
+        else -> default
+    }
+
+    /**
+     * True when the schema carries no structure at all — no `type`, `$ref`, properties, items,
+     * combinators, enum, or additionalProperties (e.g. `{}` or `{ "nullable": true }`). As a
+     * response body this means "no content", which is generated as a `Unit` return type.
+     */
+    private val Schema<*>.isEmptyContent: Boolean
+        get() = `$ref` == null &&
+            type == null &&
+            properties.isNullOrEmpty() &&
+            allOf.isNullOrEmpty() &&
+            oneOf.isNullOrEmpty() &&
+            anyOf.isNullOrEmpty() &&
+            enum.isNullOrEmpty() &&
+            additionalProperties == null &&
+            items == null
+
+    /**
+     * Builds a [TypeRef.InlineEnum] for an enum schema that is not a named component
+     * (e.g. an enum declared directly in array `items` or inline on a property).
+     * Named component enums are resolved to [TypeRef.Reference] before reaching here.
+     */
+    private fun Schema<*>.inlineEnum(contextName: String?, backingType: EnumBackingType): TypeRef.InlineEnum? =
+        enum?.filterNotNull()?.takeIf { it.isNotEmpty() }?.let { values ->
+            TypeRef.InlineEnum(
+                values = values.map { it.toString() },
+                backingType = backingType,
+                contextHint = contextName ?: "InlineEnum",
+            )
+        }
+
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.propertyModels(required: Set<String>, createContext: (String) -> String? = { null }) =
         properties
             .orEmpty()
             .mapValues { (propName, propSchema) ->
+                val type = propSchema.toTypeRef(createContext(propName))
                 PropertyModel(
                     name = propName,
-                    type = propSchema.toTypeRef(createContext(propName)),
+                    type = type,
                     description = propSchema.description,
-                    nullable = propName !in required,
-                    defaultValue = propSchema.default,
+                    nullable = propName !in required && !type.honorsDefault(propSchema.default),
+                    defaultValue = normalizeDefault(propSchema.default),
                     deprecated = propSchema.deprecated == true,
                 )
             }
@@ -558,7 +641,7 @@ object SpecParser {
             is TypeRef.Array -> callRecursive(typeRef.items)
             is TypeRef.Map -> callRecursive(typeRef.valueType)
             is TypeRef.Inline -> typeRef.properties.any { callRecursive(it.type) }
-            is TypeRef.Primitive, is TypeRef.Reference -> false
+            is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum -> false
         }
     }
 

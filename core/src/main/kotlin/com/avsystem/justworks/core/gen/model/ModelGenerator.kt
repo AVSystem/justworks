@@ -7,7 +7,6 @@ import com.avsystem.justworks.core.gen.EXPERIMENTAL_SERIALIZATION_API
 import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.INSTANT
-import com.avsystem.justworks.core.gen.InlineSchemaKey
 import com.avsystem.justworks.core.gen.JSON_CLASS_DISCRIMINATOR
 import com.avsystem.justworks.core.gen.JSON_CONTENT_POLYMORPHIC_SERIALIZER
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
@@ -26,6 +25,8 @@ import com.avsystem.justworks.core.gen.SERIAL_NAME
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
 import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
+import com.avsystem.justworks.core.gen.collectInlineEnums
+import com.avsystem.justworks.core.gen.collectInlineSchemas
 import com.avsystem.justworks.core.gen.deprecatedAnnotation
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
@@ -34,9 +35,9 @@ import com.avsystem.justworks.core.gen.resolveInlineTypes
 import com.avsystem.justworks.core.gen.resolveSerialName
 import com.avsystem.justworks.core.gen.resolveTypeRef
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
+import com.avsystem.justworks.core.gen.stripDiscriminatorProperties
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
-import com.avsystem.justworks.core.gen.toInlinedName
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiSpec
@@ -59,7 +60,9 @@ import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
+import com.squareup.kotlinpoet.joinToCode
 import kotlinx.datetime.LocalDate
+import java.util.Base64
 import kotlin.time.Instant
 
 /**
@@ -75,15 +78,17 @@ internal object ModelGenerator {
     fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
 
     context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
-    fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
+    fun generateWithResolvedSpec(rawSpec: ApiSpec): GenerateResult {
+        val spec = rawSpec.stripDiscriminatorProperties()
         ensureReserved(spec, nameRegistry)
-        val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec)
-        val resolvedSpec = spec.resolveInlineTypes(nameMap)
+        val (inlineSchemas, nameMap) = collectInlineSchemas(spec)
+        val (inlineEnums, enumNameMap) = collectInlineEnums(spec)
+        val resolvedSpec = spec.resolveInlineTypes(nameMap, enumNameMap)
 
         val resolvedInlineSchemas = inlineSchemas.map { schema ->
             schema.copy(
                 properties = schema.properties.map { prop ->
-                    prop.copy(type = resolvedSpec.resolveTypeRef(prop.type, nameMap))
+                    prop.copy(type = resolvedSpec.resolveTypeRef(prop.type, nameMap, enumNameMap))
                 },
             )
         }
@@ -104,7 +109,7 @@ internal object ModelGenerator {
 
         val inlineSchemaFiles = resolvedInlineSchemas.map { generateDataClass(it) }
 
-        val enumFiles = resolvedSpec.enums.map { generateEnumClass(it) }
+        val enumFiles = (resolvedSpec.enums + inlineEnums).map { generateEnumClass(it) }
 
         val serializersModuleFile = SerializersModuleGenerator.generate()
 
@@ -126,41 +131,6 @@ internal object ModelGenerator {
         spec.enums.forEach { nameRegistry.reserve(it.name) }
         nameRegistry.reserve(UUID_SERIALIZER.simpleName)
         nameRegistry.reserve(SERIALIZERS_MODULE.simpleName)
-    }
-
-    context(nameRegistry: NameRegistry)
-    private fun collectAllInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> {
-        val endpointRefs = spec.endpoints.flatMap { endpoint ->
-            val requestRef = endpoint.requestBody?.schema
-            val responseRefs = endpoint.responses.values.map { it.schema }
-            responseRefs + requestRef
-        }
-
-        val schemaPropertyRefs = spec.schemas.flatMap { schema -> schema.properties.map { it.type } }
-
-        val nameMap = mutableMapOf<InlineSchemaKey, String>()
-
-        val schemas = collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
-            .asSequence()
-            .sortedBy { it.contextHint }
-            .distinctBy { InlineSchemaKey.from(it.properties, it.requiredProperties) }
-            .map { ref ->
-                val key = InlineSchemaKey.from(ref.properties, ref.requiredProperties)
-                val generatedName = nameRegistry.register(ref.contextHint.toInlinedName())
-                nameMap[key] = generatedName
-                SchemaModel(
-                    name = generatedName,
-                    description = null,
-                    properties = ref.properties,
-                    requiredProperties = ref.requiredProperties,
-                    allOf = null,
-                    oneOf = null,
-                    anyOf = null,
-                    discriminator = null,
-                )
-            }.toList()
-
-        return schemas to nameMap
     }
 
     context(hierarchy: Hierarchy)
@@ -221,7 +191,6 @@ internal object ModelGenerator {
                 variantName = variantName,
                 parentClassName = className,
                 serialName = schema.resolveSerialName(variantName),
-                discriminatorProperty = schema.discriminator?.propertyName,
             )
             parentBuilder.addType(nestedType)
         }
@@ -250,22 +219,10 @@ internal object ModelGenerator {
         variantName: String,
         parentClassName: ClassName,
         serialName: String,
-        discriminatorProperty: String?,
     ): TypeSpec {
         val variantClassName = parentClassName.nestedClass(variantName.toPascalCase())
 
-        val filteredSchema = variantSchema?.let { schema ->
-            val properties = discriminatorProperty?.let { discriminatorProperty ->
-                schema.properties.filter { it.name != discriminatorProperty }
-            }
-            if (properties != null) {
-                schema.copy(properties = properties)
-            } else {
-                schema
-            }
-        }
-
-        val builder = if (filteredSchema?.properties.isNullOrEmpty()) {
+        val builder = if (variantSchema?.properties.isNullOrEmpty()) {
             TypeSpec.objectBuilder(variantClassName)
         } else {
             TypeSpec.classBuilder(variantClassName).addModifiers(KModifier.DATA)
@@ -275,8 +232,8 @@ internal object ModelGenerator {
         builder.addAnnotation(SERIALIZABLE)
         builder.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
 
-        if (!filteredSchema?.properties.isNullOrEmpty()) {
-            buildConstructorAndProperties(filteredSchema, builder)
+        if (!variantSchema?.properties.isNullOrEmpty()) {
+            buildConstructorAndProperties(variantSchema, builder)
         }
 
         return builder.build()
@@ -518,49 +475,103 @@ internal object ModelGenerator {
      */
 
     context(hierarchy: Hierarchy)
-    private fun formatDefaultValue(prop: PropertyModel): CodeBlock = when (prop.type) {
+    private fun formatDefaultValue(prop: PropertyModel): CodeBlock =
+        formatDefaultValue(prop.type, prop.defaultValue, prop.name)
+
+    context(hierarchy: Hierarchy)
+    private fun formatDefaultValue(
+        type: TypeRef,
+        value: Any?,
+        propName: String,
+    ): CodeBlock = when (type) {
         is TypeRef.Primitive -> {
-            when (prop.type.type) {
-                PrimitiveType.STRING -> CodeBlock.of("%S", prop.defaultValue)
+            when (type.type) {
+                PrimitiveType.STRING -> {
+                    CodeBlock.of("%S", value)
+                }
 
                 PrimitiveType.INT,
                 PrimitiveType.LONG,
                 PrimitiveType.DOUBLE,
-                PrimitiveType.FLOAT,
                 PrimitiveType.BOOLEAN,
-                -> CodeBlock.of("%L", prop.defaultValue)
+                -> {
+                    CodeBlock.of("%L", value)
+                }
 
-                PrimitiveType.DATE_TIME -> catch(
-                    { Instant.parse(prop.defaultValue as String) },
-                    { CodeBlock.of("%T.parse(%S)", INSTANT, prop.defaultValue) },
-                    { e ->
-                        throw IllegalArgumentException(
-                            "Invalid ISO-8601 date-time default '${prop.defaultValue}' for property ${prop.name}: ${e.message}",
+                PrimitiveType.FLOAT -> {
+                    CodeBlock.of("%Lf", value)
+                }
+
+                PrimitiveType.DATE_TIME -> {
+                    catch(
+                        { Instant.parse(value as String) },
+                        { CodeBlock.of("%T.parse(%S)", INSTANT, value) },
+                        { e ->
+                            throw IllegalArgumentException(
+                                "Invalid ISO-8601 date-time default '$value' for property $propName: ${e.message}",
+                            )
+                        },
+                    )
+                }
+
+                PrimitiveType.DATE -> {
+                    catch(
+                        { LocalDate.parse(value as String) },
+                        { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, value) },
+                        { e ->
+                            throw IllegalArgumentException(
+                                "Invalid ISO-8601 date default '$value' for property $propName: ${e.message}",
+                            )
+                        },
+                    )
+                }
+
+                PrimitiveType.BYTE_ARRAY -> {
+                    val bytes = when (value) {
+                        is ByteArray -> value
+
+                        is String -> catch(
+                            {
+                                Base64.getDecoder().decode(value)
+                            },
+                            { it },
+                            { e ->
+                                throw IllegalArgumentException(
+                                    "Invalid base64 byte default '$value' for property $propName: ${e.message}",
+                                )
+                            },
                         )
-                    },
-                )
 
-                PrimitiveType.DATE -> catch(
-                    { LocalDate.parse(prop.defaultValue as String) },
-                    { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, prop.defaultValue) },
-                    { e ->
-                        throw IllegalArgumentException(
-                            "Invalid ISO-8601 date default '${prop.defaultValue}' for property ${prop.name}: ${e.message}",
+                        else -> throw IllegalArgumentException(
+                            "Unsupported byte-array default '$value' for property $propName",
                         )
-                    },
-                )
+                    }
+                    CodeBlock.of("byteArrayOf(%L)", bytes.joinToString(", "))
+                }
 
-                else -> throw IllegalArgumentException("Unsupported default value type: ${prop.type}")
+                PrimitiveType.UUID -> {
+                    throw IllegalArgumentException("Unsupported default value type: $type")
+                }
             }
         }
 
         is TypeRef.Reference -> {
-            val constantName = prop.defaultValue.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, prop.type.schemaName), constantName)
+            val constantName = value.toString().toEnumConstantName()
+            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, type.schemaName), constantName)
+        }
+
+        is TypeRef.Array -> {
+            val elements = (value as? List<*>).orEmpty()
+            if (elements.isEmpty()) {
+                CodeBlock.of("emptyList()")
+            } else {
+                val items = elements.map { formatDefaultValue(type.items, it, propName) }
+                CodeBlock.of("listOf(%L)", items.joinToCode(separator = ", "))
+            }
         }
 
         else -> {
-            throw IllegalArgumentException("Unsupported default value type: ${prop.type}")
+            throw IllegalArgumentException("Unsupported default value type: $type")
         }
     }
 
@@ -594,33 +605,6 @@ internal object ModelGenerator {
             .build()
     }
 
-    /**
-     * Iteratively collects all [TypeRef.Inline] instances from a [TypeRef] tree.
-     */
-    private fun collectInlineTypeRefs(initialTodo: List<TypeRef?>): List<TypeRef.Inline> {
-        val todo = ArrayDeque(initialTodo.filterNotNull())
-        val visited = linkedSetOf<TypeRef.Inline>()
-
-        while (todo.isNotEmpty()) {
-            when (val current = todo.removeFirst()) {
-                is TypeRef.Inline if visited.add(current) -> {
-                    todo.addAll(current.properties.map { it.type })
-                }
-
-                is TypeRef.Array -> {
-                    todo.addFirst(current.items)
-                }
-
-                is TypeRef.Map -> {
-                    todo.addFirst(current.valueType)
-                }
-
-                else -> {}
-            }
-        }
-        return visited.toList()
-    }
-
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
 
@@ -629,7 +613,7 @@ internal object ModelGenerator {
         is TypeRef.Array -> items.containsUuid()
         is TypeRef.Map -> valueType.containsUuid()
         is TypeRef.Inline -> properties.any { it.type.containsUuid() }
-        is TypeRef.Reference, TypeRef.Unknown -> false
+        is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> false
     }
 
     private fun ApiSpec.usesUuid(): Boolean {
