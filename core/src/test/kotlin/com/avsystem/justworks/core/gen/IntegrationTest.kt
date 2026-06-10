@@ -46,22 +46,20 @@ class IntegrationTest {
 
     private fun generateModel(spec: ApiSpec): List<FileSpec> {
         val resolved = spec.resolveInlines()
-        return context(hierarchyFor(resolved), NameRegistry()) {
-            val _ = contextOf<Hierarchy>()
-            _
-            ModelGenerator.generate(resolved).files
+        return context(hierarchyFor(resolved), OutputOptions(), NameRegistry()) {
+            ModelGenerator.generate(resolved)
         }
     }
 
     private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult {
         val resolved = spec.resolveInlines()
-        return context(hierarchyFor(resolved), NameRegistry()) {
-            ModelGenerator.generate(resolved)
+        return context(hierarchyFor(resolved), OutputOptions(), NameRegistry()) {
+            ModelGenerator.generateWithResolvedSpec(resolved)
         }
     }
 
-    private fun generateClient(resolved: ResolvedApiSpec, hasPolymorphicTypes: Boolean = false,): List<FileSpec> =
-        context(hierarchyFor(resolved), ApiPackage(apiPackage), NameRegistry()) {
+    private fun generateClient(resolved: ResolvedApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
+        context(hierarchyFor(resolved), OutputOptions(), ApiPackage(apiPackage), NameRegistry()) {
             ClientGenerator.generate(resolved, hasPolymorphicTypes)
         }
 

@@ -22,11 +22,10 @@ class ModelGeneratorInlineEnumTest {
     private fun generate(spec: ApiSpec) = spec.resolveInlines().let { resolved ->
         context(
             Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(resolved.schemas.map { it.schema }) },
+            OutputOptions(),
             NameRegistry(),
         ) {
-            val _ = contextOf<Hierarchy>()
-            _
-            ModelGenerator.generate(resolved).files
+            ModelGenerator.generate(resolved)
         }
     }
 

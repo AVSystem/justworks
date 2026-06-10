@@ -16,10 +16,8 @@ class ModelGeneratorRegressionTest {
         val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(resolved.schemas.map { it.schema })
         }
-        return context(hierarchy, NameRegistry()) {
-            val _ = contextOf<Hierarchy>()
-            _
-            ModelGenerator.generate(resolved).files
+        return context(hierarchy, OutputOptions(), NameRegistry()) {
+            ModelGenerator.generate(resolved)
         }
     }
 

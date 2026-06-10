@@ -38,6 +38,10 @@ abstract class JustworksGenerateTask : DefaultTask() {
     @get:Input
     abstract val modelPackage: Property<String>
 
+    /** Whether to emit KDoc comments in generated code. */
+    @get:Input
+    abstract val generateKdoc: Property<Boolean>
+
     /** Output directory for generated Kotlin source files. */
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -61,6 +65,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
                     modelPackage = modelPackage.get(),
                     apiPackage = apiPackage.get(),
                     outputDir = outDir,
+                    generateKdoc = generateKdoc.get(),
                 )
 
                 logger.lifecycle(

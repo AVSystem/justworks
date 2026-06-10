@@ -29,18 +29,20 @@ class ClientGeneratorTest {
     private val apiPackage = "com.example.api"
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
-        spec.resolveInlines().let { resolved ->
-            context(
-                Hierarchy(ModelPackage(modelPackage)).apply {
-                    addSchemas(resolved.schemas.map { it.schema })
-                },
-                ApiPackage(apiPackage),
-                NameRegistry(),
-            ) {
-                ClientGenerator.generate(resolved, hasPolymorphicTypes)
-            }
+    private fun generate(
+        spec: ApiSpec,
+        hasPolymorphicTypes: Boolean = false,
+        generateKdoc: Boolean = true,
+    ): List<FileSpec> = spec.resolveInlines().let { resolved ->
+        context(
+            Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(resolved.schemas.map { it.schema }) },
+            OutputOptions(generateKdoc = generateKdoc),
+            ApiPackage(apiPackage),
+            NameRegistry(),
+        ) {
+            ClientGenerator.generate(resolved, hasPolymorphicTypes)
         }
+    }
 
     private fun spec(vararg endpoints: Endpoint) = spec(endpoints.toList())
 
@@ -117,6 +119,30 @@ class ClientGeneratorTest {
         val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         assertTrue(KModifier.SUSPEND in funSpec.modifiers, "Expected SUSPEND modifier")
+    }
+
+    // -- generateKdoc flag --
+
+    @Test
+    fun `generateKdoc false suppresses function KDoc`() {
+        val ep = endpoint(operationId = "listPets", summary = "List all pets")
+        val withKdoc = generate(spec(ep))
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+            .funSpecs
+            .first { it.name == "listPets" }
+        assertTrue(withKdoc.kdoc.toString().contains("List all pets"), "Expected KDoc by default")
+
+        val noKdoc = generate(spec(ep), generateKdoc = false)
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+            .funSpecs
+            .first { it.name == "listPets" }
+        assertTrue(noKdoc.kdoc.toString().isEmpty(), "Expected no KDoc when generateKdoc=false")
     }
 
     // -- CLNT-03: All HTTP methods --
