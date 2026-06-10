@@ -74,7 +74,7 @@ internal object ClientGenerator {
         val baseName = "${options.apiClassPrefix}${tag.toPascalCase()}${options.apiClassSuffix}"
 
         val interfaceClass =
-            ClassName(apiPackage, nameRegistry.register(baseName)).takeIf { options.generateInterfaces }
+            if (options.generateInterfaces) ClassName(apiPackage, nameRegistry.register(baseName)) else null
         val classSimpleName = if (options.generateInterfaces) "${baseName}Impl" else baseName
         val className = ClassName(apiPackage, nameRegistry.register(classSimpleName))
 
