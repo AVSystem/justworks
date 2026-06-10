@@ -17,9 +17,9 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
 import com.avsystem.justworks.core.gen.NameRegistry
+import com.avsystem.justworks.core.gen.ResolvedApiSpec
+import com.avsystem.justworks.core.gen.ResolvedEndpoint
 import com.avsystem.justworks.core.gen.TOKEN
-import com.avsystem.justworks.core.gen.TransformedApiSpec
-import com.avsystem.justworks.core.gen.TransformedEndpoint
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
@@ -58,7 +58,7 @@ internal object ClientGenerator {
     private const val API_SUFFIX = "Api"
 
     context(_: Hierarchy, _: ApiPackage, _: NameRegistry)
-    fun generate(spec: TransformedApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
+    fun generate(spec: ResolvedApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.endpoint.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
             generateClientFile(
@@ -74,7 +74,7 @@ internal object ClientGenerator {
     context(hierarchy: Hierarchy, apiPackage: ApiPackage, nameRegistry: NameRegistry)
     private fun generateClientFile(
         tag: String,
-        endpoints: List<TransformedEndpoint>,
+        endpoints: List<ResolvedEndpoint>,
         hasPolymorphicTypes: Boolean,
         securitySchemes: List<SecurityScheme>,
         specTitle: String,
@@ -146,14 +146,11 @@ internal object ClientGenerator {
             classBuilder.addFunction(buildApplyAuth(securitySchemes, isSingleBearer, specTitle))
         }
 
-        // Nest each operation's inline request/response body types inside the client class,
-        // registering their reference ids so endpoint signatures resolve to the nested classes.
-        // Done before generating functions so type resolution sees the registered names.
         val nestedNames = NameRegistry()
         endpoints
             .flatMap { it.inlineTypes }
-            .forEach { planned ->
-                classBuilder.addType(ModelGenerator.emitNestedInline(className, planned, nestedNames))
+            .forEach { nested ->
+                classBuilder.addType(ModelGenerator.emitNestedInline(className, nested, nestedNames))
             }
 
         context(NameRegistry()) {

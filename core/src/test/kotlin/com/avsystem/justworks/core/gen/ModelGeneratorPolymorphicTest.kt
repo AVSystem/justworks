@@ -1,7 +1,6 @@
 package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.gen.model.ModelGenerator
-import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.EnumBackingType
@@ -21,14 +20,16 @@ import kotlin.test.assertTrue
 class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = spec.transform().let { transformed ->
+    private fun generate(spec: ApiSpec) = spec.resolveInlines().let { resolved ->
         context(
             Hierarchy(ModelPackage(modelPackage)).apply {
-                addSchemas(transformed.schemas.map { it.schema })
+                addSchemas(resolved.schemas.map { it.schema })
             },
             NameRegistry(),
         ) {
-            ModelGenerator.generate(transformed)
+            val _ = contextOf<Hierarchy>()
+            _
+            ModelGenerator.generate(resolved).files
         }
     }
 

@@ -40,25 +40,29 @@ class IntegrationTest {
         }
     }
 
-    private fun hierarchyFor(transformed: TransformedApiSpec) = Hierarchy(ModelPackage(modelPackage)).apply {
-        addSchemas(transformed.schemas.map { it.schema })
+    private fun hierarchyFor(resolved: ResolvedApiSpec) = Hierarchy(ModelPackage(modelPackage)).apply {
+        addSchemas(resolved.schemas.map { it.schema })
     }
 
     private fun generateModel(spec: ApiSpec): List<FileSpec> {
-        val transformed = spec.transform()
-        return context(hierarchyFor(transformed), NameRegistry()) { ModelGenerator.generate(transformed) }
-    }
-
-    private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult {
-        val transformed = spec.transform()
-        return context(hierarchyFor(transformed), NameRegistry()) {
-            ModelGenerator.generateWithResolvedSpec(transformed)
+        val resolved = spec.resolveInlines()
+        return context(hierarchyFor(resolved), NameRegistry()) {
+            val _ = contextOf<Hierarchy>()
+            _
+            ModelGenerator.generate(resolved).files
         }
     }
 
-    private fun generateClient(transformed: TransformedApiSpec, hasPolymorphicTypes: Boolean = false,): List<FileSpec> =
-        context(hierarchyFor(transformed), ApiPackage(apiPackage), NameRegistry()) {
-            ClientGenerator.generate(transformed, hasPolymorphicTypes)
+    private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult {
+        val resolved = spec.resolveInlines()
+        return context(hierarchyFor(resolved), NameRegistry()) {
+            ModelGenerator.generate(resolved)
+        }
+    }
+
+    private fun generateClient(resolved: ResolvedApiSpec, hasPolymorphicTypes: Boolean = false,): List<FileSpec> =
+        context(hierarchyFor(resolved), ApiPackage(apiPackage), NameRegistry()) {
+            ClientGenerator.generate(resolved, hasPolymorphicTypes)
         }
 
     @Test

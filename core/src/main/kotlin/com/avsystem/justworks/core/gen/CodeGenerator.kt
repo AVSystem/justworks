@@ -20,14 +20,14 @@ object CodeGenerator {
         apiPackage: String,
         outputDir: File,
     ): Result {
-        val transformed = spec.transform()
+        val resolvedApiSpec = spec.resolveInlines()
 
         val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
-            addSchemas(transformed.schemas.map { it.schema })
+            addSchemas(resolvedApiSpec.schemas.map { it.schema })
         }
 
         val (modelFiles, resolvedSpec) = context(hierarchy, NameRegistry()) {
-            ModelGenerator.generateWithResolvedSpec(transformed)
+            ModelGenerator.generate(resolvedApiSpec)
         }
 
         modelFiles.forEach { it.writeTo(outputDir) }

@@ -30,15 +30,15 @@ class ClientGeneratorTest {
     private val modelPackage = "com.example.model"
 
     private fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
-        spec.transform().let { transformed ->
+        spec.resolveInlines().let { resolved ->
             context(
                 Hierarchy(ModelPackage(modelPackage)).apply {
-                    addSchemas(transformed.schemas.map { it.schema })
+                    addSchemas(resolved.schemas.map { it.schema })
                 },
                 ApiPackage(apiPackage),
                 NameRegistry(),
             ) {
-                ClientGenerator.generate(transformed, hasPolymorphicTypes)
+                ClientGenerator.generate(resolved, hasPolymorphicTypes)
             }
         }
 

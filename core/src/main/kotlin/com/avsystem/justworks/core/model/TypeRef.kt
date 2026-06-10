@@ -9,10 +9,8 @@ sealed interface TypeRef {
 
     data class Map(val valueType: TypeRef) : TypeRef
 
-    /** An anonymous object schema; the generator decides its name and placement. */
     data class Inline(val properties: List<PropertyModel>, val requiredProperties: Set<String>) : TypeRef
 
-    /** An anonymous enum schema; the generator decides its name and placement. */
     data class InlineEnum(val values: List<String>, val backingType: EnumBackingType) : TypeRef
 
     data object Unknown : TypeRef

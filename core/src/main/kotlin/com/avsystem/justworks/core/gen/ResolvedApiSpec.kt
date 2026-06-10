@@ -13,59 +13,54 @@ import com.avsystem.justworks.core.model.TypeRef
  * An inline (anonymous) schema lifted out to be generated as a type nested inside its owner.
  * [id] is the reference id placed in [TypeRef.Reference] and resolved to the nested class via [Hierarchy].
  */
-internal sealed interface PlannedInlineType {
+internal sealed interface NestedType {
     val id: String
     val simpleName: String
 
-    /** An inline object; [children] are inline schemas nested within it. */
     data class Obj(
         override val id: String,
         override val simpleName: String,
         val schema: SchemaModel,
-        val children: List<PlannedInlineType>,
-    ) : PlannedInlineType
+        val children: List<NestedType>,
+    ) : NestedType
 
-    /** An inline enum. */
     data class Enum(
         override val id: String,
         override val simpleName: String,
         val model: EnumModel,
-    ) : PlannedInlineType
+    ) : NestedType
 }
 
 /**
  * An [ApiSpec] whose inline schemas have been lifted: every [TypeRef.Inline]/[TypeRef.InlineEnum] is
  * rewritten to a [TypeRef.Reference], and the lifted types travel with the endpoint/schema that owns them.
  */
-internal data class TransformedApiSpec(
+internal data class ResolvedApiSpec(
     val title: String,
     val version: String,
-    val endpoints: List<TransformedEndpoint>,
-    val schemas: List<TransformedSchema>,
+    val endpoints: List<ResolvedEndpoint>,
+    val schemas: List<ResolvedSchema>,
     val enums: List<EnumModel>,
     val securitySchemes: List<SecurityScheme>,
 )
 
-/** An endpoint plus the inline request/response body types to nest inside its client class. */
-internal data class TransformedEndpoint(val endpoint: Endpoint, val inlineTypes: List<PlannedInlineType>)
+internal data class ResolvedEndpoint(val endpoint: Endpoint, val inlineTypes: List<NestedType>)
 
-/** A component schema plus the inline property types to nest inside its data class. */
-internal data class TransformedSchema(val schema: SchemaModel, val inlineTypes: List<PlannedInlineType>)
+internal data class ResolvedSchema(val schema: SchemaModel, val inlineTypes: List<NestedType>)
 
-/** Lifts every inline schema (bodies and properties, recursively) into [PlannedInlineType] trees. */
-internal fun ApiSpec.transform(): TransformedApiSpec = object { // object for mutual recursion
-    private val spec = this@transform.stripDiscriminatorProperties()
+/** Lifts every inline schema (bodies and properties, recursively) into [NestedType] trees. */
+internal fun ApiSpec.resolveInlines(): ResolvedApiSpec = object { // object for mutual recursion
     private var counter = 0
 
-    private fun planProperties(properties: List<PropertyModel>, sink: MutableList<PlannedInlineType>) =
+    private fun planProperties(properties: List<PropertyModel>, sink: MutableList<NestedType>) =
         properties.map { property ->
             property.copy(type = sink.collect(property.type, property.name.toPascalCase()))
         }
 
-    private fun plan(type: TypeRef, hint: String): Pair<TypeRef, PlannedInlineType?> = when (type) {
+    private fun plan(type: TypeRef, hint: String): Pair<TypeRef, NestedType?> = when (type) {
         is TypeRef.Inline -> {
             val id = "inline${counter++}"
-            val children = mutableListOf<PlannedInlineType>()
+            val children = mutableListOf<NestedType>()
             val schema = SchemaModel(
                 name = hint,
                 description = null,
@@ -76,7 +71,7 @@ internal fun ApiSpec.transform(): TransformedApiSpec = object { // object for mu
                 anyOf = null,
                 discriminator = null,
             )
-            TypeRef.Reference(id) to PlannedInlineType.Obj(id, hint, schema, children)
+            TypeRef.Reference(id) to NestedType.Obj(id, hint, schema, children)
         }
 
         is TypeRef.InlineEnum -> {
@@ -87,7 +82,7 @@ internal fun ApiSpec.transform(): TransformedApiSpec = object { // object for mu
                 type = type.backingType,
                 values = type.values.map { EnumModel.Value(it) },
             )
-            TypeRef.Reference(id) to PlannedInlineType.Enum(id, hint, model)
+            TypeRef.Reference(id) to NestedType.Enum(id, hint, model)
         }
 
         is TypeRef.Array -> {
@@ -103,16 +98,18 @@ internal fun ApiSpec.transform(): TransformedApiSpec = object { // object for mu
         }
     }
 
-    private fun MutableList<PlannedInlineType>.collect(type: TypeRef, hint: String): TypeRef {
-        val (rewritten, planned) = plan(type, hint)
-        if (planned != null) this.add(planned)
+    private fun MutableList<NestedType>.collect(type: TypeRef, hint: String): TypeRef {
+        val (rewritten, nested) = plan(type, hint)
+        if (nested != null) add(nested)
         return rewritten
     }
 
-    fun run(): TransformedApiSpec {
+    fun run(): ResolvedApiSpec {
+        val spec = this@resolveInlines.stripDiscriminatorProperties()
+
         val endpoints = spec.endpoints.map { endpoint ->
             val opName = endpoint.operationId.toPascalCase()
-            val owned = mutableListOf<PlannedInlineType>()
+            val owned = mutableListOf<NestedType>()
 
             // Only JSON bodies become a nested body type; form/multipart bodies stay inline so their
             // properties expand into individual function parameters.
@@ -139,26 +136,22 @@ internal fun ApiSpec.transform(): TransformedApiSpec = object { // object for mu
                     ?: response
             }
 
-            TransformedEndpoint(endpoint.copy(requestBody = newRequestBody, responses = newResponses), owned)
+            ResolvedEndpoint(endpoint.copy(requestBody = newRequestBody, responses = newResponses), owned)
         }
 
         val schemas = spec.schemas.map { schema ->
-            val owned = mutableListOf<PlannedInlineType>()
+            val owned = mutableListOf<NestedType>()
             val newProperties = planProperties(schema.properties, owned)
-            TransformedSchema(schema.copy(properties = newProperties), owned)
+            ResolvedSchema(schema.copy(properties = newProperties), owned)
         }
 
-        return TransformedApiSpec(spec.title, spec.version, endpoints, schemas, spec.enums, spec.securitySchemes)
+        return ResolvedApiSpec(spec.title, spec.version, endpoints, schemas, spec.enums, spec.securitySchemes)
     }
 }.run()
 
 /**
- * Drops the discriminator property from every polymorphic variant schema.
- *
- * In a sealed (oneOf/anyOf + discriminator) hierarchy the discriminator is emitted via
- * `@SerialName`/`@JsonClassDiscriminator` on the subtype, never as a field — the variant's own
- * (typically single-value) `type` property is dead weight. Removing it keeps inline-enum lifting
- * consistent, so no orphan discriminator enum is nested into a variant.
+ * Drops the discriminator property from each polymorphic variant: it is emitted via `@SerialName`,
+ * never as a field, so keeping it would nest an orphan single-value enum into the variant.
  */
 internal fun ApiSpec.stripDiscriminatorProperties(): ApiSpec {
     val discriminatorProps = schemas

@@ -12,7 +12,7 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
 
     /**
      * Resolution overrides for inline body types nested inside client/model classes,
-     * keyed by the reference id assigned by [transform].
+     * keyed by the reference id assigned by [resolved].
      */
     private val inlineRefs = mutableMapOf<String, ClassName>()
 

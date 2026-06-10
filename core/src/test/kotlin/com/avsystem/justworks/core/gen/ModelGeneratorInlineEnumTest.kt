@@ -13,18 +13,20 @@ import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
- * Inline enums are lifted by [ApiSpec.transform] and generated as enum classes nested inside the
+ * Inline enums are lifted by [ApiSpec.resolveInlines] and generated as enum classes nested inside the
  * type that owns them (mirroring how inline objects are nested), named after their position.
  */
 class ModelGeneratorInlineEnumTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = spec.transform().let { transformed ->
+    private fun generate(spec: ApiSpec) = spec.resolveInlines().let { resolved ->
         context(
-            Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(transformed.schemas.map { it.schema }) },
+            Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(resolved.schemas.map { it.schema }) },
             NameRegistry(),
         ) {
-            ModelGenerator.generate(transformed)
+            val _ = contextOf<Hierarchy>()
+            _
+            ModelGenerator.generate(resolved).files
         }
     }
 

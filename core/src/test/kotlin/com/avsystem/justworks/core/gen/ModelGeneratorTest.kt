@@ -24,14 +24,16 @@ import kotlin.test.assertTrue
 class ModelGeneratorTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = spec.transform().let { transformed ->
+    private fun generate(spec: ApiSpec) = spec.resolveInlines().let { resolved ->
         context(
             Hierarchy(ModelPackage(modelPackage)).apply {
-                addSchemas(transformed.schemas.map { it.schema })
+                addSchemas(resolved.schemas.map { it.schema })
             },
             NameRegistry(),
         ) {
-            ModelGenerator.generate(transformed)
+            val _ = contextOf<Hierarchy>()
+            _
+            ModelGenerator.generate(resolved).files
         }
     }
 
