@@ -164,4 +164,47 @@ class CodeGeneratorTest {
             outputDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun `lowercase component schema names become PascalCase types`() {
+        val yaml = """
+            openapi: "3.0.0"
+            info: { title: T, version: "1" }
+            paths: {}
+            components:
+              schemas:
+                dataSetList:
+                  type: object
+                  properties:
+                    owner: { ${'$'}ref: '#/components/schemas/data_owner' }
+                data_owner:
+                  type: object
+                  properties:
+                    name: { type: string }
+        """.trimIndent()
+        val specFile = File.createTempFile("pascal", ".yaml").apply {
+            writeText(yaml)
+            deleteOnExit()
+        }
+        val spec = when (val r = SpecParser.parse(specFile)) {
+            is ParseResult.Success -> r.value
+            is ParseResult.Failure -> fail("parse failed: ${r.error}")
+        }
+
+        val outputDir = Files.createTempDirectory("codegen-pascal").toFile()
+        try {
+            CodeGenerator.generate(spec, "com.example.model", "com.example.api", outputDir)
+            val modelDir = outputDir.resolve("com/example/model")
+            val files = modelDir.listFiles()?.map { it.name }.orEmpty()
+            assertTrue(files.contains("DataSetList.kt"), "got: $files")
+            assertTrue(files.contains("DataOwner.kt"), "got: $files")
+
+            val src = modelDir.resolve("DataSetList.kt").readText()
+            assertTrue(src.contains("data class DataSetList"), "type name should be PascalCase")
+            // $ref to data_owner resolves to the PascalCase DataOwner type.
+            assertTrue(src.contains("owner: DataOwner"), "ref should resolve to PascalCase type; src: $src")
+        } finally {
+            outputDir.deleteRecursively()
+        }
+    }
 }

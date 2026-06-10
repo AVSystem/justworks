@@ -153,7 +153,7 @@ internal object ModelGenerator {
      */
     context(hierarchy: Hierarchy)
     private fun generateSealedHierarchy(schema: SchemaModel): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, schema.name)
+        val className = hierarchy.classNameFor(schema.name)
 
         val parentBuilder = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
         parentBuilder.addAnnotation(SERIALIZABLE)
@@ -288,11 +288,11 @@ internal object ModelGenerator {
      */
     context(hierarchy: Hierarchy)
     private fun generateSealedInterface(schema: SchemaModel): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, schema.name)
+        val className = hierarchy.classNameFor(schema.name)
 
         val typeSpec = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
 
-        val serializerClassName = ClassName(hierarchy.modelPackage, "${schema.name}Serializer")
+        val serializerClassName = hierarchy.classNameFor("${schema.name}Serializer")
         typeSpec.addAnnotation(
             AnnotationSpec
                 .builder(SERIALIZABLE)
@@ -312,8 +312,8 @@ internal object ModelGenerator {
      */
     context(hierarchy: Hierarchy)
     private fun generatePolymorphicSerializer(schema: SchemaModel): FileSpec {
-        val sealedClassName = ClassName(hierarchy.modelPackage, schema.name)
-        val serializerClassName = ClassName(hierarchy.modelPackage, "${schema.name}Serializer")
+        val sealedClassName = hierarchy.classNameFor(schema.name)
+        val serializerClassName = hierarchy.classNameFor("${schema.name}Serializer")
 
         val variantProperties = schema.anyOf
             .orEmpty()
@@ -414,11 +414,11 @@ internal object ModelGenerator {
      */
     context(hierarchy: Hierarchy)
     private fun generateDataClass(schema: SchemaModel): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, schema.name)
+        val className = hierarchy.classNameFor(schema.name)
 
         // For anyOf-without-discriminator variants: find parent interfaces and serialName
         val parentNames = hierarchy.anyOfParents[schema.name].orEmpty()
-        val superinterfaces = parentNames.map { ClassName(hierarchy.modelPackage, it) }
+        val superinterfaces = parentNames.map { hierarchy.classNameFor(it) }
         val serialName = parentNames.firstOrNull()?.let { parentName ->
             hierarchy.schemasById[parentName]?.resolveSerialName(schema.name)
         }
@@ -512,7 +512,7 @@ internal object ModelGenerator {
 
         is TypeRef.Reference -> {
             val constantName = prop.defaultValue.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, prop.type.schemaName), constantName)
+            CodeBlock.of("%T.%L", hierarchy.classNameFor(prop.type.schemaName), constantName)
         }
 
         else -> {
@@ -522,7 +522,7 @@ internal object ModelGenerator {
 
     context(hierarchy: Hierarchy)
     private fun generateEnumClass(enum: EnumModel): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, enum.name)
+        val className = hierarchy.classNameFor(enum.name)
 
         val typeSpec = TypeSpec.enumBuilder(className).addAnnotation(SERIALIZABLE)
 
@@ -620,9 +620,9 @@ internal object ModelGenerator {
 
     context(hierarchy: Hierarchy)
     private fun generateTypeAlias(schema: SchemaModel, primitiveType: TypeName): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, schema.name)
+        val className = hierarchy.classNameFor(schema.name)
 
-        val typeAlias = TypeAliasSpec.builder(schema.name, primitiveType)
+        val typeAlias = TypeAliasSpec.builder(schema.name.toPascalCase(), primitiveType)
 
         if (schema.description != null) {
             typeAlias.addKdoc("%L", schema.description)
