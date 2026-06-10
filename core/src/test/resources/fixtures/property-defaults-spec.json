@@ -24,6 +24,15 @@
           },
           "note": {
             "type": "string"
+          },
+          "nullDefault": {
+            "type": "string",
+            "default": null
+          },
+          "secret": {
+            "type": "string",
+            "format": "byte",
+            "default": "AAEC"
           }
         }
       }

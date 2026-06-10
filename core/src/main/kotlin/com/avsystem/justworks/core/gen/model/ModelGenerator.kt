@@ -60,6 +60,7 @@ import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
 import com.squareup.kotlinpoet.joinToCode
 import kotlinx.datetime.LocalDate
+import java.util.Base64
 import kotlin.time.Instant
 
 /**
@@ -477,40 +478,76 @@ internal object ModelGenerator {
     private fun formatDefaultValue(
         type: TypeRef,
         value: Any?,
-        propName: String
+        propName: String,
     ): CodeBlock = when (type) {
         is TypeRef.Primitive -> {
             when (type.type) {
-                PrimitiveType.STRING -> CodeBlock.of("%S", value)
+                PrimitiveType.STRING -> {
+                    CodeBlock.of("%S", value)
+                }
 
                 PrimitiveType.INT,
                 PrimitiveType.LONG,
                 PrimitiveType.DOUBLE,
-                PrimitiveType.FLOAT,
                 PrimitiveType.BOOLEAN,
-                -> CodeBlock.of("%L", value)
+                -> {
+                    CodeBlock.of("%L", value)
+                }
 
-                PrimitiveType.DATE_TIME -> catch(
-                    { Instant.parse(value as String) },
-                    { CodeBlock.of("%T.parse(%S)", INSTANT, value) },
-                    { e ->
-                        throw IllegalArgumentException(
-                            "Invalid ISO-8601 date-time default '$value' for property $propName: ${e.message}",
+                PrimitiveType.FLOAT -> {
+                    CodeBlock.of("%Lf", value)
+                }
+
+                PrimitiveType.DATE_TIME -> {
+                    catch(
+                        { Instant.parse(value as String) },
+                        { CodeBlock.of("%T.parse(%S)", INSTANT, value) },
+                        { e ->
+                            throw IllegalArgumentException(
+                                "Invalid ISO-8601 date-time default '$value' for property $propName: ${e.message}",
+                            )
+                        },
+                    )
+                }
+
+                PrimitiveType.DATE -> {
+                    catch(
+                        { LocalDate.parse(value as String) },
+                        { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, value) },
+                        { e ->
+                            throw IllegalArgumentException(
+                                "Invalid ISO-8601 date default '$value' for property $propName: ${e.message}",
+                            )
+                        },
+                    )
+                }
+
+                PrimitiveType.BYTE_ARRAY -> {
+                    val bytes = when (value) {
+                        is ByteArray -> value
+
+                        is String -> catch(
+                            {
+                                Base64.getDecoder().decode(value)
+                            },
+                            { it },
+                            { e ->
+                                throw IllegalArgumentException(
+                                    "Invalid base64 byte default '$value' for property $propName: ${e.message}",
+                                )
+                            },
                         )
-                    },
-                )
 
-                PrimitiveType.DATE -> catch(
-                    { LocalDate.parse(value as String) },
-                    { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, value) },
-                    { e ->
-                        throw IllegalArgumentException(
-                            "Invalid ISO-8601 date default '$value' for property $propName: ${e.message}",
+                        else -> throw IllegalArgumentException(
+                            "Unsupported byte-array default '$value' for property $propName",
                         )
-                    },
-                )
+                    }
+                    CodeBlock.of("byteArrayOf(%L)", bytes.joinToString(", "))
+                }
 
-                else -> throw IllegalArgumentException("Unsupported default value type: $type")
+                PrimitiveType.UUID -> {
+                    throw IllegalArgumentException("Unsupported default value type: $type")
+                }
             }
         }
 

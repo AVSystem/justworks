@@ -4,6 +4,7 @@ import com.avsystem.justworks.core.model.ApiSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
+import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
 
 /**
@@ -45,5 +46,19 @@ class SpecParserDefaultsTest : SpecParserTestBase() {
         val note = props.getValue("note")
         assertTrue(note.nullable)
         assertEquals(null, note.defaultValue)
+    }
+
+    @Test
+    fun `explicit null default is not honored and property stays nullable`() {
+        val nullDefault = props.getValue("nullDefault")
+        assertTrue(nullDefault.nullable, "explicit null default must not honor a value")
+        assertEquals(null, nullDefault.defaultValue)
+    }
+
+    @Test
+    fun `byte-array default makes property non-nullable and keeps the value`() {
+        val secret = props.getValue("secret")
+        assertFalse(secret.nullable, "property with a byte-array default must not be nullable")
+        assertNotNull(secret.defaultValue, "byte-array default value must be retained")
     }
 }
