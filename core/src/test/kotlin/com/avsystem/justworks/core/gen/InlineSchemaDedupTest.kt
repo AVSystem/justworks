@@ -146,6 +146,32 @@ class InlineSchemaDedupTest {
     }
 
     @Test
+    fun `array property differing only in uniqueItems produces different keys`() {
+        val listProps = listOf(
+            PropertyModel(
+                "tags",
+                TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING), unique = false),
+                null,
+                nullable = false,
+            ),
+        )
+        val setProps = listOf(
+            PropertyModel(
+                "tags",
+                TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING), unique = true),
+                null,
+                nullable = false,
+            ),
+        )
+        val required = setOf("tags")
+
+        val listKey = InlineSchemaKey.from(listProps, required)
+        val setKey = InlineSchemaKey.from(setProps, required)
+
+        assertNotEquals(listKey, setKey)
+    }
+
+    @Test
     fun `collision with existing inline schema name uses numeric suffix`() {
         val registry = NameRegistry()
 

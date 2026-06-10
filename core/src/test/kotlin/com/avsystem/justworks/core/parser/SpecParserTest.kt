@@ -13,6 +13,7 @@ import java.io.File
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -675,7 +676,38 @@ class SpecParserTest : SpecParserTestBase() {
         val tagList = spec.schemas.find { it.name == "TagList" }
             ?: fail("TagList schema not found")
         val underlying = assertNotNull(tagList.underlyingType, "underlyingType should be set")
-        assertIs<TypeRef.Array>(underlying)
+        val array = assertIs<TypeRef.Array>(underlying)
+        assertFalse(array.unique, "array without uniqueItems should not be unique")
+    }
+
+    @Test
+    fun `array property with uniqueItems is parsed as unique Array`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                User:
+                  type: object
+                  properties:
+                    tags:
+                      type: array
+                      uniqueItems: true
+                      items:
+                        type: string
+            """.trimIndent().toTempFile(),
+        )
+
+        val user = spec.schemas.find { it.name == "User" }
+            ?: fail("User schema not found")
+        val tags = user.properties.find { it.name == "tags" }
+            ?: fail("tags property not found")
+        val array = assertIs<TypeRef.Array>(tags.type)
+        assertTrue(array.unique, "array with uniqueItems should be unique")
     }
 
     @Test
@@ -908,7 +940,7 @@ class SpecParserTest : SpecParserTestBase() {
                 }
             }
 
-            is TypeRef.Primitive, TypeRef.Unknown, null -> {}
+            is TypeRef.Primitive, is TypeRef.InlineEnum, TypeRef.Unknown, null -> {}
         }
     }
 }
