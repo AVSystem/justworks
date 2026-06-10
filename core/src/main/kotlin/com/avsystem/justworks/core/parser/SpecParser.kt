@@ -517,7 +517,7 @@ object SpecParser {
         when (this) {
             is TypeRef.Primitive, is TypeRef.InlineEnum, is TypeRef.Reference -> true
             is TypeRef.Array -> items.honorsDefault(default)
-            else -> false
+            is TypeRef.Inline, is TypeRef.Map, TypeRef.Unknown -> false
         }
 
     /**
@@ -529,9 +529,17 @@ object SpecParser {
         is ArrayNode -> default.map { normalizeDefault(it) }
 
         is JsonNode -> when {
-            default.isBoolean -> default.booleanValue()
+            default.isShort -> default.shortValue()
             default.isInt -> default.intValue()
-            default.isNumber -> default.doubleValue()
+            default.isLong -> default.longValue()
+            default.isFloat -> default.floatValue()
+            default.isDouble -> default.doubleValue()
+            default.isBigDecimal -> default.decimalValue()
+            default.isBigInteger -> default.bigIntegerValue()
+            default.isNumber -> default.numberValue()
+            default.isBoolean -> default.booleanValue()
+            default.isNull -> null
+            default.isBinary -> default.binaryValue()
             else -> default.asText()
         }
 
