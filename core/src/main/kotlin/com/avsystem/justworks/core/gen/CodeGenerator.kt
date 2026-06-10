@@ -19,14 +19,13 @@ object CodeGenerator {
         modelPackage: String,
         apiPackage: String,
         outputDir: File,
-        generateKdoc: Boolean = true,
+        options: OutputOptions = OutputOptions(),
     ): Result {
         val resolvedApiSpec = spec.resolveInlines()
 
         val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(resolvedApiSpec.schemas.map { it.schema })
         }
-        val options = OutputOptions(generateKdoc = generateKdoc)
 
         val (modelFiles, resolvedSpec) = context(hierarchy, options, NameRegistry()) {
             ModelGenerator.generateWithResolvedSpec(resolvedApiSpec)

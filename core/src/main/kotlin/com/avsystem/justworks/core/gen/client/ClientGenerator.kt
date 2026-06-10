@@ -56,7 +56,6 @@ import com.squareup.kotlinpoet.UNIT
 
 internal object ClientGenerator {
     private const val DEFAULT_TAG = "Default"
-    private const val API_SUFFIX = "Api"
 
     context(_: Hierarchy, _: OutputOptions, _: ApiPackage, _: NameRegistry)
     fun generate(spec: ResolvedApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
@@ -72,7 +71,7 @@ internal object ClientGenerator {
         }
     }
 
-    context(hierarchy: Hierarchy, _: OutputOptions, apiPackage: ApiPackage, nameRegistry: NameRegistry)
+    context(hierarchy: Hierarchy, options: OutputOptions, apiPackage: ApiPackage, nameRegistry: NameRegistry)
     private fun generateClientFile(
         tag: String,
         endpoints: List<ResolvedEndpoint>,
@@ -80,7 +79,8 @@ internal object ClientGenerator {
         securitySchemes: List<SecurityScheme>,
         specTitle: String,
     ): FileSpec {
-        val className = ClassName(apiPackage, nameRegistry.register("${tag.toPascalCase()}$API_SUFFIX"))
+        val simpleName = "${options.apiClassPrefix}${tag.toPascalCase()}${options.apiClassSuffix}"
+        val className = ClassName(apiPackage, nameRegistry.register(simpleName))
 
         val clientInitializer = if (hasPolymorphicTypes) {
             val generatedSerializersModule = MemberName(hierarchy.modelPackage, GENERATED_SERIALIZERS_MODULE)

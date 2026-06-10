@@ -1,6 +1,7 @@
 package com.avsystem.justworks.gradle
 
 import com.avsystem.justworks.core.gen.CodeGenerator
+import com.avsystem.justworks.core.gen.OutputOptions
 import com.avsystem.justworks.core.parser.ParseResult
 import com.avsystem.justworks.core.parser.SpecParser
 import org.gradle.api.DefaultTask
@@ -42,6 +43,14 @@ abstract class JustworksGenerateTask : DefaultTask() {
     @get:Input
     abstract val generateKdoc: Property<Boolean>
 
+    /** Prefix for generated API client class names. */
+    @get:Input
+    abstract val apiClassPrefix: Property<String>
+
+    /** Suffix for generated API client class names. */
+    @get:Input
+    abstract val apiClassSuffix: Property<String>
+
     /** Output directory for generated Kotlin source files. */
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -65,7 +74,11 @@ abstract class JustworksGenerateTask : DefaultTask() {
                     modelPackage = modelPackage.get(),
                     apiPackage = apiPackage.get(),
                     outputDir = outDir,
-                    generateKdoc = generateKdoc.get(),
+                    options = OutputOptions(
+                        generateKdoc = generateKdoc.get(),
+                        apiClassPrefix = apiClassPrefix.get(),
+                        apiClassSuffix = apiClassSuffix.get(),
+                    ),
                 )
 
                 logger.lifecycle(

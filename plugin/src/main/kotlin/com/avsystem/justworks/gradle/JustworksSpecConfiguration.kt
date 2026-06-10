@@ -53,5 +53,16 @@ abstract class JustworksSpecConfiguration
          */
         abstract val generateKdoc: Property<Boolean>
 
+        /**
+         * Prefix for generated API client class names. Defaults to `""`.
+         */
+        abstract val apiClassPrefix: Property<String>
+
+        /**
+         * Suffix for generated API client class names. Defaults to `"Api"`
+         * (e.g. tag `pets` -> `PetsApi`).
+         */
+        abstract val apiClassSuffix: Property<String>
+
         override fun getName(): String = name
     }
