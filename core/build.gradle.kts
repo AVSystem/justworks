@@ -33,10 +33,3 @@ dependencies {
 tasks.test {
     useJUnitPlatform()
 }
-
-
-tasks.withType<KotlinCompile>().configureEach {
-    compilerOptions {
-        freeCompilerArgs.add("-Xcontext-parameters")
-    }
-}
