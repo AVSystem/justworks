@@ -50,7 +50,7 @@ internal fun ApiSpec.resolveTypeRef(
     }
 
     is TypeRef.Array -> {
-        TypeRef.Array(resolveTypeRef(type.items, nameMap, enumNameMap))
+        TypeRef.Array(resolveTypeRef(type.items, nameMap, enumNameMap), type.unique)
     }
 
     is TypeRef.Map -> {

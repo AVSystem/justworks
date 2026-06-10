@@ -3,7 +3,7 @@ package com.avsystem.justworks.core.model
 sealed interface TypeRef {
     data class Primitive(val type: PrimitiveType) : TypeRef
 
-    data class Array(val items: TypeRef) : TypeRef
+    data class Array(val items: TypeRef, val unique: Boolean = false) : TypeRef
 
     data class Reference(val schemaName: String) : TypeRef
 
