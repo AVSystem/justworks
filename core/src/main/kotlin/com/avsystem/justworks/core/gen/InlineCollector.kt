@@ -16,6 +16,42 @@ private fun ApiSpec.topLevelTypeRefs(): Sequence<TypeRef> {
     return (endpointRefs + schemaPropertyRefs).filterNotNull()
 }
 
+/**
+ * Drops the discriminator property from every polymorphic variant schema.
+ *
+ * In a sealed (oneOf/anyOf + discriminator) hierarchy the discriminator is emitted via
+ * `@SerialName`/`@JsonClassDiscriminator` on the subtype, never as a field — the variant's own
+ * (typically single-value) `type` property is dead weight. Removing it here keeps inline-enum
+ * collection, resolution, and generation consistent, so no orphan `*_Type` enum is hoisted.
+ *
+ * The @SerialName value comes from the parent's `discriminator.mapping`
+ * (see [com.avsystem.justworks.core.gen.resolveSerialName]), so dropping the field is lossless.
+ */
+internal fun ApiSpec.stripDiscriminatorProperties(): ApiSpec {
+    val discriminatorProps = schemas
+        .asSequence()
+        .mapNotNull { parent -> parent.discriminator?.propertyName?.let { it to parent } }
+        .flatMap { (propertyName, parent) ->
+            (parent.oneOf.orEmpty() + parent.anyOf.orEmpty())
+                .asSequence()
+                .filterIsInstance<TypeRef.Reference>()
+                .map { it.schemaName to propertyName }
+        }.toMap()
+
+    return if (discriminatorProps.isEmpty()) {
+        this
+    } else {
+        copy(
+            schemas = schemas.map { schema ->
+                when (val discriminatorProp = discriminatorProps[schema.name]) {
+                    null -> schema
+                    else -> schema.copy(properties = schema.properties.filterNot { it.name == discriminatorProp })
+                }
+            },
+        )
+    }
+}
+
 private val descendants = DeepRecursiveFunction<TypeRef, List<TypeRef>> { type ->
     listOf(type) + when (type) {
         is TypeRef.Inline -> type.properties.flatMap { callRecursive(it.type) }
