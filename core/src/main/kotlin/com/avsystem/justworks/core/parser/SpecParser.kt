@@ -474,7 +474,7 @@ object SpecParser {
         "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
 
         "object" -> when (val ap = additionalProperties) {
-            is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+            is Schema<*> -> TypeRef.Map(ap.toTypeRef(contextName?.let { "${it}Value" }))
             is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
             else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
         }
