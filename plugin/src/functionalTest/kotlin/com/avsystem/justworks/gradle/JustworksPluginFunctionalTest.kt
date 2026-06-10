@@ -105,12 +105,6 @@ class JustworksPluginFunctionalTest {
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
             }
 
-            kotlin {
-                compilerOptions {
-                    freeCompilerArgs.add("-Xcontext-parameters")
-                }
-            }
-
             justworks {
                 specs {
                     register("main") {
@@ -579,12 +573,6 @@ class JustworksPluginFunctionalTest {
                 implementation("io.ktor:ktor-client-core:3.1.1")
                 implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
-            }
-
-            kotlin {
-                compilerOptions {
-                    freeCompilerArgs.add("-Xcontext-parameters")
-                }
             }
 
             justworks {
