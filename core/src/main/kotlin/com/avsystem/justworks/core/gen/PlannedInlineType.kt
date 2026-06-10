@@ -1,19 +1,18 @@
 package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
+import com.avsystem.justworks.core.model.Endpoint
+import com.avsystem.justworks.core.model.EnumModel
+import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
+import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 
 /**
- * An inline (anonymous) object schema lifted out so it can be generated as a type nested
- * inside its owner (a client class for operation bodies, or a parent data class for
- * properties). Forms a tree: [children] are inline objects nested within this one.
- *
- * @param id stable reference id stored in [TypeRef.Reference] in place of the inline schema;
- *   the generator resolves it to the nested [com.squareup.kotlinpoet.ClassName] via [Hierarchy].
- * @param simpleName the nested type's simple name (e.g. `DomainsUpdateRequest`, `Address`).
- * @param schema the schema to generate the nested data class from, with its own inline
- *   properties already rewritten to references pointing at [children].
+ * An inline object schema lifted out to be generated as a type nested inside its owner.
+ * [children] are inline objects nested within this one. [id] is the reference id placed in
+ * [TypeRef.Reference] and resolved to the nested class via [Hierarchy].
  */
 internal data class PlannedInlineType(
     val id: String,
@@ -23,43 +22,42 @@ internal data class PlannedInlineType(
 )
 
 /**
- * Result of [planInlineTypes]: the spec with every [TypeRef.Inline] rewritten to a
- * [TypeRef.Reference], plus the inline types to nest, grouped by owner.
+ * An [ApiSpec] whose inline schemas have been lifted: every [TypeRef.Inline] is rewritten to a
+ * [TypeRef.Reference], and the lifted types travel with the endpoint/schema that owns them.
  */
-internal data class InlinePlan(
-    val spec: ApiSpec,
-    /** Operation id -> inline body types to nest inside that operation's client class. */
-    val clientInline: Map<String, List<PlannedInlineType>>,
-    /** Component schema name -> inline property types to nest inside that data class. */
-    val modelInline: Map<String, List<PlannedInlineType>>,
+internal data class TransformedApiSpec(
+    val title: String,
+    val version: String,
+    val endpoints: List<TransformedEndpoint>,
+    val schemas: List<TransformedSchema>,
+    val enums: List<EnumModel>,
+    val securitySchemes: List<SecurityScheme>,
 )
 
-/**
- * Single pass over the spec that lifts every inline object schema (operation request/response
- * bodies and object-typed properties, recursively) into [PlannedInlineType] trees and rewrites
- * the spec to reference them.
- *
- * No structural deduplication: each occurrence gets its own copy, named after its position, so
- * inline types are placed (and named) relative to the type that owns them.
- */
-internal fun planInlineTypes(spec: ApiSpec): InlinePlan {
-    var counter = 0
+/** An endpoint plus the inline request/response body types to nest inside its client class. */
+internal data class TransformedEndpoint(val endpoint: Endpoint, val inlineTypes: List<PlannedInlineType>)
 
-    // Rewrites a type (and inline objects nested in arrays/maps) to references, returning the
-    // rewritten type and, if an inline object was lifted, its PlannedInlineType.
-    fun plan(type: TypeRef, hint: String): Pair<TypeRef, PlannedInlineType?> = when (type) {
+/** A component schema plus the inline property types to nest inside its data class. */
+internal data class TransformedSchema(val schema: SchemaModel, val inlineTypes: List<PlannedInlineType>)
+
+/** Lifts every inline object schema (bodies and properties, recursively) into [PlannedInlineType] trees. */
+internal fun ApiSpec.transform(): TransformedApiSpec = object { // object for mutual recursion
+    private val spec = this@transform
+    private var counter = 0
+
+    private fun planProperties(properties: List<PropertyModel>, sink: MutableList<PlannedInlineType>) =
+        properties.map { property ->
+            property.copy(type = sink.collect(property.type, property.name.toPascalCase()))
+        }
+
+    private fun plan(type: TypeRef, hint: String): Pair<TypeRef, PlannedInlineType?> = when (type) {
         is TypeRef.Inline -> {
             val id = "inline${counter++}"
             val children = mutableListOf<PlannedInlineType>()
-            val newProperties = type.properties.map { property ->
-                val (newType, child) = plan(property.type, property.name.toPascalCase())
-                if (child != null) children.add(child)
-                property.copy(type = newType)
-            }
             val schema = SchemaModel(
                 name = hint,
                 description = null,
-                properties = newProperties,
+                properties = planProperties(type.properties, children),
                 requiredProperties = type.requiredProperties,
                 allOf = null,
                 oneOf = null,
@@ -82,50 +80,51 @@ internal fun planInlineTypes(spec: ApiSpec): InlinePlan {
         }
     }
 
-    val clientInline = mutableMapOf<String, MutableList<PlannedInlineType>>()
-    val modelInline = mutableMapOf<String, MutableList<PlannedInlineType>>()
-
-    val newEndpoints = spec.endpoints.map { endpoint ->
-        val opName = endpoint.operationId.toPascalCase()
-        val owned = mutableListOf<PlannedInlineType>()
-
-        val newRequestBody = endpoint.requestBody?.let { body ->
-            val (newType, planned) = plan(body.schema, "${opName}Request")
-            if (planned != null) owned.add(planned)
-            body.copy(schema = newType)
-        }
-
-        val newResponses = endpoint.responses.mapValues { (code, response) ->
-            val schema = response.schema ?: return@mapValues response
-            val (newType, planned) = plan(schema, responseTypeName(opName, code))
-            if (planned != null) owned.add(planned)
-            response.copy(schema = newType)
-        }
-
-        if (owned.isNotEmpty()) clientInline[endpoint.operationId] = owned
-        endpoint.copy(requestBody = newRequestBody, responses = newResponses)
+    private fun MutableList<PlannedInlineType>.collect(type: TypeRef, hint: String): TypeRef {
+        val (rewritten, planned) = plan(type, hint)
+        if (planned != null) this.add(planned)
+        return rewritten
     }
 
-    val newSchemas = spec.schemas.map { schema ->
-        val owned = mutableListOf<PlannedInlineType>()
-        val newProperties = schema.properties.map { property ->
-            val (newType, planned) = plan(property.type, property.name.toPascalCase())
-            if (planned != null) owned.add(planned)
-            property.copy(type = newType)
+    fun run(): TransformedApiSpec {
+        val endpoints = spec.endpoints.map { endpoint ->
+            val opName = endpoint.operationId.toPascalCase()
+            val owned = mutableListOf<PlannedInlineType>()
+
+            // Only JSON bodies become a nested body type; form/multipart bodies stay inline so their
+            // properties expand into individual function parameters.
+            val newRequestBody = endpoint.requestBody?.let {
+                if (it.contentType == ContentType.JSON_CONTENT_TYPE) {
+                    it.copy(schema = owned.collect(it.schema, "${opName}Request"))
+                } else {
+                    it
+                }
+            }
+            val newResponses = endpoint.responses.mapValues { (code, response) ->
+                response.schema?.let {
+                    response.copy(
+                        schema = owned.collect(
+                            it,
+                            when {
+                                code.toIntOrNull() in 200..299 -> "${opName}Response"
+                                code == "default" -> "${opName}DefaultResponse"
+                                else -> "${opName}Response$code"
+                            },
+                        ),
+                    )
+                }
+                    ?: response
+            }
+
+            TransformedEndpoint(endpoint.copy(requestBody = newRequestBody, responses = newResponses), owned)
         }
-        if (owned.isNotEmpty()) modelInline[schema.name] = owned
-        schema.copy(properties = newProperties)
+
+        val schemas = spec.schemas.map { schema ->
+            val owned = mutableListOf<PlannedInlineType>()
+            val newProperties = planProperties(schema.properties, owned)
+            TransformedSchema(schema.copy(properties = newProperties), owned)
+        }
+
+        return TransformedApiSpec(spec.title, spec.version, endpoints, schemas, spec.enums, spec.securitySchemes)
     }
-
-    return InlinePlan(
-        spec = spec.copy(endpoints = newEndpoints, schemas = newSchemas),
-        clientInline = clientInline,
-        modelInline = modelInline,
-    )
-}
-
-private fun responseTypeName(opName: String, code: String): String = when {
-    code.toIntOrNull()?.let { it in 200..299 } == true -> "${opName}Response"
-    code == "default" -> "${opName}DefaultResponse"
-    else -> "${opName}Response$code"
-}
+}.run()

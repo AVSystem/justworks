@@ -9,7 +9,7 @@ sealed interface TypeRef {
 
     data class Map(val valueType: TypeRef) : TypeRef
 
-    data class Inline(val properties: List<PropertyModel>, val requiredProperties: Set<String>,) : TypeRef
+    data class Inline(val properties: List<PropertyModel>, val requiredProperties: Set<String>) : TypeRef
 
     data object Unknown : TypeRef
 }

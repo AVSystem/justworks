@@ -20,16 +20,14 @@ object CodeGenerator {
         apiPackage: String,
         outputDir: File,
     ): Result {
-        // Lift inline object schemas (operation bodies + object properties) into nested types.
-        val plan = planInlineTypes(spec)
+        val transformed = spec.transform()
 
         val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
-            addSchemas(plan.spec.schemas)
-            modelInline = plan.modelInline
+            addSchemas(transformed.schemas.map { it.schema })
         }
 
         val (modelFiles, resolvedSpec) = context(hierarchy, NameRegistry()) {
-            ModelGenerator.generateWithResolvedSpec(plan.spec)
+            ModelGenerator.generateWithResolvedSpec(transformed)
         }
 
         modelFiles.forEach { it.writeTo(outputDir) }
@@ -37,7 +35,7 @@ object CodeGenerator {
         val hasPolymorphicTypes = modelFiles.any { it.name == SERIALIZERS_MODULE.simpleName }
 
         val clientFiles = context(hierarchy, ApiPackage(apiPackage), NameRegistry()) {
-            ClientGenerator.generate(resolvedSpec, hasPolymorphicTypes, plan.clientInline)
+            ClientGenerator.generate(resolvedSpec, hasPolymorphicTypes)
         }
 
         clientFiles.forEach { it.writeTo(outputDir) }

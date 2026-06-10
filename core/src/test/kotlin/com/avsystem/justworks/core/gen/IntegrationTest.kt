@@ -40,27 +40,26 @@ class IntegrationTest {
         }
     }
 
-    private fun hierarchyFor(plan: InlinePlan) = Hierarchy(ModelPackage(modelPackage)).apply {
-        addSchemas(plan.spec.schemas)
-        modelInline = plan.modelInline
+    private fun hierarchyFor(transformed: TransformedApiSpec) = Hierarchy(ModelPackage(modelPackage)).apply {
+        addSchemas(transformed.schemas.map { it.schema })
     }
 
     private fun generateModel(spec: ApiSpec): List<FileSpec> {
-        val plan = planInlineTypes(spec)
-        return context(hierarchyFor(plan), NameRegistry()) { ModelGenerator.generate(plan.spec) }
+        val transformed = spec.transform()
+        return context(hierarchyFor(transformed), NameRegistry()) { ModelGenerator.generate(transformed) }
     }
 
     private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult {
-        val plan = planInlineTypes(spec)
-        return context(hierarchyFor(plan), NameRegistry()) { ModelGenerator.generateWithResolvedSpec(plan.spec) }
-    }
-
-    private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> {
-        val plan = planInlineTypes(spec)
-        return context(hierarchyFor(plan), ApiPackage(apiPackage), NameRegistry()) {
-            ClientGenerator.generate(plan.spec, hasPolymorphicTypes, plan.clientInline)
+        val transformed = spec.transform()
+        return context(hierarchyFor(transformed), NameRegistry()) {
+            ModelGenerator.generateWithResolvedSpec(transformed)
         }
     }
+
+    private fun generateClient(transformed: TransformedApiSpec, hasPolymorphicTypes: Boolean = false,): List<FileSpec> =
+        context(hierarchyFor(transformed), ApiPackage(apiPackage), NameRegistry()) {
+            ClientGenerator.generate(transformed, hasPolymorphicTypes)
+        }
 
     @Test
     fun `real-world specs generate compilable enum code without class body conflicts`() {

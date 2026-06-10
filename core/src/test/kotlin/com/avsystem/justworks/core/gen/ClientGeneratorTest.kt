@@ -29,15 +29,18 @@ class ClientGeneratorTest {
     private val apiPackage = "com.example.api"
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> = context(
-        Hierarchy(ModelPackage(modelPackage)).apply {
-            addSchemas(spec.schemas)
-        },
-        ApiPackage(apiPackage),
-        NameRegistry(),
-    ) {
-        ClientGenerator.generate(spec, hasPolymorphicTypes, emptyMap())
-    }
+    private fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
+        spec.transform().let { transformed ->
+            context(
+                Hierarchy(ModelPackage(modelPackage)).apply {
+                    addSchemas(transformed.schemas.map { it.schema })
+                },
+                ApiPackage(apiPackage),
+                NameRegistry(),
+            ) {
+                ClientGenerator.generate(transformed, hasPolymorphicTypes)
+            }
+        }
 
     private fun spec(vararg endpoints: Endpoint) = spec(endpoints.toList())
 

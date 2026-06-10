@@ -12,12 +12,11 @@ class ModelGeneratorRegressionTest {
     private val modelPackage = "com.example.model"
 
     private fun generate(spec: ApiSpec): List<com.squareup.kotlinpoet.FileSpec> {
-        val plan = planInlineTypes(spec)
+        val transformed = spec.transform()
         val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
-            addSchemas(plan.spec.schemas)
-            modelInline = plan.modelInline
+            addSchemas(transformed.schemas.map { it.schema })
         }
-        return context(hierarchy, NameRegistry()) { ModelGenerator.generate(plan.spec) }
+        return context(hierarchy, NameRegistry()) { ModelGenerator.generate(transformed) }
     }
 
     private fun spec(schemas: List<SchemaModel> = emptyList()) = ApiSpec(
