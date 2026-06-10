@@ -299,6 +299,7 @@ object SpecParser {
                         parameters = mergedParams,
                         requestBody = requestBody,
                         responses = responses,
+                        deprecated = operation.deprecated ?: false,
                     )
                 }
         }.toList()
@@ -310,6 +311,7 @@ object SpecParser {
         required = required ?: false,
         schema = schema?.toTypeRef() ?: TypeRef.Primitive(PrimitiveType.STRING),
         description = description,
+        deprecated = deprecated ?: false,
     )
 
 // --- Schema extraction ---
@@ -363,6 +365,7 @@ object SpecParser {
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
             underlyingType = underlyingType,
+            deprecated = schema.deprecated ?: false,
         )
     }
 
@@ -592,6 +595,7 @@ object SpecParser {
                     description = propSchema.description,
                     nullable = propName !in required && !type.honorsDefault(propSchema.default),
                     defaultValue = normalizeDefault(propSchema.default),
+                    deprecated = propSchema.deprecated == true,
                 )
             }
 

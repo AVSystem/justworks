@@ -116,6 +116,28 @@ class ClientGeneratorTest {
         assertTrue(KModifier.SUSPEND in funSpec.modifiers, "Expected SUSPEND modifier")
     }
 
+    // -- Deprecated operations --
+
+    @Test
+    fun `deprecated operation gets Deprecated annotation`() {
+        val cls = clientClass(endpoint().copy(deprecated = true))
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        assertTrue(
+            funSpec.annotations.any { it.typeName.toString() == "kotlin.Deprecated" },
+            "Expected @Deprecated on deprecated operation",
+        )
+    }
+
+    @Test
+    fun `non-deprecated operation has no Deprecated annotation`() {
+        val cls = clientClass(endpoint())
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        assertFalse(
+            funSpec.annotations.any { it.typeName.toString() == "kotlin.Deprecated" },
+            "Did not expect @Deprecated on non-deprecated operation",
+        )
+    }
+
     // -- CLNT-03: All HTTP methods --
 
     @Test

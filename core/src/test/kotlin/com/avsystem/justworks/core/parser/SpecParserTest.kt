@@ -142,6 +142,55 @@ class SpecParserTest : SpecParserTestBase() {
     }
 
     @Test
+    fun `parses deprecated operations schemas and parameters`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Deprecated API
+              version: 1.0.0
+            paths:
+              /legacy:
+                get:
+                  operationId: getLegacy
+                  deprecated: true
+                  parameters:
+                    - name: oldParam
+                      in: query
+                      deprecated: true
+                      schema:
+                        type: string
+                  responses:
+                    '200':
+                      description: ok
+            components:
+              schemas:
+                LegacyModel:
+                  type: object
+                  deprecated: true
+                  properties:
+                    id:
+                      type: string
+                    oldField:
+                      type: string
+                      deprecated: true
+            """.trimIndent().toTempFile(),
+        )
+
+        val op = spec.endpoints.find { it.operationId == "getLegacy" } ?: fail("getLegacy not found")
+        assertTrue(op.deprecated, "operation should be deprecated")
+        val param = op.parameters.find { it.name == "oldParam" } ?: fail("oldParam not found")
+        assertTrue(param.deprecated, "parameter should be deprecated")
+
+        val model = spec.schemas.find { it.name == "LegacyModel" } ?: fail("LegacyModel not found")
+        assertTrue(model.deprecated, "schema should be deprecated")
+        val oldField = model.properties.find { it.name == "oldField" } ?: fail("oldField not found")
+        assertTrue(oldField.deprecated, "property should be deprecated")
+        val idField = model.properties.find { it.name == "id" } ?: fail("id not found")
+        assertFalse(idField.deprecated, "normal property should not be deprecated")
+    }
+
+    @Test
     fun `parsed endpoints have tags`() {
         val listPets = petstore.endpoints.find { it.operationId == "listPets" }!!
 

@@ -21,6 +21,7 @@ import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
+import com.avsystem.justworks.core.gen.deprecatedAnnotation
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
@@ -230,6 +231,10 @@ internal object ClientGenerator {
             .builder(functionName)
             .addModifiers(KModifier.SUSPEND)
             .returns(returnType)
+
+        if (endpoint.deprecated) {
+            funBuilder.addAnnotation(deprecatedAnnotation("This operation is deprecated."))
+        }
 
         val params = endpoint.parameters.groupBy { it.location }
 
