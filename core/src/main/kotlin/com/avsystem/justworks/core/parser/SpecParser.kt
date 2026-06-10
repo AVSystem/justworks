@@ -282,6 +282,7 @@ object SpecParser {
                                 schema = resp.content
                                     ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
+                                    ?.takeUnless { it.isEmptyContent }
                                     ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                             )
                         }
@@ -504,6 +505,22 @@ object SpecParser {
             this !in componentSchemaIdentity && type == "object" && !properties.isNullOrEmpty()
 
     private val Schema<*>.isEnumSchema get(): Boolean = !enum.isNullOrEmpty()
+
+    /**
+     * True when the schema carries no structure at all — no `type`, `$ref`, properties, items,
+     * combinators, enum, or additionalProperties (e.g. `{}` or `{ "nullable": true }`). As a
+     * response body this means "no content", which is generated as a `Unit` return type.
+     */
+    private val Schema<*>.isEmptyContent: Boolean
+        get() = `$ref` == null &&
+            type == null &&
+            properties.isNullOrEmpty() &&
+            allOf.isNullOrEmpty() &&
+            oneOf.isNullOrEmpty() &&
+            anyOf.isNullOrEmpty() &&
+            enum.isNullOrEmpty() &&
+            additionalProperties == null &&
+            items == null
 
     /**
      * Builds a [TypeRef.InlineEnum] for an enum schema that is not a named component
