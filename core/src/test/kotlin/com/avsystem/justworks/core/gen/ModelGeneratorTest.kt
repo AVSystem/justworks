@@ -1007,47 +1007,6 @@ class ModelGeneratorTest {
         assertTrue(serialName.members.any { it.toString().contains("\"keys\"") })
     }
 
-    // -- ROB-01: Circular schema visited-set guard --
-
-    @Test
-    fun `collectInlineTypeRefs with nested inline TypeRef does not stack overflow`() {
-        // Build a schema model containing a deeply nested inline structure
-        // (inline -> property -> another inline with the same shape)
-        val innerInline = TypeRef.Inline(
-            properties = listOf(
-                PropertyModel("value", TypeRef.Primitive(PrimitiveType.STRING), null, false),
-            ),
-            requiredProperties = emptySet(),
-            contextHint = "treeNode",
-        )
-
-        val selfReferencingInline = TypeRef.Inline(
-            properties = listOf(
-                PropertyModel("children", TypeRef.Array(innerInline), null, true),
-            ),
-            requiredProperties = emptySet(),
-            contextHint = "treeNode",
-        )
-
-        val schema = SchemaModel(
-            name = "TreeNode",
-            description = null,
-            properties = listOf(
-                PropertyModel("value", TypeRef.Primitive(PrimitiveType.STRING), null, false),
-                PropertyModel("children", TypeRef.Array(selfReferencingInline), null, true),
-            ),
-            requiredProperties = setOf("value"),
-            allOf = null,
-            oneOf = null,
-            anyOf = null,
-            discriminator = null,
-        )
-
-        // Should complete without StackOverflowError
-        val files = generate(spec(schemas = listOf(schema)))
-        assertNotNull(files, "generate should return results without StackOverflowError")
-    }
-
     // -- SER-02: Nullable/optional property defaults regression tests --
 
     @Test

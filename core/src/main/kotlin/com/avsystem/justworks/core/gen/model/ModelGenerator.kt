@@ -7,7 +7,6 @@ import com.avsystem.justworks.core.gen.EXPERIMENTAL_SERIALIZATION_API
 import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.INSTANT
-import com.avsystem.justworks.core.gen.InlineSchemaKey
 import com.avsystem.justworks.core.gen.JSON_CLASS_DISCRIMINATOR
 import com.avsystem.justworks.core.gen.JSON_CONTENT_POLYMORPHIC_SERIALIZER
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
@@ -18,6 +17,7 @@ import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.OPT_IN
 import com.avsystem.justworks.core.gen.PRIMITIVE_KIND
 import com.avsystem.justworks.core.gen.PRIMITIVE_SERIAL_DESCRIPTOR_FUN
+import com.avsystem.justworks.core.gen.PlannedInlineType
 import com.avsystem.justworks.core.gen.SERIALIZABLE
 import com.avsystem.justworks.core.gen.SERIALIZATION_EXCEPTION
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
@@ -29,9 +29,7 @@ import com.avsystem.justworks.core.gen.UUID_TYPE
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
 import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
-import com.avsystem.justworks.core.gen.resolveInlineTypes
 import com.avsystem.justworks.core.gen.resolveSerialName
-import com.avsystem.justworks.core.gen.resolveTypeRef
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
@@ -73,93 +71,58 @@ internal object ModelGenerator {
     context(_: Hierarchy, _: NameRegistry)
     fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
 
-    context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
+    context(hierarchy: Hierarchy, _: NameRegistry)
     fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
-        ensureReserved(spec, nameRegistry)
-        val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec)
-        val resolvedSpec = spec.resolveInlineTypes(nameMap)
-
-        val resolvedInlineSchemas = inlineSchemas.map { schema ->
-            schema.copy(
-                properties = schema.properties.map { prop ->
-                    prop.copy(type = resolvedSpec.resolveTypeRef(prop.type, nameMap))
-                },
-            )
-        }
-
-        hierarchy.addSchemas(resolvedSpec.schemas + resolvedInlineSchemas)
-
+        // Inline schemas have already been lifted and rewritten to references by planInlineTypes;
+        // the inline types to nest are available via hierarchy.modelInline.
         val nestedVariantNames = hierarchy.sealedHierarchies
             .asSequence()
             .filterNot { (key, _) -> key in hierarchy.anyOfWithoutDiscriminator }
             .flatMap { (_, names) -> names }
             .toSet()
 
-        val schemaFiles = resolvedSpec.schemas
+        val schemaFiles = spec.schemas
             .asSequence()
             .filterNot { it.name in nestedVariantNames }
             .flatMap { generateSchemaFiles(it) }
             .toList()
 
-        val inlineSchemaFiles = resolvedInlineSchemas.map { generateDataClass(it) }
-
-        val enumFiles = resolvedSpec.enums.map { generateEnumClass(it) }
+        val enumFiles = spec.enums.map { generateEnumClass(it) }
 
         val serializersModuleFile = SerializersModuleGenerator.generate()
 
-        val uuidSerializerFile = if (resolvedSpec.usesUuid()) generateUuidSerializer() else null
+        val uuidSerializerFile = if (spec.usesUuid()) generateUuidSerializer() else null
 
-        val files =
-            schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
+        val files = schemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
 
-        return GenerateResult(files, resolvedSpec)
+        return GenerateResult(files, spec)
     }
 
     /**
-     * Ensures all top-level schema/enum names are reserved in [nameRegistry],
-     * preventing inline schemas from colliding with component types even if
-     * the caller supplied an empty registry.
+     * Recursively builds a `@Serializable data class` [TypeSpec] for a lifted inline type,
+     * nesting its child inline types and registering each reference id with [hierarchy] so
+     * properties referencing them resolve to the nested [ClassName].
      */
-    private fun ensureReserved(spec: ApiSpec, nameRegistry: NameRegistry) {
-        spec.schemas.forEach { nameRegistry.reserve(it.name) }
-        spec.enums.forEach { nameRegistry.reserve(it.name) }
-        nameRegistry.reserve(UUID_SERIALIZER.simpleName)
-        nameRegistry.reserve(SERIALIZERS_MODULE.simpleName)
-    }
+    context(hierarchy: Hierarchy)
+    internal fun emitNestedInline(
+        parentClass: ClassName,
+        planned: PlannedInlineType,
+        siblingNames: NameRegistry,
+    ): TypeSpec {
+        val name = siblingNames.register(planned.simpleName)
+        val className = parentClass.nestedClass(name)
+        hierarchy.registerInlineRef(planned.id, className)
 
-    context(nameRegistry: NameRegistry)
-    private fun collectAllInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> {
-        val endpointRefs = spec.endpoints.flatMap { endpoint ->
-            val requestRef = endpoint.requestBody?.schema
-            val responseRefs = endpoint.responses.values.map { it.schema }
-            responseRefs + requestRef
-        }
+        val childNames = NameRegistry()
+        val childSpecs = planned.children.map { emitNestedInline(className, it, childNames) }
 
-        val schemaPropertyRefs = spec.schemas.flatMap { schema -> schema.properties.map { it.type } }
-
-        val nameMap = mutableMapOf<InlineSchemaKey, String>()
-
-        val schemas = collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
-            .asSequence()
-            .sortedBy { it.contextHint }
-            .distinctBy { InlineSchemaKey.from(it.properties, it.requiredProperties) }
-            .map { ref ->
-                val key = InlineSchemaKey.from(ref.properties, ref.requiredProperties)
-                val generatedName = nameRegistry.register(ref.contextHint.toInlinedName())
-                nameMap[key] = generatedName
-                SchemaModel(
-                    name = generatedName,
-                    description = null,
-                    properties = ref.properties,
-                    requiredProperties = ref.requiredProperties,
-                    allOf = null,
-                    oneOf = null,
-                    anyOf = null,
-                    discriminator = null,
-                )
-            }.toList()
-
-        return schemas to nameMap
+        val builder = TypeSpec
+            .classBuilder(name)
+            .addModifiers(KModifier.DATA)
+            .addAnnotation(SERIALIZABLE)
+        buildConstructorAndProperties(planned.schema, builder)
+        childSpecs.forEach { builder.addType(it) }
+        return builder.build()
     }
 
     context(hierarchy: Hierarchy)
@@ -274,21 +237,6 @@ internal object ModelGenerator {
             buildConstructorAndProperties(filteredSchema, builder)
         }
 
-        return builder.build()
-    }
-
-    /**
-     * Builds a `@Serializable data class` [TypeSpec] for an inline operation body schema,
-     * suitable for nesting inside a client class. Carries no superinterfaces or discriminator
-     * wiring — operation bodies are plain anonymous objects.
-     */
-    context(_: Hierarchy)
-    internal fun buildNestedBodyType(simpleName: String, schema: SchemaModel): TypeSpec {
-        val builder = TypeSpec
-            .classBuilder(simpleName)
-            .addModifiers(KModifier.DATA)
-            .addAnnotation(SERIALIZABLE)
-        buildConstructorAndProperties(schema, builder)
         return builder.build()
     }
 
@@ -490,7 +438,15 @@ internal object ModelGenerator {
             )
         }
 
+        // Nest this schema's inline property types, registering their ids before resolving
+        // properties so references to them resolve to the nested classes.
+        val nestedNames = NameRegistry()
+        val nestedSpecs = hierarchy.modelInline[schema.name]
+            .orEmpty()
+            .map { emitNestedInline(className, it, nestedNames) }
+
         buildConstructorAndProperties(schema, typeSpec)
+        nestedSpecs.forEach { typeSpec.addType(it) }
 
         val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
 
@@ -592,33 +548,6 @@ internal object ModelGenerator {
             .builder(className)
             .addType(typeSpec.build())
             .build()
-    }
-
-    /**
-     * Iteratively collects all [TypeRef.Inline] instances from a [TypeRef] tree.
-     */
-    private fun collectInlineTypeRefs(initialTodo: List<TypeRef?>): List<TypeRef.Inline> {
-        val todo = ArrayDeque(initialTodo.filterNotNull())
-        val visited = linkedSetOf<TypeRef.Inline>()
-
-        while (todo.isNotEmpty()) {
-            when (val current = todo.removeFirst()) {
-                is TypeRef.Inline if visited.add(current) -> {
-                    todo.addAll(current.properties.map { it.type })
-                }
-
-                is TypeRef.Array -> {
-                    todo.addFirst(current.items)
-                }
-
-                is TypeRef.Map -> {
-                    todo.addFirst(current.valueType)
-                }
-
-                else -> {}
-            }
-        }
-        return visited.toList()
     }
 
     private val SchemaModel.isPrimitiveOnly: Boolean

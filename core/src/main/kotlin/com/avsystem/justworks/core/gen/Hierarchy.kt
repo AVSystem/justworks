@@ -11,12 +11,15 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
     private val memoScope = MemoScope()
 
     /**
-     * Resolution overrides for inline operation body types nested inside client classes,
-     * keyed by the reference id assigned by [planOperationInlineTypes].
+     * Resolution overrides for inline body types nested inside client/model classes,
+     * keyed by the reference id assigned by [planInlineTypes].
      */
     private val inlineRefs = mutableMapOf<String, ClassName>()
 
-    /** Registers the nested [ClassName] an inline-operation reference id resolves to. */
+    /** Inline object types to nest inside a component data class, keyed by the component name. */
+    var modelInline: Map<String, List<PlannedInlineType>> = emptyMap()
+
+    /** Registers the nested [ClassName] an inline reference id resolves to. */
     fun registerInlineRef(id: String, className: ClassName) {
         inlineRefs[id] = className
     }

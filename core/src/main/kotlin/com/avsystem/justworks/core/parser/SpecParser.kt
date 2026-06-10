@@ -263,7 +263,7 @@ object SpecParser {
                         val mediaType = content[contentType].bind()
 
                         val schema = mediaType.schema
-                            ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Request")
+                            ?.toTypeRef()
                             .bind()
 
                         RequestBody(
@@ -282,7 +282,7 @@ object SpecParser {
                                 schema = resp.content
                                     ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
-                                    ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
+                                    ?.toTypeRef(),
                             )
                         }
 
@@ -330,7 +330,7 @@ object SpecParser {
             } else {
                 val requiredProps = schema.required.orEmpty().toSet()
                 val props = schema
-                    .propertyModels(requiredProps) { propName -> "$name.${propName.toPascalCase()}" }
+                    .propertyModels(requiredProps)
                     .values
                     .toList()
                 props to requiredProps
@@ -384,17 +384,16 @@ object SpecParser {
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun extractAllOfProperties(parentName: String, schema: Schema<*>): Pair<List<PropertyModel>, Set<String>> {
         val topRequired = schema.required.orEmpty().toSet()
-        val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
 
         val (required, properties) = schema.allOf
             .orEmpty()
             .fold(topRequired to emptyMap<String, PropertyModel>()) { (accRequired, accProperties), subSchema ->
                 val resolvedSchema = subSchema.resolveSubSchema()
                 val mergedRequired = accRequired + resolvedSchema.required.orEmpty().toSet()
-                mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired, contextCreator)
+                mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired)
             }
 
-        val topLevelProperties = schema.propertyModels(required, contextCreator)
+        val topLevelProperties = schema.propertyModels(required)
         val finalProperties =
             properties.plus(topLevelProperties).values.map { prop -> prop.copy(nullable = prop.name !in required) }
 
@@ -451,14 +450,14 @@ object SpecParser {
     }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
-    private fun Schema<*>.toTypeRef(contextName: String? = null): TypeRef = contextName?.let { toInlineTypeRef(it) }
+    private fun Schema<*>.toTypeRef(): TypeRef = toInlineTypeRef()
         ?: (resolveName() ?: allOf?.singleOrNull()?.resolveName())?.let(TypeRef::Reference)
         ?: TypeRef.Unknown.takeIf { (allOf?.size ?: 0) > 1 }
-        ?: resolveByType(contextName)
+        ?: resolveByType()
 
     /** Resolves a [TypeRef] based on the schema's structural type/format, ignoring component identity. */
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
-    private fun Schema<*>.resolveByType(contextName: String? = null): TypeRef = when (type) {
+    private fun Schema<*>.resolveByType(): TypeRef = when (type) {
         "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
 
         "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
@@ -467,7 +466,7 @@ object SpecParser {
 
         "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-        "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
+        "array" -> TypeRef.Array(items?.toTypeRef() ?: TypeRef.Unknown)
 
         "object" -> when (val ap = additionalProperties) {
             is Schema<*> -> TypeRef.Map(ap.toTypeRef())
@@ -478,13 +477,13 @@ object SpecParser {
         else -> TypeRef.Unknown
     }
 
+    /** An anonymous object schema becomes an [TypeRef.Inline]; the generator decides its name and placement. */
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
-    private fun Schema<*>.toInlineTypeRef(contextName: String): TypeRef? = takeIf { isInlineObject }?.let {
+    private fun Schema<*>.toInlineTypeRef(): TypeRef? = takeIf { isInlineObject }?.let {
         val required = required.orEmpty().toSet()
         TypeRef.Inline(
-            properties = propertyModels(required) { "$contextName.${it.toPascalCase()}" }.values.toList(),
+            properties = propertyModels(required).values.toList(),
             requiredProperties = required,
-            contextHint = contextName,
         )
     }
 
@@ -499,18 +498,17 @@ object SpecParser {
     private val Schema<*>.isEnumSchema get(): Boolean = !enum.isNullOrEmpty()
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
-    private fun Schema<*>.propertyModels(required: Set<String>, createContext: (String) -> String? = { null }) =
-        properties
-            .orEmpty()
-            .mapValues { (propName, propSchema) ->
-                PropertyModel(
-                    name = propName,
-                    type = propSchema.toTypeRef(createContext(propName)),
-                    description = propSchema.description,
-                    nullable = propName !in required,
-                    defaultValue = propSchema.default,
-                )
-            }
+    private fun Schema<*>.propertyModels(required: Set<String>) = properties
+        .orEmpty()
+        .mapValues { (propName, propSchema) ->
+            PropertyModel(
+                name = propName,
+                type = propSchema.toTypeRef(),
+                description = propSchema.description,
+                nullable = propName !in required,
+                defaultValue = propSchema.default,
+            )
+        }
 
     context(_: Warnings)
     private fun warnOnUnknownTypes(endpoints: List<Endpoint>, schemas: List<SchemaModel>) {

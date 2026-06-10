@@ -11,13 +11,13 @@ import kotlin.test.Test
 class ModelGeneratorRegressionTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = context(
-        Hierarchy(ModelPackage(modelPackage)).apply {
-            addSchemas(spec.schemas)
-        },
-        NameRegistry(),
-    ) {
-        ModelGenerator.generate(spec)
+    private fun generate(spec: ApiSpec): List<com.squareup.kotlinpoet.FileSpec> {
+        val plan = planInlineTypes(spec)
+        val hierarchy = Hierarchy(ModelPackage(modelPackage)).apply {
+            addSchemas(plan.spec.schemas)
+            modelInline = plan.modelInline
+        }
+        return context(hierarchy, NameRegistry()) { ModelGenerator.generate(plan.spec) }
     }
 
     private fun spec(schemas: List<SchemaModel> = emptyList()) = ApiSpec(
@@ -61,7 +61,6 @@ class ModelGeneratorRegressionTest {
                             PropertyModel("radius", TypeRef.Primitive(PrimitiveType.DOUBLE), null, false),
                         ),
                         requiredProperties = setOf("radius"),
-                        contextHint = "Circle_config",
                     ),
                     description = null,
                     nullable = false,

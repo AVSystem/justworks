@@ -120,4 +120,48 @@ class CodeGeneratorTest {
             outputDir.deleteRecursively()
         }
     }
+
+    @Test
+    fun `inline object properties are nested inside the parent model type`() {
+        val yaml = """
+            openapi: "3.0.0"
+            info: { title: T, version: "1" }
+            paths: {}
+            components:
+              schemas:
+                DataSetList:
+                  type: object
+                  properties:
+                    total: { type: integer, format: int32 }
+                    address:
+                      type: object
+                      properties:
+                        street: { type: string }
+        """.trimIndent()
+        val specFile = File.createTempFile("nested-prop", ".yaml").apply {
+            writeText(yaml)
+            deleteOnExit()
+        }
+        val spec = when (val r = SpecParser.parse(specFile)) {
+            is ParseResult.Success -> r.value
+            is ParseResult.Failure -> fail("parse failed: ${r.error}")
+        }
+
+        val outputDir = Files.createTempDirectory("codegen-prop").toFile()
+        try {
+            CodeGenerator.generate(spec, "com.example.model", "com.example.api", outputDir)
+
+            val modelDir = outputDir.resolve("com/example/model")
+            val files = modelDir.listFiles()?.map { it.name }.orEmpty()
+            assertTrue(files.contains("DataSetList.kt"), "got: $files")
+            // The inline `address` object is nested in DataSetList, not a separate file.
+            assertTrue(files.none { it.contains("Address") }, "inline property should not be top-level, got: $files")
+
+            val src = modelDir.resolve("DataSetList.kt").readText()
+            assertTrue(src.contains("data class Address"), "address should be nested in DataSetList")
+            assertTrue(src.contains("address: Address"), "property should reference the nested type")
+        } finally {
+            outputDir.deleteRecursively()
+        }
+    }
 }

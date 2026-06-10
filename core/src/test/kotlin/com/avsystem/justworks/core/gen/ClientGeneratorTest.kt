@@ -36,7 +36,7 @@ class ClientGeneratorTest {
         ApiPackage(apiPackage),
         NameRegistry(),
     ) {
-        ClientGenerator.generate(spec, hasPolymorphicTypes)
+        ClientGenerator.generate(spec, hasPolymorphicTypes, emptyMap())
     }
 
     private fun spec(vararg endpoints: Endpoint) = spec(endpoints.toList())
@@ -520,7 +520,6 @@ class ClientGeneratorTest {
                         PropertyModel("description", TypeRef.Primitive(PrimitiveType.STRING), null, false),
                     ),
                     requiredProperties = setOf("file", "description"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -544,7 +543,6 @@ class ClientGeneratorTest {
                         PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
                     ),
                     requiredProperties = setOf("file"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -570,7 +568,6 @@ class ClientGeneratorTest {
                         PropertyModel("description", TypeRef.Primitive(PrimitiveType.STRING), null, false),
                     ),
                     requiredProperties = setOf("file", "description"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -593,7 +590,6 @@ class ClientGeneratorTest {
                         PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
                     ),
                     requiredProperties = setOf("file"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -670,7 +666,6 @@ class ClientGeneratorTest {
                         PropertyModel("age", TypeRef.Primitive(PrimitiveType.INT), null, false),
                     ),
                     requiredProperties = setOf("username", "age"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -699,7 +694,6 @@ class ClientGeneratorTest {
                         PropertyModel("age", TypeRef.Primitive(PrimitiveType.INT), null, false),
                     ),
                     requiredProperties = setOf("username", "age"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -724,7 +718,6 @@ class ClientGeneratorTest {
                         PropertyModel("nickname", TypeRef.Primitive(PrimitiveType.STRING), null, false),
                     ),
                     requiredProperties = setOf("username"),
-                    contextHint = "request",
                 ),
             ),
         )

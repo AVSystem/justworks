@@ -61,7 +61,7 @@ internal object ClientGenerator {
     fun generate(
         spec: ApiSpec,
         hasPolymorphicTypes: Boolean,
-        operationInlineTypes: Map<String, List<PlannedInlineType>> = emptyMap(),
+        operationInlineTypes: Map<String, List<PlannedInlineType>>,
     ): List<FileSpec> {
         val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
@@ -155,13 +155,11 @@ internal object ClientGenerator {
         // Nest each operation's inline request/response body types inside the client class,
         // registering their reference ids so endpoint signatures resolve to the nested classes.
         // Done before generating functions so type resolution sees the registered names.
-        val nestedNameRegistry = NameRegistry()
+        val nestedNames = NameRegistry()
         endpoints
             .flatMap { operationInlineTypes[it.operationId].orEmpty() }
             .forEach { planned ->
-                val nestedName = nestedNameRegistry.register(planned.simpleName)
-                hierarchy.registerInlineRef(planned.id, className.nestedClass(nestedName))
-                classBuilder.addType(ModelGenerator.buildNestedBodyType(nestedName, planned.schema))
+                classBuilder.addType(ModelGenerator.emitNestedInline(className, planned, nestedNames))
             }
 
         context(NameRegistry()) {
