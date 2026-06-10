@@ -59,7 +59,9 @@ import com.squareup.kotlinpoet.TypeAliasSpec
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.WildcardTypeName
+import com.squareup.kotlinpoet.joinToCode
 import kotlinx.datetime.LocalDate
+import java.util.Base64
 import kotlin.time.Instant
 
 /**
@@ -458,49 +460,103 @@ internal object ModelGenerator {
      */
 
     context(hierarchy: Hierarchy)
-    private fun formatDefaultValue(prop: PropertyModel): CodeBlock = when (prop.type) {
+    private fun formatDefaultValue(prop: PropertyModel): CodeBlock =
+        formatDefaultValue(prop.type, prop.defaultValue, prop.name)
+
+    context(hierarchy: Hierarchy)
+    private fun formatDefaultValue(
+        type: TypeRef,
+        value: Any?,
+        propName: String,
+    ): CodeBlock = when (type) {
         is TypeRef.Primitive -> {
-            when (prop.type.type) {
-                PrimitiveType.STRING -> CodeBlock.of("%S", prop.defaultValue)
+            when (type.type) {
+                PrimitiveType.STRING -> {
+                    CodeBlock.of("%S", value)
+                }
 
                 PrimitiveType.INT,
                 PrimitiveType.LONG,
                 PrimitiveType.DOUBLE,
-                PrimitiveType.FLOAT,
                 PrimitiveType.BOOLEAN,
-                -> CodeBlock.of("%L", prop.defaultValue)
+                -> {
+                    CodeBlock.of("%L", value)
+                }
 
-                PrimitiveType.DATE_TIME -> catch(
-                    { Instant.parse(prop.defaultValue as String) },
-                    { CodeBlock.of("%T.parse(%S)", INSTANT, prop.defaultValue) },
-                    { e ->
-                        throw IllegalArgumentException(
-                            "Invalid ISO-8601 date-time default '${prop.defaultValue}' for property ${prop.name}: ${e.message}",
+                PrimitiveType.FLOAT -> {
+                    CodeBlock.of("%Lf", value)
+                }
+
+                PrimitiveType.DATE_TIME -> {
+                    catch(
+                        { Instant.parse(value as String) },
+                        { CodeBlock.of("%T.parse(%S)", INSTANT, value) },
+                        { e ->
+                            throw IllegalArgumentException(
+                                "Invalid ISO-8601 date-time default '$value' for property $propName: ${e.message}",
+                            )
+                        },
+                    )
+                }
+
+                PrimitiveType.DATE -> {
+                    catch(
+                        { LocalDate.parse(value as String) },
+                        { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, value) },
+                        { e ->
+                            throw IllegalArgumentException(
+                                "Invalid ISO-8601 date default '$value' for property $propName: ${e.message}",
+                            )
+                        },
+                    )
+                }
+
+                PrimitiveType.BYTE_ARRAY -> {
+                    val bytes = when (value) {
+                        is ByteArray -> value
+
+                        is String -> catch(
+                            {
+                                Base64.getDecoder().decode(value)
+                            },
+                            { it },
+                            { e ->
+                                throw IllegalArgumentException(
+                                    "Invalid base64 byte default '$value' for property $propName: ${e.message}",
+                                )
+                            },
                         )
-                    },
-                )
 
-                PrimitiveType.DATE -> catch(
-                    { LocalDate.parse(prop.defaultValue as String) },
-                    { CodeBlock.of("%T.parse(%S)", LOCAL_DATE, prop.defaultValue) },
-                    { e ->
-                        throw IllegalArgumentException(
-                            "Invalid ISO-8601 date default '${prop.defaultValue}' for property ${prop.name}: ${e.message}",
+                        else -> throw IllegalArgumentException(
+                            "Unsupported byte-array default '$value' for property $propName",
                         )
-                    },
-                )
+                    }
+                    CodeBlock.of("byteArrayOf(%L)", bytes.joinToString(", "))
+                }
 
-                else -> throw IllegalArgumentException("Unsupported default value type: ${prop.type}")
+                PrimitiveType.UUID -> {
+                    throw IllegalArgumentException("Unsupported default value type: $type")
+                }
             }
         }
 
         is TypeRef.Reference -> {
-            val constantName = prop.defaultValue.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, prop.type.schemaName), constantName)
+            val constantName = value.toString().toEnumConstantName()
+            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, type.schemaName), constantName)
+        }
+
+        is TypeRef.Array -> {
+            val elements = (value as? List<*>).orEmpty()
+            if (elements.isEmpty()) {
+                CodeBlock.of("emptyList()")
+            } else {
+                val items = elements.map { formatDefaultValue(type.items, it, propName) }
+                CodeBlock.of("listOf(%L)", items.joinToCode(separator = ", "))
+            }
         }
 
         else -> {
-            throw IllegalArgumentException("Unsupported default value type: ${prop.type}")
+            throw IllegalArgumentException("Unsupported default value type: $type")
         }
     }
 

@@ -36,6 +36,8 @@ import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import com.avsystem.justworks.core.toEnumOrNull
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ArrayNode
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
@@ -507,6 +509,48 @@ object SpecParser {
     private val Schema<*>.isEnumSchema get(): Boolean = !enum.isNullOrEmpty()
 
     /**
+     * True when a property of this type declares a `default` that should be honored, i.e. the
+     * property is not optional-null but carries a concrete value and must be generated as a
+     * non-nullable field initialized to that default rather than as `T? = null`.
+     *
+     * Honored for scalar/enum types (primitives, inline enums, references — the latter typically
+     * a named enum) and for arrays of such element types (emitted as `listOf(...)`/`emptyList()`).
+     * Object/map defaults are intentionally excluded and keep the previous nullable-null behavior.
+     */
+    private fun TypeRef.honorsDefault(default: Any?): Boolean = default != null &&
+        when (this) {
+            is TypeRef.Primitive, is TypeRef.InlineEnum, is TypeRef.Reference -> true
+            is TypeRef.Array -> items.honorsDefault(default)
+            is TypeRef.Inline, is TypeRef.Map, TypeRef.Unknown -> false
+        }
+
+    /**
+     * Normalizes a raw Swagger default into a plain Kotlin value the model layer can format
+     * without depending on Jackson. Array defaults arrive as a Jackson [ArrayNode]; unwrap them
+     * into a `List` of plain scalar values. Scalar defaults are already plain and pass through.
+     */
+    private fun normalizeDefault(default: Any?): Any? = when (default) {
+        is ArrayNode -> default.map { normalizeDefault(it) }
+
+        is JsonNode -> when {
+            default.isShort -> default.shortValue()
+            default.isInt -> default.intValue()
+            default.isLong -> default.longValue()
+            default.isFloat -> default.floatValue()
+            default.isDouble -> default.doubleValue()
+            default.isBigDecimal -> default.decimalValue()
+            default.isBigInteger -> default.bigIntegerValue()
+            default.isNumber -> default.numberValue()
+            default.isBoolean -> default.booleanValue()
+            default.isNull -> null
+            default.isBinary -> default.binaryValue()
+            else -> default.asText()
+        }
+
+        else -> default
+    }
+
+    /**
      * True when the schema carries no structure at all — no `type`, `$ref`, properties, items,
      * combinators, enum, or additionalProperties (e.g. `{}` or `{ "nullable": true }`). As a
      * response body this means "no content", which is generated as a `Unit` return type.
@@ -541,12 +585,13 @@ object SpecParser {
         properties
             .orEmpty()
             .mapValues { (propName, propSchema) ->
+                val type = propSchema.toTypeRef(createContext(propName))
                 PropertyModel(
                     name = propName,
-                    type = propSchema.toTypeRef(createContext(propName)),
+                    type = type,
                     description = propSchema.description,
-                    nullable = propName !in required,
-                    defaultValue = propSchema.default,
+                    nullable = propName !in required && !type.honorsDefault(propSchema.default),
+                    defaultValue = normalizeDefault(propSchema.default),
                 )
             }
 
