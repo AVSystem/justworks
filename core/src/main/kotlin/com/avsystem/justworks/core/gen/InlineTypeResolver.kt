@@ -24,7 +24,7 @@ internal fun ApiSpec.resolveTypeRef(type: TypeRef, nameMap: Map<InlineSchemaKey,
     }
 
     is TypeRef.Array -> {
-        TypeRef.Array(resolveTypeRef(type.items, nameMap))
+        TypeRef.Array(resolveTypeRef(type.items, nameMap), type.unique)
     }
 
     is TypeRef.Map -> {

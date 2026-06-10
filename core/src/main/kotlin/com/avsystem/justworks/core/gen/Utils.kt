@@ -14,6 +14,7 @@ import com.squareup.kotlinpoet.LIST
 import com.squareup.kotlinpoet.LONG
 import com.squareup.kotlinpoet.MAP
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.SET
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 
@@ -47,7 +48,7 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
     }
 
     is TypeRef.Array -> {
-        LIST.parameterizedBy(items.toTypeName())
+        (if (unique) SET else LIST).parameterizedBy(items.toTypeName())
     }
 
     is TypeRef.Map -> {
