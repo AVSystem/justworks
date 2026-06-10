@@ -21,13 +21,19 @@ import com.squareup.kotlinpoet.TypeName
 internal val TypeRef.properties: List<PropertyModel>
     get() = when (this) {
         is TypeRef.Inline -> properties
-        is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptyList()
+
+        is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum,
+        TypeRef.Unknown,
+        -> emptyList()
     }
 
 internal val TypeRef.requiredProperties: Set<String>
     get() = when (this) {
         is TypeRef.Inline -> requiredProperties
-        is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptySet()
+
+        is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum,
+        TypeRef.Unknown,
+        -> emptySet()
     }
 
 context(hierarchy: Hierarchy)
@@ -61,6 +67,10 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
 
     is TypeRef.Inline -> {
         error("TypeRef.Inline should have been resolved by InlineTypeResolver (contextHint=$contextHint)")
+    }
+
+    is TypeRef.InlineEnum -> {
+        error("TypeRef.InlineEnum should have been resolved by InlineTypeResolver (contextHint=$contextHint)")
     }
 
     is TypeRef.Unknown -> {

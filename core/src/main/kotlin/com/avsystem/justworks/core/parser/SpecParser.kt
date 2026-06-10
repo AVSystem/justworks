@@ -459,9 +459,13 @@ object SpecParser {
     /** Resolves a [TypeRef] based on the schema's structural type/format, ignoring component identity. */
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.resolveByType(contextName: String? = null): TypeRef = when (type) {
-        "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
+        "string" -> inlineEnum(contextName, EnumBackingType.STRING)
+            ?: STRING_FORMAT_MAP[format]
+            ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-        "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
+        "integer" -> inlineEnum(contextName, EnumBackingType.INTEGER)
+            ?: INTEGER_FORMAT_MAP[format]
+            ?: TypeRef.Primitive(PrimitiveType.INT)
 
         "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
 
@@ -473,7 +477,7 @@ object SpecParser {
         )
 
         "object" -> when (val ap = additionalProperties) {
-            is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+            is Schema<*> -> TypeRef.Map(ap.toTypeRef(contextName?.let { "${it}Value" }))
             is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
             else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
         }
@@ -500,6 +504,20 @@ object SpecParser {
             this !in componentSchemaIdentity && type == "object" && !properties.isNullOrEmpty()
 
     private val Schema<*>.isEnumSchema get(): Boolean = !enum.isNullOrEmpty()
+
+    /**
+     * Builds a [TypeRef.InlineEnum] for an enum schema that is not a named component
+     * (e.g. an enum declared directly in array `items` or inline on a property).
+     * Named component enums are resolved to [TypeRef.Reference] before reaching here.
+     */
+    private fun Schema<*>.inlineEnum(contextName: String?, backingType: EnumBackingType): TypeRef.InlineEnum? =
+        enum?.filterNotNull()?.takeIf { it.isNotEmpty() }?.let { values ->
+            TypeRef.InlineEnum(
+                values = values.map { it.toString() },
+                backingType = backingType,
+                contextHint = contextName ?: "InlineEnum",
+            )
+        }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.propertyModels(required: Set<String>, createContext: (String) -> String? = { null }) =
@@ -557,7 +575,7 @@ object SpecParser {
             is TypeRef.Array -> callRecursive(typeRef.items)
             is TypeRef.Map -> callRecursive(typeRef.valueType)
             is TypeRef.Inline -> typeRef.properties.any { callRecursive(it.type) }
-            is TypeRef.Primitive, is TypeRef.Reference -> false
+            is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum -> false
         }
     }
 

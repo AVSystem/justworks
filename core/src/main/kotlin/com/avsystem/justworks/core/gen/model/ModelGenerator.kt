@@ -7,7 +7,6 @@ import com.avsystem.justworks.core.gen.EXPERIMENTAL_SERIALIZATION_API
 import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.INSTANT
-import com.avsystem.justworks.core.gen.InlineSchemaKey
 import com.avsystem.justworks.core.gen.JSON_CLASS_DISCRIMINATOR
 import com.avsystem.justworks.core.gen.JSON_CONTENT_POLYMORPHIC_SERIALIZER
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
@@ -26,6 +25,8 @@ import com.avsystem.justworks.core.gen.SERIAL_NAME
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
 import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
+import com.avsystem.justworks.core.gen.collectInlineEnums
+import com.avsystem.justworks.core.gen.collectInlineSchemas
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
 import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
@@ -35,7 +36,6 @@ import com.avsystem.justworks.core.gen.resolveTypeRef
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
-import com.avsystem.justworks.core.gen.toInlinedName
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiSpec
@@ -76,13 +76,14 @@ internal object ModelGenerator {
     context(hierarchy: Hierarchy, nameRegistry: NameRegistry)
     fun generateWithResolvedSpec(spec: ApiSpec): GenerateResult {
         ensureReserved(spec, nameRegistry)
-        val (inlineSchemas, nameMap) = collectAllInlineSchemas(spec)
-        val resolvedSpec = spec.resolveInlineTypes(nameMap)
+        val (inlineSchemas, nameMap) = collectInlineSchemas(spec)
+        val (inlineEnums, enumNameMap) = collectInlineEnums(spec)
+        val resolvedSpec = spec.resolveInlineTypes(nameMap, enumNameMap)
 
         val resolvedInlineSchemas = inlineSchemas.map { schema ->
             schema.copy(
                 properties = schema.properties.map { prop ->
-                    prop.copy(type = resolvedSpec.resolveTypeRef(prop.type, nameMap))
+                    prop.copy(type = resolvedSpec.resolveTypeRef(prop.type, nameMap, enumNameMap))
                 },
             )
         }
@@ -103,7 +104,7 @@ internal object ModelGenerator {
 
         val inlineSchemaFiles = resolvedInlineSchemas.map { generateDataClass(it) }
 
-        val enumFiles = resolvedSpec.enums.map { generateEnumClass(it) }
+        val enumFiles = (resolvedSpec.enums + inlineEnums).map { generateEnumClass(it) }
 
         val serializersModuleFile = SerializersModuleGenerator.generate()
 
@@ -125,41 +126,6 @@ internal object ModelGenerator {
         spec.enums.forEach { nameRegistry.reserve(it.name) }
         nameRegistry.reserve(UUID_SERIALIZER.simpleName)
         nameRegistry.reserve(SERIALIZERS_MODULE.simpleName)
-    }
-
-    context(nameRegistry: NameRegistry)
-    private fun collectAllInlineSchemas(spec: ApiSpec): Pair<List<SchemaModel>, Map<InlineSchemaKey, String>> {
-        val endpointRefs = spec.endpoints.flatMap { endpoint ->
-            val requestRef = endpoint.requestBody?.schema
-            val responseRefs = endpoint.responses.values.map { it.schema }
-            responseRefs + requestRef
-        }
-
-        val schemaPropertyRefs = spec.schemas.flatMap { schema -> schema.properties.map { it.type } }
-
-        val nameMap = mutableMapOf<InlineSchemaKey, String>()
-
-        val schemas = collectInlineTypeRefs(endpointRefs + schemaPropertyRefs)
-            .asSequence()
-            .sortedBy { it.contextHint }
-            .distinctBy { InlineSchemaKey.from(it.properties, it.requiredProperties) }
-            .map { ref ->
-                val key = InlineSchemaKey.from(ref.properties, ref.requiredProperties)
-                val generatedName = nameRegistry.register(ref.contextHint.toInlinedName())
-                nameMap[key] = generatedName
-                SchemaModel(
-                    name = generatedName,
-                    description = null,
-                    properties = ref.properties,
-                    requiredProperties = ref.requiredProperties,
-                    allOf = null,
-                    oneOf = null,
-                    anyOf = null,
-                    discriminator = null,
-                )
-            }.toList()
-
-        return schemas to nameMap
     }
 
     context(hierarchy: Hierarchy)
@@ -579,33 +545,6 @@ internal object ModelGenerator {
             .build()
     }
 
-    /**
-     * Iteratively collects all [TypeRef.Inline] instances from a [TypeRef] tree.
-     */
-    private fun collectInlineTypeRefs(initialTodo: List<TypeRef?>): List<TypeRef.Inline> {
-        val todo = ArrayDeque(initialTodo.filterNotNull())
-        val visited = linkedSetOf<TypeRef.Inline>()
-
-        while (todo.isNotEmpty()) {
-            when (val current = todo.removeFirst()) {
-                is TypeRef.Inline if visited.add(current) -> {
-                    todo.addAll(current.properties.map { it.type })
-                }
-
-                is TypeRef.Array -> {
-                    todo.addFirst(current.items)
-                }
-
-                is TypeRef.Map -> {
-                    todo.addFirst(current.valueType)
-                }
-
-                else -> {}
-            }
-        }
-        return visited.toList()
-    }
-
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
 
@@ -614,7 +553,7 @@ internal object ModelGenerator {
         is TypeRef.Array -> items.containsUuid()
         is TypeRef.Map -> valueType.containsUuid()
         is TypeRef.Inline -> properties.any { it.type.containsUuid() }
-        is TypeRef.Reference, TypeRef.Unknown -> false
+        is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> false
     }
 
     private fun ApiSpec.usesUuid(): Boolean {
