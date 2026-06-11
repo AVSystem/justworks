@@ -9,27 +9,11 @@ sealed interface TypeRef {
 
     data class Map(val valueType: TypeRef) : TypeRef
 
-    data class Inline(
-        val properties: List<PropertyModel>,
-        val requiredProperties: Set<String>,
-        override val contextHint: String, // "request"|"response"|property name for context-aware naming
-    ) : InlineType
+    data class Inline(val properties: List<PropertyModel>, val requiredProperties: Set<String>) : TypeRef
 
-    data class InlineEnum(
-        val values: List<String>,
-        val backingType: EnumBackingType,
-        override val contextHint: String, // property/item name for context-aware naming
-    ) : InlineType
+    data class InlineEnum(val values: List<String>, val backingType: EnumBackingType) : TypeRef
 
     data object Unknown : TypeRef
-
-    /**
-     * A schema defined inline (anonymously) that must be hoisted into a named generated
-     * declaration. [contextHint] is the seed used to derive that name.
-     */
-    sealed interface InlineType : TypeRef {
-        val contextHint: String
-    }
 }
 
 enum class PrimitiveType { STRING, INT, LONG, DOUBLE, FLOAT, BOOLEAN, BYTE_ARRAY, DATE_TIME, DATE, UUID }

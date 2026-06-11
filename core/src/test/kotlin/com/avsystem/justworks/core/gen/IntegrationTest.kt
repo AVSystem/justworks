@@ -40,32 +40,28 @@ class IntegrationTest {
         }
     }
 
-    private fun generateModel(spec: ApiSpec): List<FileSpec> = context(
-        Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) },
-        OutputOptions(),
-        NameRegistry(),
-    ) {
-        ModelGenerator.generate(spec)
+    private fun hierarchyFor(resolved: ResolvedApiSpec) = Hierarchy(ModelPackage(modelPackage)).apply {
+        addSchemas(resolved.schemas.map { it.schema })
     }
 
-    private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult = context(
-        Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) },
-        OutputOptions(),
-        NameRegistry(),
-    ) {
-        ModelGenerator.generateWithResolvedSpec(spec)
+    private fun generateModel(spec: ApiSpec): List<FileSpec> {
+        val resolved = spec.resolveInlines()
+        return context(hierarchyFor(resolved), OutputOptions(), NameRegistry()) {
+            ModelGenerator.generate(resolved)
+        }
     }
 
-    private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> = context(
-        Hierarchy(ModelPackage(modelPackage)).apply {
-            addSchemas(spec.schemas)
-        },
-        OutputOptions(),
-        ApiPackage(apiPackage),
-        NameRegistry(),
-    ) {
-        ClientGenerator.generate(spec, hasPolymorphicTypes)
+    private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult {
+        val resolved = spec.resolveInlines()
+        return context(hierarchyFor(resolved), OutputOptions(), NameRegistry()) {
+            ModelGenerator.generateWithResolvedSpec(resolved)
+        }
     }
+
+    private fun generateClient(resolved: ResolvedApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> =
+        context(hierarchyFor(resolved), OutputOptions(), ApiPackage(apiPackage), NameRegistry()) {
+            ClientGenerator.generate(resolved, hasPolymorphicTypes)
+        }
 
     @Test
     fun `real-world specs generate compilable enum code without class body conflicts`() {

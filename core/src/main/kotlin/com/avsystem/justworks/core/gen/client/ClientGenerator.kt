@@ -18,17 +18,19 @@ import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.OutputOptions
+import com.avsystem.justworks.core.gen.ResolvedApiSpec
+import com.avsystem.justworks.core.gen.ResolvedEndpoint
 import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
 import com.avsystem.justworks.core.gen.invoke
+import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiKeyLocation
-import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.SecurityScheme
@@ -56,17 +58,23 @@ internal object ClientGenerator {
     private const val DEFAULT_TAG = "Default"
 
     context(_: Hierarchy, _: OutputOptions, _: ApiPackage, _: NameRegistry)
-    fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
-        val grouped = spec.endpoints.groupBy { it.tags.firstOrNull() ?: DEFAULT_TAG }
+    fun generate(spec: ResolvedApiSpec, hasPolymorphicTypes: Boolean): List<FileSpec> {
+        val grouped = spec.endpoints.groupBy { it.endpoint.tags.firstOrNull() ?: DEFAULT_TAG }
         return grouped.map { (tag, endpoints) ->
-            generateClientFile(tag, endpoints, hasPolymorphicTypes, spec.securitySchemes, spec.title)
+            generateClientFile(
+                tag,
+                endpoints,
+                hasPolymorphicTypes,
+                spec.securitySchemes,
+                spec.title,
+            )
         }
     }
 
     context(hierarchy: Hierarchy, options: OutputOptions, apiPackage: ApiPackage, nameRegistry: NameRegistry)
     private fun generateClientFile(
         tag: String,
-        endpoints: List<Endpoint>,
+        endpoints: List<ResolvedEndpoint>,
         hasPolymorphicTypes: Boolean,
         securitySchemes: List<SecurityScheme>,
         specTitle: String,
@@ -139,8 +147,15 @@ internal object ClientGenerator {
             classBuilder.addFunction(buildApplyAuth(securitySchemes, isSingleBearer, specTitle))
         }
 
+        val nestedNames = NameRegistry()
+        endpoints
+            .flatMap { it.inlineTypes }
+            .forEach { nested ->
+                classBuilder.addType(ModelGenerator.emitNestedInline(className, nested, nestedNames))
+            }
+
         context(NameRegistry()) {
-            classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })
+            classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it.endpoint) })
         }
 
         return FileSpec

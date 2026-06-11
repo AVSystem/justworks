@@ -135,7 +135,6 @@ class TypeMappingTest {
         val ref = TypeRef.Inline(
             properties = listOf(PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
             requiredProperties = setOf("name"),
-            contextHint = "Pet.Address",
         )
         assertFailsWith<IllegalStateException> { map(ref) }
     }

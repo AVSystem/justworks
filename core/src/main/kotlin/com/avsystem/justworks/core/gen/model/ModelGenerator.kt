@@ -14,33 +14,28 @@ import com.avsystem.justworks.core.gen.JSON_OBJECT_EXT
 import com.avsystem.justworks.core.gen.K_SERIALIZER
 import com.avsystem.justworks.core.gen.LOCAL_DATE
 import com.avsystem.justworks.core.gen.NameRegistry
+import com.avsystem.justworks.core.gen.NestedType
 import com.avsystem.justworks.core.gen.OPT_IN
 import com.avsystem.justworks.core.gen.OutputOptions
 import com.avsystem.justworks.core.gen.PRIMITIVE_KIND
 import com.avsystem.justworks.core.gen.PRIMITIVE_SERIAL_DESCRIPTOR_FUN
+import com.avsystem.justworks.core.gen.ResolvedApiSpec
+import com.avsystem.justworks.core.gen.ResolvedSchema
 import com.avsystem.justworks.core.gen.SERIALIZABLE
 import com.avsystem.justworks.core.gen.SERIALIZATION_EXCEPTION
-import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.SERIAL_DESCRIPTOR
 import com.avsystem.justworks.core.gen.SERIAL_NAME
 import com.avsystem.justworks.core.gen.USE_SERIALIZERS
 import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
-import com.avsystem.justworks.core.gen.collectInlineEnums
-import com.avsystem.justworks.core.gen.collectInlineSchemas
-import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
 import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
-import com.avsystem.justworks.core.gen.resolveInlineTypes
 import com.avsystem.justworks.core.gen.resolveSerialName
-import com.avsystem.justworks.core.gen.resolveTypeRef
 import com.avsystem.justworks.core.gen.shared.SerializersModuleGenerator
-import com.avsystem.justworks.core.gen.stripDiscriminatorProperties
 import com.avsystem.justworks.core.gen.toCamelCase
 import com.avsystem.justworks.core.gen.toEnumConstantName
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
-import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
@@ -63,96 +58,107 @@ import com.squareup.kotlinpoet.WildcardTypeName
 import com.squareup.kotlinpoet.joinToCode
 import kotlinx.datetime.LocalDate
 import java.util.Base64
+import kotlin.collections.map
+import kotlin.collections.orEmpty
 import kotlin.time.Instant
 
 /**
- * Generates KotlinPoet [FileSpec] instances from an [ApiSpec].
+ * Generates KotlinPoet [FileSpec] instances from a [ResolvedApiSpec].
  *
  * Produces one file per [SchemaModel] (data class, sealed class hierarchy, or allOf composed class)
  * and one file per [EnumModel] (enum class), all annotated with kotlinx.serialization annotations.
  */
 internal object ModelGenerator {
-    data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ApiSpec)
+    data class GenerateResult(val files: List<FileSpec>, val resolvedSpec: ResolvedApiSpec)
 
     context(_: Hierarchy, _: OutputOptions, _: NameRegistry)
-    fun generate(spec: ApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
+    fun generate(spec: ResolvedApiSpec): List<FileSpec> = generateWithResolvedSpec(spec).files
 
-    context(hierarchy: Hierarchy, _: OutputOptions, nameRegistry: NameRegistry)
-    fun generateWithResolvedSpec(rawSpec: ApiSpec): GenerateResult {
-        val spec = rawSpec.stripDiscriminatorProperties()
-        ensureReserved(spec, nameRegistry)
-        val (inlineSchemas, nameMap) = collectInlineSchemas(spec)
-        val (inlineEnums, enumNameMap) = collectInlineEnums(spec)
-        val resolvedSpec = spec.resolveInlineTypes(nameMap, enumNameMap)
-
-        val resolvedInlineSchemas = inlineSchemas.map { schema ->
-            schema.copy(
-                properties = schema.properties.map { prop ->
-                    prop.copy(type = resolvedSpec.resolveTypeRef(prop.type, nameMap, enumNameMap))
-                },
-            )
-        }
-
-        hierarchy.addSchemas(resolvedSpec.schemas + resolvedInlineSchemas)
-
+    context(hierarchy: Hierarchy, _: OutputOptions, _: NameRegistry)
+    fun generateWithResolvedSpec(spec: ResolvedApiSpec): GenerateResult {
         val nestedVariantNames = hierarchy.sealedHierarchies
             .asSequence()
             .filterNot { (key, _) -> key in hierarchy.anyOfWithoutDiscriminator }
             .flatMap { (_, names) -> names }
             .toSet()
 
-        val schemaFiles = resolvedSpec.schemas
+        // Inline types to nest, keyed by owner schema name — variants need their owner's lookup too.
+        val inlineByName = spec.schemas.associate { it.schema.name to it.inlineTypes }
+
+        val schemaFiles = spec.schemas
             .asSequence()
-            .filterNot { it.name in nestedVariantNames }
-            .flatMap { generateSchemaFiles(it) }
+            .filterNot { it.schema.name in nestedVariantNames }
+            .flatMap { generateSchemaFiles(it, inlineByName) }
             .toList()
 
-        val inlineSchemaFiles = resolvedInlineSchemas.map { generateDataClass(it) }
-
-        val enumFiles = (resolvedSpec.enums + inlineEnums).map { generateEnumClass(it) }
+        val enumFiles = spec.enums.map { generateEnumClass(it) }
 
         val serializersModuleFile = SerializersModuleGenerator.generate()
 
-        val uuidSerializerFile = if (resolvedSpec.usesUuid()) generateUuidSerializer() else null
+        val uuidSerializerFile = if (spec.usesUuid()) generateUuidSerializer() else null
 
-        val files =
-            schemaFiles + inlineSchemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
+        val files = schemaFiles + enumFiles + listOfNotNull(serializersModuleFile, uuidSerializerFile)
 
-        return GenerateResult(files, resolvedSpec)
+        return GenerateResult(files, spec)
     }
 
     /**
-     * Ensures all top-level schema/enum names are reserved in [nameRegistry],
-     * preventing inline schemas from colliding with component types even if
-     * the caller supplied an empty registry.
+     * Builds the nested [TypeSpec] for a lifted inline type (data class or enum), recursing into
+     * children and registering each reference id with [hierarchy] so properties resolve to it.
      */
-    private fun ensureReserved(spec: ApiSpec, nameRegistry: NameRegistry) {
-        spec.schemas.forEach { nameRegistry.reserve(it.name) }
-        spec.enums.forEach { nameRegistry.reserve(it.name) }
-        nameRegistry.reserve(UUID_SERIALIZER.simpleName)
-        nameRegistry.reserve(SERIALIZERS_MODULE.simpleName)
+    context(hierarchy: Hierarchy, _: OutputOptions)
+    internal fun emitNestedInline(
+        parentClass: ClassName,
+        planned: NestedType,
+        siblingNames: NameRegistry,
+    ): TypeSpec {
+        val name = siblingNames.register(planned.simpleName)
+        val className = parentClass.nestedClass(name)
+        hierarchy.registerInlineRef(planned.id, className)
+
+        return when (planned) {
+            is NestedType.Obj -> {
+                val childNames = NameRegistry()
+                val childSpecs = planned.children.map { emitNestedInline(className, it, childNames) }
+
+                val builder = TypeSpec
+                    .classBuilder(name)
+                    .addModifiers(KModifier.DATA)
+                    .addAnnotation(SERIALIZABLE)
+                buildConstructorAndProperties(planned.schema, builder)
+                childSpecs.forEach { builder.addType(it) }
+                builder.build()
+            }
+
+            is NestedType.Enum -> {
+                buildEnumType(name, planned.model)
+            }
+        }
     }
 
     context(hierarchy: Hierarchy, _: OutputOptions)
-    private fun generateSchemaFiles(schema: SchemaModel): List<FileSpec> = when {
-        !schema.anyOf.isNullOrEmpty() || !schema.oneOf.isNullOrEmpty() -> {
-            if (schema.name in hierarchy.anyOfWithoutDiscriminator) {
+    private fun generateSchemaFiles(
+        resolved: ResolvedSchema,
+        inlineByName: Map<String, List<NestedType>>,
+    ): List<FileSpec> = when {
+        !resolved.schema.anyOf.isNullOrEmpty() || !resolved.schema.oneOf.isNullOrEmpty() -> {
+            if (resolved.schema.name in hierarchy.anyOfWithoutDiscriminator) {
                 listOf(
-                    generateSealedInterface(schema),
-                    generatePolymorphicSerializer(schema),
+                    generateSealedInterface(resolved.schema),
+                    generatePolymorphicSerializer(resolved.schema),
                 )
             } else {
-                listOf(generateSealedHierarchy(schema))
+                listOf(generateSealedHierarchy(resolved.schema, inlineByName))
             }
         }
 
-        schema.isPrimitiveOnly -> {
-            val targetType = schema.underlyingType?.toTypeName() ?: STRING
-            listOf(generateTypeAlias(schema, targetType))
+        resolved.schema.isPrimitiveOnly -> {
+            val targetType = resolved.schema.underlyingType?.toTypeName() ?: STRING
+            listOf(generateTypeAlias(resolved.schema, targetType))
         }
 
         else -> {
-            listOf(generateDataClass(schema))
+            listOf(generateDataClass(resolved.schema, resolved.inlineTypes))
         }
     }
 
@@ -160,8 +166,8 @@ internal object ModelGenerator {
      * Generates a sealed interface with nested subtypes for oneOf or anyOf-with-discriminator schemas.
      */
     context(hierarchy: Hierarchy, options: OutputOptions)
-    private fun generateSealedHierarchy(schema: SchemaModel): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, schema.name)
+    private fun generateSealedHierarchy(schema: SchemaModel, inlineByName: Map<String, List<NestedType>>): FileSpec {
+        val className = hierarchy.classNameFor(schema.name)
 
         val parentBuilder = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
         parentBuilder.addAnnotation(SERIALIZABLE)
@@ -187,6 +193,7 @@ internal object ModelGenerator {
                 variantName = variantName,
                 parentClassName = className,
                 serialName = schema.resolveSerialName(variantName),
+                inlineTypes = inlineByName[variantName].orEmpty(),
             )
             parentBuilder.addType(nestedType)
         }
@@ -215,6 +222,7 @@ internal object ModelGenerator {
         variantName: String,
         parentClassName: ClassName,
         serialName: String,
+        inlineTypes: List<NestedType>,
     ): TypeSpec {
         val variantClassName = parentClassName.nestedClass(variantName.toPascalCase())
 
@@ -228,9 +236,14 @@ internal object ModelGenerator {
         builder.addAnnotation(SERIALIZABLE)
         builder.addAnnotation(AnnotationSpec.builder(SERIAL_NAME).addMember("%S", serialName).build())
 
+        // Nest the variant's own inline types, registering their ids before resolving properties.
+        val nestedNames = NameRegistry()
+        val nestedSpecs = inlineTypes.map { emitNestedInline(variantClassName, it, nestedNames) }
+
         if (!variantSchema?.properties.isNullOrEmpty()) {
             buildConstructorAndProperties(variantSchema, builder)
         }
+        nestedSpecs.forEach { builder.addType(it) }
 
         return builder.build()
     }
@@ -283,11 +296,11 @@ internal object ModelGenerator {
      */
     context(hierarchy: Hierarchy, options: OutputOptions)
     private fun generateSealedInterface(schema: SchemaModel): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, schema.name)
+        val className = hierarchy.classNameFor(schema.name)
 
         val typeSpec = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
 
-        val serializerClassName = ClassName(hierarchy.modelPackage, "${schema.name}Serializer")
+        val serializerClassName = hierarchy.classNameFor("${schema.name}Serializer")
         typeSpec.addAnnotation(
             AnnotationSpec
                 .builder(SERIALIZABLE)
@@ -307,8 +320,8 @@ internal object ModelGenerator {
      */
     context(hierarchy: Hierarchy, _: OutputOptions)
     private fun generatePolymorphicSerializer(schema: SchemaModel): FileSpec {
-        val sealedClassName = ClassName(hierarchy.modelPackage, schema.name)
-        val serializerClassName = ClassName(hierarchy.modelPackage, "${schema.name}Serializer")
+        val sealedClassName = hierarchy.classNameFor(schema.name)
+        val serializerClassName = hierarchy.classNameFor("${schema.name}Serializer")
 
         val variantProperties = schema.anyOf
             .orEmpty()
@@ -408,12 +421,12 @@ internal object ModelGenerator {
      * Used for: standalone schemas, allOf composed classes, and anyOf-without-discriminator variants.
      */
     context(hierarchy: Hierarchy, _: OutputOptions)
-    private fun generateDataClass(schema: SchemaModel): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, schema.name)
+    private fun generateDataClass(schema: SchemaModel, inlineTypes: List<NestedType>): FileSpec {
+        val className = hierarchy.classNameFor(schema.name)
 
         // For anyOf-without-discriminator variants: find parent interfaces and serialName
         val parentNames = hierarchy.anyOfParents[schema.name].orEmpty()
-        val superinterfaces = parentNames.map { ClassName(hierarchy.modelPackage, it) }
+        val superinterfaces = parentNames.map { hierarchy.classNameFor(it) }
         val serialName = parentNames.firstOrNull()?.let { parentName ->
             hierarchy.schemasById[parentName]?.resolveSerialName(schema.name)
         }
@@ -433,7 +446,13 @@ internal object ModelGenerator {
             )
         }
 
+        // Nest this schema's inline property types, registering their ids before resolving
+        // properties so references to them resolve to the nested classes.
+        val nestedNames = NameRegistry()
+        val nestedSpecs = inlineTypes.map { emitNestedInline(className, it, nestedNames) }
+
         buildConstructorAndProperties(schema, typeSpec)
+        nestedSpecs.forEach { typeSpec.addType(it) }
 
         val fileBuilder = FileSpec.builder(className).addType(typeSpec.build())
 
@@ -543,7 +562,7 @@ internal object ModelGenerator {
 
         is TypeRef.Reference -> {
             val constantName = value.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, type.schemaName), constantName)
+            CodeBlock.of("%T.%L", hierarchy.classNameFor(type.schemaName), constantName)
         }
 
         is TypeRef.Array -> {
@@ -563,9 +582,17 @@ internal object ModelGenerator {
 
     context(hierarchy: Hierarchy, options: OutputOptions)
     private fun generateEnumClass(enum: EnumModel): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, enum.name)
+        val className = hierarchy.classNameFor(enum.name)
+        return FileSpec
+            .builder(className)
+            .addType(buildEnumType(className.simpleName, enum))
+            .build()
+    }
 
-        val typeSpec = TypeSpec.enumBuilder(className).addAnnotation(SERIALIZABLE)
+    /** Builds an `@Serializable enum class` [TypeSpec] with the given simple [name]. */
+    context(options: OutputOptions)
+    private fun buildEnumType(name: String, enum: EnumModel): TypeSpec {
+        val typeSpec = TypeSpec.enumBuilder(name).addAnnotation(SERIALIZABLE)
 
         val enumRegistry = NameRegistry()
         enum.values.forEach { value ->
@@ -585,10 +612,7 @@ internal object ModelGenerator {
             typeSpec.addKdoc("%L", enum.description)
         }
 
-        return FileSpec
-            .builder(className)
-            .addType(typeSpec.build())
-            .build()
+        return typeSpec.build()
     }
 
     private val SchemaModel.isPrimitiveOnly: Boolean
@@ -602,9 +626,10 @@ internal object ModelGenerator {
         is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> false
     }
 
-    private fun ApiSpec.usesUuid(): Boolean {
-        val schemaRefs = schemas.asSequence().flatMap { schema -> schema.properties.map { it.type } }
-        val endpointRefs = endpoints.asSequence().flatMap { endpoint ->
+    private fun ResolvedApiSpec.usesUuid(): Boolean {
+        val schemaRefs = schemas.asSequence().flatMap { schema -> schema.schema.properties.map { it.type } }
+        val endpointRefs = endpoints.asSequence().flatMap { resolved ->
+            val endpoint = resolved.endpoint
             val responseRefs = endpoint.responses.values
                 .asSequence()
                 .mapNotNull { it.schema }
@@ -661,9 +686,9 @@ internal object ModelGenerator {
 
     context(hierarchy: Hierarchy, options: OutputOptions)
     private fun generateTypeAlias(schema: SchemaModel, primitiveType: TypeName): FileSpec {
-        val className = ClassName(hierarchy.modelPackage, schema.name)
+        val className = hierarchy.classNameFor(schema.name)
 
-        val typeAlias = TypeAliasSpec.builder(schema.name, primitiveType)
+        val typeAlias = TypeAliasSpec.builder(schema.name.toPascalCase(), primitiveType)
 
         if (options.generateKdoc && schema.description != null) {
             typeAlias.addKdoc("%L", schema.description)

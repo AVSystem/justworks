@@ -66,11 +66,11 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
     }
 
     is TypeRef.Inline -> {
-        error("TypeRef.Inline should have been resolved by InlineTypeResolver (contextHint=$contextHint)")
+        error("TypeRef.Inline should have been lifted and rewritten to a reference by ApiSpec.transform")
     }
 
     is TypeRef.InlineEnum -> {
-        error("TypeRef.InlineEnum should have been resolved by InlineTypeResolver (contextHint=$contextHint)")
+        error("TypeRef.InlineEnum should have been lifted and rewritten to a reference by ApiSpec.transform")
     }
 
     is TypeRef.Unknown -> {

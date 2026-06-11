@@ -33,15 +33,15 @@ class ClientGeneratorTest {
         spec: ApiSpec,
         hasPolymorphicTypes: Boolean = false,
         options: OutputOptions = OutputOptions(),
-    ): List<FileSpec> = context(
-        Hierarchy(ModelPackage(modelPackage)).apply {
-            addSchemas(spec.schemas)
-        },
-        options,
-        ApiPackage(apiPackage),
-        NameRegistry(),
-    ) {
-        ClientGenerator.generate(spec, hasPolymorphicTypes)
+    ): List<FileSpec> = spec.resolveInlines().let { resolved ->
+        context(
+            Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(resolved.schemas.map { it.schema }) },
+            options,
+            ApiPackage(apiPackage),
+            NameRegistry(),
+        ) {
+            ClientGenerator.generate(resolved, hasPolymorphicTypes)
+        }
     }
 
     private fun spec(vararg endpoints: Endpoint) = spec(endpoints.toList())
@@ -582,7 +582,6 @@ class ClientGeneratorTest {
                         PropertyModel("description", TypeRef.Primitive(PrimitiveType.STRING), null, false),
                     ),
                     requiredProperties = setOf("file", "description"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -606,7 +605,6 @@ class ClientGeneratorTest {
                         PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
                     ),
                     requiredProperties = setOf("file"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -632,7 +630,6 @@ class ClientGeneratorTest {
                         PropertyModel("description", TypeRef.Primitive(PrimitiveType.STRING), null, false),
                     ),
                     requiredProperties = setOf("file", "description"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -655,7 +652,6 @@ class ClientGeneratorTest {
                         PropertyModel("file", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), null, false),
                     ),
                     requiredProperties = setOf("file"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -732,7 +728,6 @@ class ClientGeneratorTest {
                         PropertyModel("age", TypeRef.Primitive(PrimitiveType.INT), null, false),
                     ),
                     requiredProperties = setOf("username", "age"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -761,7 +756,6 @@ class ClientGeneratorTest {
                         PropertyModel("age", TypeRef.Primitive(PrimitiveType.INT), null, false),
                     ),
                     requiredProperties = setOf("username", "age"),
-                    contextHint = "request",
                 ),
             ),
         )
@@ -786,7 +780,6 @@ class ClientGeneratorTest {
                         PropertyModel("nickname", TypeRef.Primitive(PrimitiveType.STRING), null, false),
                     ),
                     requiredProperties = setOf("username"),
-                    contextHint = "request",
                 ),
             ),
         )

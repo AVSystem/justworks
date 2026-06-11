@@ -11,6 +11,17 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
     private val memoScope = MemoScope()
 
     /**
+     * Resolution overrides for inline body types nested inside client/model classes,
+     * keyed by the reference id assigned by [resolved].
+     */
+    private val inlineRefs = mutableMapOf<String, ClassName>()
+
+    /** Registers the nested [ClassName] an inline reference id resolves to. */
+    fun registerInlineRef(id: String, className: ClassName) {
+        inlineRefs[id] = className
+    }
+
+    /**
      * Updates the underlying schemas and invalidates all cached derived views.
      * This is necessary when schemas are updated (e.g., after inlining types).
      */
@@ -60,20 +71,23 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
             .mapValues { (_, parents) -> parents.toSet() }
     }
 
+    /** Top-level [ClassName] for a component schema/enum name, normalized to a PascalCase identifier. */
+    fun classNameFor(schemaName: String): ClassName = ClassName(modelPackage, schemaName.toPascalCase())
+
     /** Maps schema name to its [ClassName], using nested class for discriminated hierarchy variants. */
     private val lookup: Map<String, ClassName> by memoized(memoScope) {
         sealedHierarchies
             .asSequence()
             .filterNot { (parent, _) -> parent in anyOfWithoutDiscriminator }
             .flatMap { (parent, variants) ->
-                val parentClass = ClassName(modelPackage, parent)
+                val parentClass = classNameFor(parent)
                 variants.map { variant -> variant to parentClass.nestedClass(variant.toPascalCase()) } +
                     (parent to parentClass)
             }.toMap()
     }
 
-    /** Resolves a schema name to its [ClassName], falling back to a flat top-level class. */
-    operator fun get(name: String): ClassName = lookup[name] ?: ClassName(modelPackage, name)
+    /** Resolves a schema name (or inline-ref id) to its [ClassName], falling back to a flat top-level class. */
+    operator fun get(name: String): ClassName = inlineRefs[name] ?: lookup[name] ?: classNameFor(name)
 }
 
 private fun SchemaModel.variants() = oneOf ?: anyOf

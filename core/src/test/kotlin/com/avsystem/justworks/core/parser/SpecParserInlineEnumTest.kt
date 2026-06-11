@@ -29,7 +29,7 @@ class SpecParserInlineEnumTest : SpecParserTestBase() {
     }
 
     @Test
-    fun `inline enum as a map value carries a context-derived hint`() {
+    fun `inline enum as a map value is parsed as InlineEnum`() {
         val spec = parseSpec(loadResource("inline-enum-spec.yaml"))
 
         val schema = assertNotNull(
@@ -48,10 +48,10 @@ class SpecParserInlineEnumTest : SpecParserTestBase() {
 
         val flags = mapValueEnum("flagsByRegion")
         assertEquals(listOf("ENABLED", "DISABLED"), flags.values)
-        assertEquals("SpeedTestResult.FlagsByRegionValue", flags.contextHint)
+        assertEquals(EnumBackingType.STRING, flags.backingType)
 
         val tiers = mapValueEnum("tiersByUser")
         assertEquals(listOf("FREE", "PRO"), tiers.values)
-        assertEquals("SpeedTestResult.TiersByUserValue", tiers.contextHint)
+        assertEquals(EnumBackingType.STRING, tiers.backingType)
     }
 }

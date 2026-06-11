@@ -1,7 +1,6 @@
 package com.avsystem.justworks.core.gen
 
 import com.avsystem.justworks.core.gen.model.ModelGenerator
-import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
 import com.avsystem.justworks.core.model.EnumBackingType
@@ -21,14 +20,14 @@ import kotlin.test.assertTrue
 class ModelGeneratorPolymorphicTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = context(
-        Hierarchy(ModelPackage(modelPackage)).apply {
-            addSchemas(spec.schemas)
-        },
-        OutputOptions(),
-        NameRegistry(),
-    ) {
-        ModelGenerator.generate(spec)
+    private fun generate(spec: ApiSpec) = spec.resolveInlines().let { resolved ->
+        context(
+            Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(resolved.schemas.map { it.schema }) },
+            OutputOptions(),
+            NameRegistry(),
+        ) {
+            ModelGenerator.generate(resolved)
+        }
     }
 
     private fun spec(schemas: List<SchemaModel> = emptyList(), enums: List<EnumModel> = emptyList()) = ApiSpec(
@@ -971,13 +970,13 @@ class ModelGeneratorPolymorphicTest {
                     listOf(
                         PropertyModel(
                             "type",
-                            TypeRef.InlineEnum(listOf("Cat"), EnumBackingType.STRING, "Cat.Type"),
+                            TypeRef.InlineEnum(listOf("Cat"), EnumBackingType.STRING),
                             null,
                             false,
                         ),
                         PropertyModel(
                             "sound",
-                            TypeRef.InlineEnum(listOf("MEOW", "PURR"), EnumBackingType.STRING, "Cat.Sound"),
+                            TypeRef.InlineEnum(listOf("MEOW", "PURR"), EnumBackingType.STRING),
                             null,
                             false,
                         ),
@@ -985,11 +984,12 @@ class ModelGeneratorPolymorphicTest {
             )
 
         val files = generate(spec(schemas = listOf(animal, cat)))
-        val enumNames = files
-            .flatMap { it.members }
-            .filterIsInstance<TypeSpec>()
-            .filter { it.kind == TypeSpec.Kind.CLASS && KModifier.ENUM in it.modifiers }
-            .mapNotNull { it.name }
+
+        fun enumsIn(types: List<TypeSpec>): List<String> = types.flatMap { type ->
+            val self = if (KModifier.ENUM in type.modifiers) listOfNotNull(type.name) else emptyList()
+            self + enumsIn(type.typeSpecs)
+        }
+        val enumNames = enumsIn(files.flatMap { it.members }.filterIsInstance<TypeSpec>())
 
         // The single-value `type` discriminator enum must NOT be generated...
         assertTrue(
