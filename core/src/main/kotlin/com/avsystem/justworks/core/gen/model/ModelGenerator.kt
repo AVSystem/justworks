@@ -549,10 +549,11 @@ internal object ModelGenerator {
         is TypeRef.Array -> {
             val elements = (value as? List<*>).orEmpty()
             if (elements.isEmpty()) {
-                CodeBlock.of("emptyList()")
+                CodeBlock.of(if (type.unique) "emptySet()" else "emptyList()")
             } else {
                 val items = elements.map { formatDefaultValue(type.items, it, propName) }
-                CodeBlock.of("listOf(%L)", items.joinToCode(separator = ", "))
+                val factory = if (type.unique) "setOf" else "listOf"
+                CodeBlock.of("$factory(%L)", items.joinToCode(separator = ", "))
             }
         }
 

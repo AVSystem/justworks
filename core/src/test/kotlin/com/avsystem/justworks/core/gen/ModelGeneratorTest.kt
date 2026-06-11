@@ -698,6 +698,64 @@ class ModelGeneratorTest {
     }
 
     @Test
+    fun `unique array property with default emits setOf with element literals`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "tags",
+                            TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING), unique = true),
+                            null,
+                            false,
+                            listOf("X", "Y"),
+                        ),
+                    ),
+                requiredProperties = setOf("tags"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "tags" }
+        assertEquals("setOf(\"X\", \"Y\")", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `unique array property with empty default emits emptySet`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "tags",
+                            TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING), unique = true),
+                            null,
+                            false,
+                            emptyList<String>(),
+                        ),
+                    ),
+                requiredProperties = setOf("tags"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "tags" }
+        assertEquals("emptySet()", param.defaultValue.toString())
+    }
+
+    @Test
     fun `long default generates default parameter with literal`() {
         val schema =
             SchemaModel(
