@@ -542,8 +542,37 @@ internal object ModelGenerator {
         }
 
         is TypeRef.Reference -> {
-            val constantName = value.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, type.schemaName), constantName)
+            val className = hierarchy[type.schemaName]
+            when (value) {
+                is Map<*, *> -> {
+                    val schema = hierarchy.schemasById[type.schemaName]
+                        ?: throw IllegalArgumentException(
+                            "Cannot build object default for property $propName: unknown schema '${type.schemaName}'",
+                        )
+
+                    val args = schema.properties
+                        .asSequence()
+                        .filter { it.name in value }
+                        .map { prop ->
+                            val valueCode = when (val rawValue = value[prop.name]) {
+                                null -> CodeBlock.of("null")
+                                else -> formatDefaultValue(prop.type, rawValue, prop.name)
+                            }
+                            CodeBlock.of("%N = %L", prop.name.toCamelCase(), valueCode)
+                        }.toList()
+                    CodeBlock.of("%T(%L)", className, args.joinToCode(separator = ", "))
+                }
+
+                is String -> {
+                    CodeBlock.of("%T.%L", className, value.toEnumConstantName())
+                }
+
+                else -> {
+                    error(
+                        "${value?.javaClass?.name} is not a valid default value for reference type $type (property $propName)",
+                    )
+                }
+            }
         }
 
         is TypeRef.Array -> {

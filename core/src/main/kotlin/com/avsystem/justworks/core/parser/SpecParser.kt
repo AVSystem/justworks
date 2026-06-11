@@ -17,7 +17,6 @@ import com.avsystem.justworks.core.accumulate
 import com.avsystem.justworks.core.accumulateAndReturnNull
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.ensureOrAccumulate
-import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.ContentType
@@ -38,6 +37,14 @@ import com.avsystem.justworks.core.model.TypeRef
 import com.avsystem.justworks.core.toEnumOrNull
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ArrayNode
+import com.fasterxml.jackson.databind.node.BinaryNode
+import com.fasterxml.jackson.databind.node.BooleanNode
+import com.fasterxml.jackson.databind.node.MissingNode
+import com.fasterxml.jackson.databind.node.NullNode
+import com.fasterxml.jackson.databind.node.NumericNode
+import com.fasterxml.jackson.databind.node.ObjectNode
+import com.fasterxml.jackson.databind.node.POJONode
+import com.fasterxml.jackson.databind.node.TextNode
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
@@ -47,7 +54,6 @@ import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
 import java.util.IdentityHashMap
-import kotlin.collections.emptyMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 import io.swagger.v3.oas.models.security.SecurityScheme as SwaggerSecurityScheme
 
@@ -526,27 +532,19 @@ object SpecParser {
 
     /**
      * Normalizes a raw Swagger default into a plain Kotlin value the model layer can format
-     * without depending on Jackson. Array defaults arrive as a Jackson [ArrayNode]; unwrap them
-     * into a `List` of plain scalar values. Scalar defaults are already plain and pass through.
+     * without depending on Jackson. Jackson [JsonNode] defaults are unwrapped recursively into
+     * plain `List`/`Map`/scalar values; already-plain defaults pass through unchanged.
      */
     private fun normalizeDefault(default: Any?): Any? = when (default) {
         is ArrayNode -> default.map { normalizeDefault(it) }
-
-        is JsonNode -> when {
-            default.isShort -> default.shortValue()
-            default.isInt -> default.intValue()
-            default.isLong -> default.longValue()
-            default.isFloat -> default.floatValue()
-            default.isDouble -> default.doubleValue()
-            default.isBigDecimal -> default.decimalValue()
-            default.isBigInteger -> default.bigIntegerValue()
-            default.isNumber -> default.numberValue()
-            default.isBoolean -> default.booleanValue()
-            default.isNull -> null
-            default.isBinary -> default.binaryValue()
-            else -> default.asText()
-        }
-
+        is ObjectNode -> default.properties().associate { (k, v) -> k to normalizeDefault(v) }
+        is NullNode, is MissingNode -> null
+        is BooleanNode -> default.booleanValue()
+        is BinaryNode -> default.binaryValue()
+        is NumericNode -> default.numberValue()
+        is TextNode -> default.textValue()
+        is POJONode -> normalizeDefault(default.pojo)
+        is JsonNode -> default.asText()
         else -> default
     }
 
