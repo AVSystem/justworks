@@ -564,7 +564,7 @@ internal object ModelGenerator {
                 }
 
                 is String -> {
-                    CodeBlock.of("%T.%L", className, value.toEnumConstantName())
+                    CodeBlock.of("%T.%N", className, value.toEnumConstantName())
                 }
 
                 else -> {

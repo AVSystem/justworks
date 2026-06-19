@@ -641,6 +641,40 @@ class ModelGeneratorTest {
     }
 
     @Test
+    fun `enum default with numeric string value uses backtick-escaped constant reference`() {
+        val floorEnum =
+            EnumModel(
+                name = "Floor",
+                description = null,
+                type = EnumBackingType.STRING,
+                values = listOf(EnumModel.Value("1"), EnumModel.Value("2"), EnumModel.Value("3")),
+            )
+        val schema =
+            SchemaModel(
+                name = "Request",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("floor", TypeRef.Reference("Floor"), null, false, "1"),
+                    ),
+                requiredProperties = setOf("floor"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema), enums = listOf(floorEnum)))
+        val typeSpec = files.first { it.name == "Request" }.members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "floor" }
+        val defaultStr = param.defaultValue.toString()
+        assertTrue(
+            defaultStr.contains("`1`"),
+            "Expected backtick-escaped `1`, got: $defaultStr",
+        )
+    }
+
+    @Test
     fun `array property with default emits listOf with element literals`() {
         val schema =
             SchemaModel(
