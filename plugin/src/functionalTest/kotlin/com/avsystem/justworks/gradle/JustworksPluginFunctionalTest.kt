@@ -204,6 +204,28 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
+    fun `generateInterfaces produces an interface implemented by the client`() {
+        writeBuildFile("generateInterfaces = true")
+
+        runner("compileKotlin").build()
+
+        val apiDir = projectDir.resolve("build/generated/justworks/main/com/example/api")
+        val interfaceFile = apiDir.resolve("PetsApi.kt")
+        val implFile = apiDir.resolve("PetsApiImpl.kt")
+        assertTrue(
+            interfaceFile.exists(),
+            "Expected PetsApi.kt interface; files: ${apiDir.listFiles()?.map { it.name }}",
+        )
+        assertTrue(implFile.exists(), "Expected PetsApiImpl.kt; files: ${apiDir.listFiles()?.map { it.name }}")
+        assertTrue(interfaceFile.readText().contains("interface PetsApi"), "Expected interface PetsApi")
+        assertTrue(implFile.readText().contains("class PetsApiImpl"), "Expected class PetsApiImpl")
+        assertTrue(
+            implFile.readText().contains(": PetsApi") || implFile.readText().contains("PetsApi"),
+            "Impl implements PetsApi",
+        )
+    }
+
+    @Test
     fun `generateKdoc true by default emits KDoc in generated code`() {
         writeBuildFile()
 
