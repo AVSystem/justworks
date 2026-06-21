@@ -382,6 +382,72 @@ class ClientGeneratorTest {
         assertTrue(body.contains("append(\"X-Request-Id\""), "Expected header append inside headers block")
     }
 
+    // -- CLNT-09b: Cookie parameters --
+
+    @Test
+    fun `cookie parameters become function parameters`() {
+        val ep = endpoint(
+            operationId = "listPets",
+            parameters =
+                listOf(
+                    Parameter(
+                        "session",
+                        ParameterLocation.COOKIE,
+                        true,
+                        TypeRef.Primitive(PrimitiveType.STRING),
+                        null,
+                    ),
+                ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val param = funSpec.parameters.first { it.name == "session" }
+        assertEquals("kotlin.String", param.type.toString())
+    }
+
+    @Test
+    fun `required cookie parameters are emitted via cookie call`() {
+        val ep = endpoint(
+            operationId = "listPets",
+            parameters =
+                listOf(
+                    Parameter(
+                        "session",
+                        ParameterLocation.COOKIE,
+                        true,
+                        TypeRef.Primitive(PrimitiveType.STRING),
+                        null,
+                    ),
+                ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("cookie(\"session\""), "Expected cookie call in generated body")
+    }
+
+    @Test
+    fun `optional cookie parameters are null-guarded`() {
+        val ep = endpoint(
+            operationId = "listPets",
+            parameters =
+                listOf(
+                    Parameter(
+                        "session",
+                        ParameterLocation.COOKIE,
+                        false,
+                        TypeRef.Primitive(PrimitiveType.STRING),
+                        null,
+                    ),
+                ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listPets" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("if (session != null)"), "Expected null guard for optional cookie")
+        assertTrue(body.contains("cookie(\"session\""), "Expected cookie call in generated body")
+    }
+
     // -- CLNT-10: Client constructor has baseUrl parameter --
 
     @Test
