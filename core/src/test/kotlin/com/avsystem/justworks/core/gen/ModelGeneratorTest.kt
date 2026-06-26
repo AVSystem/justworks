@@ -13,6 +13,7 @@ import com.avsystem.justworks.core.model.PropertyModel
 import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.TypeRef
 import com.squareup.kotlinpoet.KModifier
+import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.TypeSpec
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -24,10 +25,11 @@ import kotlin.test.assertTrue
 class ModelGeneratorTest {
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec) = context(
+    private fun generate(spec: ApiSpec, generateKdoc: Boolean = true) = context(
         Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(spec.schemas)
         },
+        OutputOptions(generateKdoc = generateKdoc),
         NameRegistry(),
     ) {
         ModelGenerator.generate(spec)
@@ -145,6 +147,13 @@ class ModelGeneratorTest {
         val files = generate(spec(schemas = listOf(petSchema)))
         val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
         assertTrue(typeSpec.kdoc.toString().contains("A pet in the store"), "Expected KDoc from description")
+    }
+
+    @Test
+    fun `generateKdoc false suppresses schema KDoc`() {
+        val files = generate(spec(schemas = listOf(petSchema)), generateKdoc = false)
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        assertTrue(typeSpec.kdoc.toString().isEmpty(), "Expected no KDoc when generateKdoc=false")
     }
 
     @Test
@@ -632,6 +641,40 @@ class ModelGeneratorTest {
     }
 
     @Test
+    fun `enum default with numeric string value uses backtick-escaped constant reference`() {
+        val floorEnum =
+            EnumModel(
+                name = "Floor",
+                description = null,
+                type = EnumBackingType.STRING,
+                values = listOf(EnumModel.Value("1"), EnumModel.Value("2"), EnumModel.Value("3")),
+            )
+        val schema =
+            SchemaModel(
+                name = "Request",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("floor", TypeRef.Reference("Floor"), null, false, "1"),
+                    ),
+                requiredProperties = setOf("floor"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema), enums = listOf(floorEnum)))
+        val typeSpec = files.first { it.name == "Request" }.members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "floor" }
+        val defaultStr = param.defaultValue.toString()
+        assertTrue(
+            defaultStr.contains("`1`"),
+            "Expected backtick-escaped `1`, got: $defaultStr",
+        )
+    }
+
+    @Test
     fun `array property with default emits listOf with element literals`() {
         val schema =
             SchemaModel(
@@ -687,6 +730,608 @@ class ModelGeneratorTest {
         val constructor = assertNotNull(typeSpec.primaryConstructor)
         val param = constructor.parameters.first { it.name == "tags" }
         assertEquals("emptyList()", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `unique array property with default emits setOf with element literals`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "tags",
+                            TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING), unique = true),
+                            null,
+                            false,
+                            listOf("X", "Y"),
+                        ),
+                    ),
+                requiredProperties = setOf("tags"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "tags" }
+        assertEquals("setOf(\"X\", \"Y\")", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `unique array property with empty default emits emptySet`() {
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "tags",
+                            TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING), unique = true),
+                            null,
+                            false,
+                            emptyList<String>(),
+                        ),
+                    ),
+                requiredProperties = setOf("tags"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema)))
+        val typeSpec = files[0].members.filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "tags" }
+        assertEquals("emptySet()", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `reference property with object default constructs referenced class with named args`() {
+        val taskConfig =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("taskName", TypeRef.Primitive(PrimitiveType.STRING), null, true),
+                        PropertyModel(
+                            "parameters",
+                            TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING)),
+                            null,
+                            false,
+                        ),
+                        PropertyModel("isActive", TypeRef.Primitive(PrimitiveType.BOOLEAN), null, true),
+                    ),
+                requiredProperties = emptySet(),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val invocation =
+            SchemaModel(
+                name = "TaskTemplateInvocation",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "config",
+                            TypeRef.Reference("TaskConfig"),
+                            null,
+                            false,
+                            mapOf("taskName" to null, "parameters" to emptyList<String>(), "isActive" to null),
+                        ),
+                    ),
+                requiredProperties = setOf("config"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(taskConfig, invocation)))
+        val typeSpec =
+            files
+                .first { it.name == "TaskTemplateInvocation" }
+                .members
+                .filterIsInstance<TypeSpec>()[0]
+        val constructor = assertNotNull(typeSpec.primaryConstructor)
+        val param = constructor.parameters.first { it.name == "config" }
+        assertEquals(
+            "com.example.model.TaskConfig(taskName = null, parameters = emptyList(), isActive = null)",
+            param.defaultValue.toString(),
+        )
+    }
+
+    @Test
+    fun `object default formats overridden scalar values with correct literals`() {
+        val taskConfig =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("taskName", TypeRef.Primitive(PrimitiveType.STRING), null, true),
+                        PropertyModel("isActive", TypeRef.Primitive(PrimitiveType.BOOLEAN), null, true),
+                        PropertyModel("retries", TypeRef.Primitive(PrimitiveType.INT), null, true),
+                    ),
+                requiredProperties = emptySet(),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val invocation =
+            SchemaModel(
+                name = "TaskTemplateInvocation",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "config",
+                            TypeRef.Reference("TaskConfig"),
+                            null,
+                            false,
+                            mapOf("taskName" to "build", "isActive" to true, "retries" to 5),
+                        ),
+                    ),
+                requiredProperties = setOf("config"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(taskConfig, invocation)))
+        val param = files
+            .first { it.name == "TaskTemplateInvocation" }
+            .members
+            .filterIsInstance<TypeSpec>()[0]
+            .primaryConstructor!!
+            .parameters
+            .first { it.name == "config" }
+        assertEquals(
+            "com.example.model.TaskConfig(taskName = \"build\", isActive = true, retries = 5)",
+            param.defaultValue.toString(),
+        )
+    }
+
+    @Test
+    fun `object default with unique array property emits setOf`() {
+        val taskConfig =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "labels",
+                            TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING), unique = true),
+                            null,
+                            false,
+                        ),
+                    ),
+                requiredProperties = setOf("labels"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val invocation =
+            SchemaModel(
+                name = "TaskTemplateInvocation",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "config",
+                            TypeRef.Reference("TaskConfig"),
+                            null,
+                            false,
+                            mapOf("labels" to listOf("a", "b")),
+                        ),
+                    ),
+                requiredProperties = setOf("config"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(taskConfig, invocation)))
+        val param = files
+            .first { it.name == "TaskTemplateInvocation" }
+            .members
+            .filterIsInstance<TypeSpec>()[0]
+            .primaryConstructor!!
+            .parameters
+            .first { it.name == "config" }
+        assertEquals(
+            "com.example.model.TaskConfig(labels = setOf(\"a\", \"b\"))",
+            param.defaultValue.toString(),
+        )
+    }
+
+    @Test
+    fun `object default skips keys that are not properties of the referenced schema`() {
+        val taskConfig =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("taskName", TypeRef.Primitive(PrimitiveType.STRING), null, true),
+                    ),
+                requiredProperties = emptySet(),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val invocation =
+            SchemaModel(
+                name = "TaskTemplateInvocation",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "config",
+                            TypeRef.Reference("TaskConfig"),
+                            null,
+                            false,
+                            mapOf("taskName" to "x", "unknownKey" to "ignored"),
+                        ),
+                    ),
+                requiredProperties = setOf("config"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(taskConfig, invocation)))
+        val param = files
+            .first { it.name == "TaskTemplateInvocation" }
+            .members
+            .filterIsInstance<TypeSpec>()[0]
+            .primaryConstructor!!
+            .parameters
+            .first { it.name == "config" }
+        assertEquals("com.example.model.TaskConfig(taskName = \"x\")", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `nested object reference default constructs nested class`() {
+        val inner =
+            SchemaModel(
+                name = "Inner",
+                description = null,
+                properties =
+                    listOf(PropertyModel("content", TypeRef.Primitive(PrimitiveType.STRING), null, true)),
+                requiredProperties = emptySet(),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val outer =
+            SchemaModel(
+                name = "Outer",
+                description = null,
+                properties =
+                    listOf(PropertyModel("child", TypeRef.Reference("Inner"), null, true)),
+                requiredProperties = emptySet(),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val holder =
+            SchemaModel(
+                name = "Holder",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "outer",
+                            TypeRef.Reference("Outer"),
+                            null,
+                            false,
+                            mapOf("child" to mapOf("content" to "deep")),
+                        ),
+                    ),
+                requiredProperties = setOf("outer"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(inner, outer, holder)))
+        val param = files
+            .first { it.name == "Holder" }
+            .members
+            .filterIsInstance<TypeSpec>()[0]
+            .primaryConstructor!!
+            .parameters
+            .first { it.name == "outer" }
+        assertEquals(
+            "com.example.model.Outer(child = com.example.model.Inner(content = \"deep\"))",
+            param.defaultValue.toString(),
+        )
+    }
+
+    @Test
+    fun `scalar reference default emits enum constant`() {
+        val statusEnum =
+            EnumModel(
+                name = "Status",
+                description = null,
+                type = EnumBackingType.STRING,
+                values = listOf(EnumModel.Value("active"), EnumModel.Value("closed")),
+            )
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel("status", TypeRef.Reference("Status"), null, false, "active"),
+                    ),
+                requiredProperties = setOf("status"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val files = generate(spec(schemas = listOf(schema), enums = listOf(statusEnum)))
+        val param = files
+            .first { it.name == "Config" }
+            .members
+            .filterIsInstance<TypeSpec>()[0]
+            .primaryConstructor!!
+            .parameters
+            .first { it.name == "status" }
+        assertEquals("com.example.model.Status.ACTIVE", param.defaultValue.toString())
+    }
+
+    /** Convenience: build a single-schema spec, generate, and return the named constructor parameter. */
+    private fun defaultParamOf(
+        schemas: List<SchemaModel>,
+        enums: List<EnumModel> = emptyList(),
+        className: String,
+        paramName: String,
+    ): ParameterSpec {
+        val files = generate(spec(schemas = schemas, enums = enums))
+        return files
+            .first { it.name == className }
+            .members
+            .filterIsInstance<TypeSpec>()[0]
+            .primaryConstructor!!
+            .parameters
+            .first { it.name == paramName }
+    }
+
+    private fun refHolder(refSchemaName: String, default: Any?) = SchemaModel(
+        name = "Holder",
+        description = null,
+        properties = listOf(PropertyModel("value", TypeRef.Reference(refSchemaName), null, false, default)),
+        requiredProperties = setOf("value"),
+        allOf = null,
+        oneOf = null,
+        anyOf = null,
+        discriminator = null,
+    )
+
+    @Test
+    fun `empty object default constructs referenced class with no arguments`() {
+        val target =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties = listOf(PropertyModel("taskName", TypeRef.Primitive(PrimitiveType.STRING), null, true)),
+                requiredProperties = emptySet(),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val param = defaultParamOf(
+            schemas = listOf(target, refHolder("TaskConfig", emptyMap<String, Any?>())),
+            className = "Holder",
+            paramName = "value",
+        )
+        assertEquals("com.example.model.TaskConfig()", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `object default with enum reference property emits nested enum constant`() {
+        val statusEnum =
+            EnumModel(
+                name = "Status",
+                description = null,
+                type = EnumBackingType.STRING,
+                values = listOf(EnumModel.Value("active"), EnumModel.Value("closed")),
+            )
+        val target =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties = listOf(PropertyModel("status", TypeRef.Reference("Status"), null, false)),
+                requiredProperties = setOf("status"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val param = defaultParamOf(
+            schemas = listOf(target, refHolder("TaskConfig", mapOf("status" to "closed"))),
+            enums = listOf(statusEnum),
+            className = "Holder",
+            paramName = "value",
+        )
+        assertEquals(
+            "com.example.model.TaskConfig(status = com.example.model.Status.CLOSED)",
+            param.defaultValue.toString(),
+        )
+    }
+
+    @Test
+    fun `object default with date-time property emits Instant parse call`() {
+        val target =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties = listOf(
+                    PropertyModel("createdAt", TypeRef.Primitive(PrimitiveType.DATE_TIME), null, false),
+                ),
+                requiredProperties = setOf("createdAt"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val param = defaultParamOf(
+            schemas = listOf(target, refHolder("TaskConfig", mapOf("createdAt" to "2024-01-01T00:00:00Z"))),
+            className = "Holder",
+            paramName = "value",
+        )
+        assertTrue(
+            param.defaultValue.toString().contains("Instant.parse(\"2024-01-01T00:00:00Z\")"),
+            "Expected Instant.parse inside constructor, got: ${param.defaultValue}",
+        )
+    }
+
+    @Test
+    fun `object default with float property emits float literal`() {
+        val target =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties = listOf(PropertyModel("ratio", TypeRef.Primitive(PrimitiveType.FLOAT), null, false)),
+                requiredProperties = setOf("ratio"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val param = defaultParamOf(
+            schemas = listOf(target, refHolder("TaskConfig", mapOf("ratio" to 1.5))),
+            className = "Holder",
+            paramName = "value",
+        )
+        assertEquals("com.example.model.TaskConfig(ratio = 1.5f)", param.defaultValue.toString())
+    }
+
+    @Test
+    fun `object default referencing an unknown schema throws IllegalArgumentException`() {
+        val ex = assertFailsWith<IllegalArgumentException> {
+            generate(spec(schemas = listOf(refHolder("DoesNotExist", mapOf("x" to 1)))))
+        }
+        assertTrue(
+            ex.message.orEmpty().contains("unknown schema"),
+            "Expected unknown-schema message, got: ${ex.message}",
+        )
+    }
+
+    @Test
+    fun `reference default with invalid value type fails`() {
+        val target =
+            SchemaModel(
+                name = "TaskConfig",
+                description = null,
+                properties = listOf(PropertyModel("x", TypeRef.Primitive(PrimitiveType.INT), null, true)),
+                requiredProperties = emptySet(),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        // A bare Int is neither an enum constant (String) nor an object (Map) default.
+        assertFailsWith<IllegalStateException> {
+            generate(spec(schemas = listOf(target, refHolder("TaskConfig", 42))))
+        }
+    }
+
+    @Test
+    fun `array of object references default emits listOf of constructed classes`() {
+        val item =
+            SchemaModel(
+                name = "Item",
+                description = null,
+                properties = listOf(PropertyModel("label", TypeRef.Primitive(PrimitiveType.STRING), null, false)),
+                requiredProperties = setOf("label"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val holder =
+            SchemaModel(
+                name = "Holder",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "items",
+                            TypeRef.Array(TypeRef.Reference("Item")),
+                            null,
+                            false,
+                            listOf(mapOf("label" to "a"), mapOf("label" to "b")),
+                        ),
+                    ),
+                requiredProperties = setOf("items"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val param = defaultParamOf(schemas = listOf(item, holder), className = "Holder", paramName = "items")
+        assertEquals(
+            "listOf(com.example.model.Item(label = \"a\"), com.example.model.Item(label = \"b\"))",
+            param.defaultValue.toString(),
+        )
+    }
+
+    @Test
+    fun `unique array of enum references default emits setOf of enum constants`() {
+        val statusEnum =
+            EnumModel(
+                name = "Status",
+                description = null,
+                type = EnumBackingType.STRING,
+                values = listOf(EnumModel.Value("active"), EnumModel.Value("closed")),
+            )
+        val schema =
+            SchemaModel(
+                name = "Config",
+                description = null,
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "statuses",
+                            TypeRef.Array(TypeRef.Reference("Status"), unique = true),
+                            null,
+                            false,
+                            listOf("active", "closed"),
+                        ),
+                    ),
+                requiredProperties = setOf("statuses"),
+                allOf = null,
+                oneOf = null,
+                anyOf = null,
+                discriminator = null,
+            )
+        val param = defaultParamOf(
+            schemas = listOf(schema),
+            enums = listOf(statusEnum),
+            className = "Config",
+            paramName = "statuses",
+        )
+        assertEquals(
+            "setOf(com.example.model.Status.ACTIVE, com.example.model.Status.CLOSED)",
+            param.defaultValue.toString(),
+        )
     }
 
     @Test

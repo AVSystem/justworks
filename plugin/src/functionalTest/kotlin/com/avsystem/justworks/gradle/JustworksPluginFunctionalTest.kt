@@ -61,6 +61,7 @@ class JustworksPluginFunctionalTest {
               schemas:
                 Pet:
                   type: object
+                  description: A pet in the store
                   required:
                     - id
                     - name
@@ -183,6 +184,47 @@ class JustworksPluginFunctionalTest {
         val content = clientFile.readText()
         assertTrue(content.contains("suspend fun"), "PetsApi should contain suspend functions")
         assertTrue(content.contains("class PetsApi"), "PetsApi should define PetsApi class")
+    }
+
+    @Test
+    fun `custom apiClassPrefix and apiClassSuffix change generated client class name`() {
+        writeBuildFile(
+            """
+            apiClassPrefix = "My"
+            apiClassSuffix = "Client"
+            """.trimIndent(),
+        )
+
+        runner("justworksGenerateMain").build()
+
+        val apiDir = projectDir.resolve("build/generated/justworks/main/com/example/api")
+        val clientFile = apiDir.resolve("MyPetsClient.kt")
+        assertTrue(clientFile.exists(), "Expected MyPetsClient.kt; files: ${apiDir.listFiles()?.map { it.name }}")
+        assertTrue(clientFile.readText().contains("class MyPetsClient"), "Expected class MyPetsClient")
+    }
+
+    @Test
+    fun `generateKdoc true by default emits KDoc in generated code`() {
+        writeBuildFile()
+
+        runner("justworksGenerateMain").build()
+
+        val petFile = projectDir.resolve("build/generated/justworks/main/com/example/model/Pet.kt")
+        val clientFile = projectDir.resolve("build/generated/justworks/main/com/example/api/PetsApi.kt")
+        assertTrue(petFile.readText().contains("/**"), "Model should contain KDoc by default")
+        assertTrue(clientFile.readText().contains("/**"), "Client should contain KDoc by default")
+    }
+
+    @Test
+    fun `generateKdoc false suppresses all KDoc in generated code`() {
+        writeBuildFile("generateKdoc = false")
+
+        runner("justworksGenerateMain").build()
+
+        val petFile = projectDir.resolve("build/generated/justworks/main/com/example/model/Pet.kt")
+        val clientFile = projectDir.resolve("build/generated/justworks/main/com/example/api/PetsApi.kt")
+        assertFalse(petFile.readText().contains("/**"), "Model should contain no KDoc when generateKdoc=false")
+        assertFalse(clientFile.readText().contains("/**"), "Client should contain no KDoc when generateKdoc=false")
     }
 
     @Test

@@ -47,5 +47,22 @@ abstract class JustworksSpecConfiguration
          */
         abstract val modelPackage: Property<String>
 
+        /**
+         * Whether to emit KDoc comments in generated code.
+         * Defaults to `true`. Set to `false` to reduce generated file size and noise.
+         */
+        abstract val generateKdoc: Property<Boolean>
+
+        /**
+         * Prefix for generated API client class names. Defaults to `""`.
+         */
+        abstract val apiClassPrefix: Property<String>
+
+        /**
+         * Suffix for generated API client class names. Defaults to `"Api"`
+         * (e.g. tag `pets` -> `PetsApi`).
+         */
+        abstract val apiClassSuffix: Property<String>
+
         override fun getName(): String = name
     }

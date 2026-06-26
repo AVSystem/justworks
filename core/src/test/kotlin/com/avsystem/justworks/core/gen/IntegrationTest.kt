@@ -40,20 +40,27 @@ class IntegrationTest {
         }
     }
 
-    private fun generateModel(spec: ApiSpec): List<FileSpec> =
-        context(Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }, NameRegistry()) {
-            ModelGenerator.generate(spec)
-        }
+    private fun generateModel(spec: ApiSpec): List<FileSpec> = context(
+        Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) },
+        OutputOptions(),
+        NameRegistry(),
+    ) {
+        ModelGenerator.generate(spec)
+    }
 
-    private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult =
-        context(Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) }, NameRegistry()) {
-            ModelGenerator.generateWithResolvedSpec(spec)
-        }
+    private fun generateModelWithResolvedSpec(spec: ApiSpec): ModelGenerator.GenerateResult = context(
+        Hierarchy(ModelPackage(modelPackage)).apply { addSchemas(spec.schemas) },
+        OutputOptions(),
+        NameRegistry(),
+    ) {
+        ModelGenerator.generateWithResolvedSpec(spec)
+    }
 
     private fun generateClient(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> = context(
         Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(spec.schemas)
         },
+        OutputOptions(),
         ApiPackage(apiPackage),
         NameRegistry(),
     ) {
