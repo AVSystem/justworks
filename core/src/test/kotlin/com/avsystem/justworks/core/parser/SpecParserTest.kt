@@ -142,6 +142,81 @@ class SpecParserTest : SpecParserTestBase() {
     }
 
     @Test
+    fun `schema-level nullable controls property nullability independent of required`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Nullable API
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Thing:
+                  type: object
+                  required:
+                    - requiredNullable
+                    - requiredPlain
+                  properties:
+                    requiredNullable:
+                      type: string
+                      nullable: true
+                    requiredPlain:
+                      type: string
+                    optionalNullable:
+                      type: string
+                      nullable: true
+                    optionalPlain:
+                      type: string
+            """.trimIndent().toTempFile(),
+        )
+        val thing = spec.schemas.find { it.name == "Thing" } ?: fail("Thing not found")
+        val props = thing.properties.associateBy { it.name }
+
+        assertTrue(props.getValue("requiredNullable").nullable, "required + nullable:true should be nullable")
+        assertFalse(props.getValue("requiredPlain").nullable, "required without nullable should be non-nullable")
+        assertTrue(props.getValue("optionalNullable").nullable, "optional + nullable:true should be nullable")
+        assertTrue(props.getValue("optionalPlain").nullable, "optional should be nullable")
+    }
+
+    @Test
+    fun `allOf property required in a later member is not nullable`() {
+        // `foo` is declared (optional) in the first allOf member and marked required in the
+        // second. After merging it is required, so it must be non-nullable — regardless of the
+        // order the members are listed. Regression test: nullability must be derived from the
+        // full merged `required` set, not one accumulated mid-fold.
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: AllOf API
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Base:
+                  type: object
+                  properties:
+                    foo:
+                      type: string
+                RequiresFoo:
+                  type: object
+                  required:
+                    - foo
+                Combined:
+                  allOf:
+                    - ${'$'}ref: '#/components/schemas/Base'
+                    - ${'$'}ref: '#/components/schemas/RequiresFoo'
+            """.trimIndent().toTempFile(),
+        )
+        val combined = spec.schemas.find { it.name == "Combined" } ?: fail("Combined not found")
+        val foo = combined.properties.first { it.name == "foo" }
+
+        assertTrue("foo" in combined.requiredProperties, "sanity: foo should be required after merge")
+        assertFalse(foo.nullable, "foo is required (via a later allOf member) and must be non-nullable")
+    }
+
+    @Test
     fun `parsed endpoints have tags`() {
         val listPets = petstore.endpoints.find { it.operationId == "listPets" }!!
 
