@@ -395,19 +395,15 @@ object SpecParser {
         val topRequired = schema.required.orEmpty().toSet()
         val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
 
-        val (required, properties) = schema.allOf
-            .orEmpty()
-            .fold(topRequired to emptyMap<String, PropertyModel>()) { (accRequired, accProperties), subSchema ->
-                val resolvedSchema = subSchema.resolveSubSchema()
-                val mergedRequired = accRequired + resolvedSchema.required.orEmpty().toSet()
-                mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired, contextCreator)
-            }
+        val subSchemas = schema.allOf.orEmpty().map { it.resolveSubSchema() }
 
-        val topLevelProperties = schema.propertyModels(required, contextCreator)
-        val finalProperties =
-            properties.plus(topLevelProperties).values.map { prop ->
-                prop.copy(nullable = prop.name !in required || prop.nullable)
-            }
+        val required = topRequired + subSchemas.flatMap { it.required.orEmpty() }.toSet()
+
+        val properties = subSchemas.fold(emptyMap<String, PropertyModel>()) { accProperties, resolvedSchema ->
+            accProperties + resolvedSchema.propertyModels(required, contextCreator)
+        }
+
+        val finalProperties = properties.plus(schema.propertyModels(required, contextCreator)).values.toList()
 
         return finalProperties to required
     }
