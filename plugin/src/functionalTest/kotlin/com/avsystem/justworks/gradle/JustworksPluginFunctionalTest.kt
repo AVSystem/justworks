@@ -348,9 +348,11 @@ class JustworksPluginFunctionalTest {
             "src/test/kotlin/WrapperUnionRoundTripTest.kt",
             """
             import com.example.model.Node
+            import kotlinx.serialization.SerializationException
             import kotlinx.serialization.json.Json
             import kotlin.test.Test
             import kotlin.test.assertEquals
+            import kotlin.test.assertFailsWith
 
             class WrapperUnionRoundTripTest {
                 private val json = Json
@@ -392,6 +394,30 @@ class JustworksPluginFunctionalTest {
                     val nested = dir.children[1] as Node.Directory
                     assertEquals("sub", nested.name)
                     assertEquals(0, nested.children.size)
+                }
+
+                @Test
+                fun `rejects an unknown wrapper key`() {
+                    // Hits the `else ->` branch in deserialize.
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>(""${'"'}{"Bogus":{}}""${'"'})
+                    }
+                }
+
+                @Test
+                fun `rejects an empty wrapper object`() {
+                    // Hits the `singleOrNull() ?: throw` branch (zero keys).
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>("{}")
+                    }
+                }
+
+                @Test
+                fun `rejects a multi-key wrapper object`() {
+                    // Hits the `singleOrNull() ?: throw` branch (two keys).
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>(""${'"'}{"File":{"name":"a.txt","sizeBytes":1},"Directory":{"name":"x","children":[]}}""${'"'})
+                    }
                 }
             }
             """.trimIndent(),

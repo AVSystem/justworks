@@ -603,6 +603,10 @@ class ModelGeneratorPolymorphicTest {
         assertTrue("element.keys.singleOrNull()" in deserializeBody, "Should read the single wrapper key")
         assertTrue("\"File\" ->" in deserializeBody, "Should branch on wrapper key 'File'. Body: $deserializeBody")
         assertTrue(
+            "\"Directory\" ->" in deserializeBody,
+            "Should branch on wrapper key 'Directory'. Body: $deserializeBody",
+        )
+        assertTrue(
             "decodeFromJsonElement" in deserializeBody,
             "Should delegate to variant serializer on the wrapped value",
         )
@@ -613,6 +617,10 @@ class ModelGeneratorPolymorphicTest {
         // Re-wraps under the wrapper key (external tagging), not {"type": ...}.
         assertTrue("JsonObject" in serializeBody, "serialize should build a JsonObject wrapper")
         assertTrue("\"File\"" in serializeBody, "serialize should re-wrap under key 'File'. Body: $serializeBody")
+        assertTrue(
+            "\"Directory\"" in serializeBody,
+            "serialize should re-wrap under key 'Directory'. Body: $serializeBody",
+        )
     }
 
     @Test
