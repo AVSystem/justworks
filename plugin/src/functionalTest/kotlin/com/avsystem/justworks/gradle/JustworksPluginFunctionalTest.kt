@@ -259,6 +259,202 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
+    fun `externally-tagged wrapper oneOf compiles and round-trips the wrapper wire shape`() {
+        // Recursive file-tree union from issue #104: each variant is a single-key wrapper object.
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Wrapper Union Test
+              version: '1.0'
+            paths:
+              /tree:
+                get:
+                  operationId: getTree
+                  summary: Get the file tree
+                  tags:
+                    - tree
+                  responses:
+                    '200':
+                      description: The root node
+                      content:
+                        application/json:
+                          schema:
+                            ${'$'}ref: '#/components/schemas/Node'
+            components:
+              schemas:
+                Node:
+                  oneOf:
+                    - type: object
+                      required: [File]
+                      properties:
+                        File:
+                          type: object
+                          required: [name, sizeBytes]
+                          properties:
+                            name: { type: string }
+                            sizeBytes: { type: integer }
+                    - type: object
+                      required: [Directory]
+                      properties:
+                        Directory:
+                          type: object
+                          required: [name, children]
+                          properties:
+                            name: { type: string }
+                            children:
+                              type: array
+                              items:
+                                ${'$'}ref: '#/components/schemas/Node'
+            """.trimIndent(),
+        )
+
+        // Build file with a test source set that exercises the generated serializer at runtime.
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "src/test/kotlin/WrapperUnionRoundTripTest.kt",
+            """
+            import com.example.model.Node
+            import kotlinx.serialization.SerializationException
+            import kotlinx.serialization.json.Json
+            import kotlin.test.Test
+            import kotlin.test.assertEquals
+            import kotlin.test.assertFailsWith
+
+            class WrapperUnionRoundTripTest {
+                private val json = Json
+
+                @Test
+                fun `decodes the externally-tagged wire payload`() {
+                    val wire = ""${'"'}{"File":{"name":"a.txt","sizeBytes":12}}""${'"'}
+                    val node = json.decodeFromString<Node>(wire)
+                    val file = node as Node.File
+                    assertEquals("a.txt", file.name)
+                    assertEquals(12, file.sizeBytes)
+                }
+
+                @Test
+                fun `encodes back to the wrapper shape, not an internal type field`() {
+                    val node: Node = Node.File(name = "a.txt", sizeBytes = 12)
+                    val encoded = json.encodeToString(node)
+                    assertEquals(
+                        json.parseToJsonElement(""${'"'}{"File":{"name":"a.txt","sizeBytes":12}}""${'"'}),
+                        json.parseToJsonElement(encoded),
+                    )
+                }
+
+                @Test
+                fun `round-trips a recursive directory tree`() {
+                    val wire =
+                        ""${'"'}{"Directory":{"name":"root","children":[{"File":{"name":"a.txt","sizeBytes":1}},{"Directory":{"name":"sub","children":[]}}]}}""${'"'}
+                    val node = json.decodeFromString<Node>(wire)
+                    // Encode with the static Node type (an `as` cast below would smart-cast `node`
+                    // to Node.Directory and pick the wrong serializer).
+                    val encoded = json.encodeToString<Node>(node)
+                    assertEquals(
+                        json.parseToJsonElement(wire),
+                        json.parseToJsonElement(encoded),
+                    )
+                    val dir = node as Node.Directory
+                    assertEquals("root", dir.name)
+                    assertEquals(2, dir.children.size)
+                    val nested = dir.children[1] as Node.Directory
+                    assertEquals("sub", nested.name)
+                    assertEquals(0, nested.children.size)
+                }
+
+                @Test
+                fun `rejects an unknown wrapper key`() {
+                    // Hits the `else ->` branch in deserialize.
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>(""${'"'}{"Bogus":{}}""${'"'})
+                    }
+                }
+
+                @Test
+                fun `rejects an empty wrapper object`() {
+                    // Hits the `singleOrNull() ?: throw` branch (zero keys).
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>("{}")
+                    }
+                }
+
+                @Test
+                fun `rejects a multi-key wrapper object`() {
+                    // Hits the `singleOrNull() ?: throw` branch (two keys).
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>(""${'"'}{"File":{"name":"a.txt","sizeBytes":1},"Directory":{"name":"x","children":[]}}""${'"'})
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("test").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":test")?.outcome,
+            "runtime round-trip test against the generated wrapper serializer should pass",
+        )
+
+        // The generated union must not fall back to internal tagging.
+        val nodeFile = projectDir.resolve("build/generated/justworks/main/com/example/model/Node.kt")
+        assertTrue(nodeFile.exists(), "Node.kt should exist")
+        val nodeContent = nodeFile.readText()
+        assertFalse(
+            nodeContent.contains("JsonClassDiscriminator"),
+            "Wrapper union must NOT emit @JsonClassDiscriminator",
+        )
+        assertTrue(
+            nodeContent.contains("with = NodeSerializer::class"),
+            "Node should bind the bespoke NodeSerializer",
+        )
+        assertTrue(
+            projectDir.resolve("build/generated/justworks/main/com/example/model/NodeSerializer.kt").exists(),
+            "NodeSerializer.kt should be generated",
+        )
+    }
+
+    @Test
     fun `generates polymorphic types from spec with oneOf and allOf`() {
         // Write a polymorphic OpenAPI spec
         writeFile(

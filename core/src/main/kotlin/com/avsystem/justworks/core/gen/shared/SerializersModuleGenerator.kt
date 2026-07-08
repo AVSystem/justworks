@@ -26,10 +26,13 @@ internal object SerializersModuleGenerator {
 
     context(hierarchy: Hierarchy)
     fun generate(): FileSpec? {
-        // anyOf hierarchies without a discriminator use JsonContentPolymorphicSerializer
-        // with custom deserialization logic, so they don't need SerializersModule registration.
+        // anyOf-without-discriminator and externally-tagged oneOf-wrapper hierarchies use a custom
+        // serializer (JsonContentPolymorphicSerializer / bespoke KSerializer), so they don't need
+        // SerializersModule registration.
         val discriminatorHierarchies =
-            hierarchy.sealedHierarchies.filterKeys { it !in hierarchy.anyOfWithoutDiscriminator }
+            hierarchy.sealedHierarchies.filterKeys {
+                it !in hierarchy.anyOfWithoutDiscriminator && it !in hierarchy.oneOfWrappers
+            }
 
         if (discriminatorHierarchies.isEmpty()) return null
 
