@@ -437,7 +437,10 @@ internal object ModelGenerator {
             parentBuilder.addKdoc("%L", schema.description)
         }
 
-        hierarchy.sealedHierarchies[schema.name]?.forEach { variantName ->
+        // Drive the nested variants from the same source as generateWrapperSerializer's `when`
+        // branches (oneOfWrapperMapping), so the interface's subtypes and the serializer's arms
+        // can never diverge into a non-exhaustive `when`.
+        schema.oneOfWrapperMapping.orEmpty().forEach { (_, variantName) ->
             parentBuilder.addType(
                 buildNestedVariant(
                     variantSchema = hierarchy.schemasById[variantName],
