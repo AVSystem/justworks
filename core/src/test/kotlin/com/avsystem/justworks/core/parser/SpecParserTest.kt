@@ -13,6 +13,7 @@ import java.io.File
 import kotlin.test.BeforeTest
 import kotlin.test.Test
 import kotlin.test.assertEquals
+import kotlin.test.assertFalse
 import kotlin.test.assertIs
 import kotlin.test.assertNotNull
 import kotlin.test.assertTrue
@@ -138,6 +139,81 @@ class SpecParserTest : SpecParserTestBase() {
 
         val bodyType = assertIs<TypeRef.Reference>(body.schema)
         assertEquals("NewPet", bodyType.schemaName)
+    }
+
+    @Test
+    fun `schema-level nullable controls property nullability independent of required`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Nullable API
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Thing:
+                  type: object
+                  required:
+                    - requiredNullable
+                    - requiredPlain
+                  properties:
+                    requiredNullable:
+                      type: string
+                      nullable: true
+                    requiredPlain:
+                      type: string
+                    optionalNullable:
+                      type: string
+                      nullable: true
+                    optionalPlain:
+                      type: string
+            """.trimIndent().toTempFile(),
+        )
+        val thing = spec.schemas.find { it.name == "Thing" } ?: fail("Thing not found")
+        val props = thing.properties.associateBy { it.name }
+
+        assertTrue(props.getValue("requiredNullable").nullable, "required + nullable:true should be nullable")
+        assertFalse(props.getValue("requiredPlain").nullable, "required without nullable should be non-nullable")
+        assertTrue(props.getValue("optionalNullable").nullable, "optional + nullable:true should be nullable")
+        assertTrue(props.getValue("optionalPlain").nullable, "optional should be nullable")
+    }
+
+    @Test
+    fun `allOf property required in a later member is not nullable`() {
+        // `foo` is declared (optional) in the first allOf member and marked required in the
+        // second. After merging it is required, so it must be non-nullable — regardless of the
+        // order the members are listed. Regression test: nullability must be derived from the
+        // full merged `required` set, not one accumulated mid-fold.
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: AllOf API
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Base:
+                  type: object
+                  properties:
+                    foo:
+                      type: string
+                RequiresFoo:
+                  type: object
+                  required:
+                    - foo
+                Combined:
+                  allOf:
+                    - ${'$'}ref: '#/components/schemas/Base'
+                    - ${'$'}ref: '#/components/schemas/RequiresFoo'
+            """.trimIndent().toTempFile(),
+        )
+        val combined = spec.schemas.find { it.name == "Combined" } ?: fail("Combined not found")
+        val foo = combined.properties.first { it.name == "foo" }
+
+        assertTrue("foo" in combined.requiredProperties, "sanity: foo should be required after merge")
+        assertFalse(foo.nullable, "foo is required (via a later allOf member) and must be non-nullable")
     }
 
     @Test
@@ -632,7 +708,38 @@ class SpecParserTest : SpecParserTestBase() {
         val tagList = spec.schemas.find { it.name == "TagList" }
             ?: fail("TagList schema not found")
         val underlying = assertNotNull(tagList.underlyingType, "underlyingType should be set")
-        assertIs<TypeRef.Array>(underlying)
+        val array = assertIs<TypeRef.Array>(underlying)
+        assertFalse(array.unique, "array without uniqueItems should not be unique")
+    }
+
+    @Test
+    fun `array property with uniqueItems is parsed as unique Array`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Test
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                User:
+                  type: object
+                  properties:
+                    tags:
+                      type: array
+                      uniqueItems: true
+                      items:
+                        type: string
+            """.trimIndent().toTempFile(),
+        )
+
+        val user = spec.schemas.find { it.name == "User" }
+            ?: fail("User schema not found")
+        val tags = user.properties.find { it.name == "tags" }
+            ?: fail("tags property not found")
+        val array = assertIs<TypeRef.Array>(tags.type)
+        assertTrue(array.unique, "array with uniqueItems should be unique")
     }
 
     @Test
@@ -865,7 +972,7 @@ class SpecParserTest : SpecParserTestBase() {
                 }
             }
 
-            is TypeRef.Primitive, TypeRef.Unknown, null -> {}
+            is TypeRef.Primitive, is TypeRef.InlineEnum, TypeRef.Unknown, null -> {}
         }
     }
 }

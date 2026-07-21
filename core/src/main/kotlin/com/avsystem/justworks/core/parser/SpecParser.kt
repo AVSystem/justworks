@@ -17,7 +17,6 @@ import com.avsystem.justworks.core.accumulate
 import com.avsystem.justworks.core.accumulateAndReturnNull
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.ensureOrAccumulate
-import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.ContentType
@@ -36,6 +35,16 @@ import com.avsystem.justworks.core.model.SchemaModel
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.avsystem.justworks.core.model.TypeRef
 import com.avsystem.justworks.core.toEnumOrNull
+import com.fasterxml.jackson.databind.JsonNode
+import com.fasterxml.jackson.databind.node.ArrayNode
+import com.fasterxml.jackson.databind.node.BinaryNode
+import com.fasterxml.jackson.databind.node.BooleanNode
+import com.fasterxml.jackson.databind.node.MissingNode
+import com.fasterxml.jackson.databind.node.NullNode
+import com.fasterxml.jackson.databind.node.NumericNode
+import com.fasterxml.jackson.databind.node.ObjectNode
+import com.fasterxml.jackson.databind.node.POJONode
+import com.fasterxml.jackson.databind.node.TextNode
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
@@ -45,7 +54,6 @@ import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
 import java.util.IdentityHashMap
-import kotlin.collections.emptyMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 import io.swagger.v3.oas.models.security.SecurityScheme as SwaggerSecurityScheme
 
@@ -282,6 +290,7 @@ object SpecParser {
                                 schema = resp.content
                                     ?.get(ContentType.JSON_CONTENT_TYPE.value)
                                     ?.schema
+                                    ?.takeUnless { it.isEmptyContent }
                                     ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
                             )
                         }
@@ -315,7 +324,7 @@ object SpecParser {
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
-        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
+        val (oneOf, oneOfWrapperMapping) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
             ?: (schema.oneOf?.mapNotNull { it.resolveName() } to null)
 
         val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
@@ -336,7 +345,7 @@ object SpecParser {
                 props to requiredProps
             }
 
-        val discriminator = discriminatorFromWrapper ?: nullable {
+        val discriminator = nullable {
             val disc = schema.discriminator.bind()
             val propertyName = disc.propertyName.bind()
             Discriminator(propertyName = propertyName, mapping = disc.mapping.orEmpty())
@@ -359,6 +368,7 @@ object SpecParser {
             oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
+            oneOfWrapperMapping = oneOfWrapperMapping,
             underlyingType = underlyingType,
         )
     }
@@ -386,17 +396,15 @@ object SpecParser {
         val topRequired = schema.required.orEmpty().toSet()
         val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
 
-        val (required, properties) = schema.allOf
-            .orEmpty()
-            .fold(topRequired to emptyMap<String, PropertyModel>()) { (accRequired, accProperties), subSchema ->
-                val resolvedSchema = subSchema.resolveSubSchema()
-                val mergedRequired = accRequired + resolvedSchema.required.orEmpty().toSet()
-                mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired, contextCreator)
-            }
+        val subSchemas = schema.allOf.orEmpty().map { it.resolveSubSchema() }
 
-        val topLevelProperties = schema.propertyModels(required, contextCreator)
-        val finalProperties =
-            properties.plus(topLevelProperties).values.map { prop -> prop.copy(nullable = prop.name !in required) }
+        val required = topRequired + subSchemas.flatMap { it.required.orEmpty() }.toSet()
+
+        val properties = subSchemas.fold(emptyMap<String, PropertyModel>()) { accProperties, resolvedSchema ->
+            accProperties + resolvedSchema.propertyModels(required, contextCreator)
+        }
+
+        val finalProperties = properties.plus(schema.propertyModels(required, contextCreator)).values.toList()
 
         return finalProperties to required
     }
@@ -415,10 +423,11 @@ object SpecParser {
      * - Every variant has exactly one property
      * - The property value is either a $ref or an inline object
      *
-     * Returns: Pair of (unwrapped oneOf refs, synthetic discriminator) or null if pattern not matched.
+     * Returns: Pair of (unwrapped oneOf refs, wrapper-key -> variant-schema-name mapping) or null
+     * if the pattern is not matched. The mapping drives the bespoke externally-tagged serializer.
      */
     context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
-    private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Discriminator>? = nullable {
+    private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Map<String, String>>? = nullable {
         ensure(!schema.oneOf.isNullOrEmpty() && schema.discriminator == null)
 
         val variants = schema.oneOf.orEmpty()
@@ -446,8 +455,7 @@ object SpecParser {
 
         ensure(unwrapped.size == variants.size)
 
-        val mapping = unwrapped.mapValues { (_, schemaName) -> "$SCHEMA_PREFIX$schemaName" }
-        unwrapped.values.toList() to Discriminator(propertyName = "type", mapping = mapping)
+        unwrapped.values.toList() to unwrapped
     }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
@@ -459,18 +467,25 @@ object SpecParser {
     /** Resolves a [TypeRef] based on the schema's structural type/format, ignoring component identity. */
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.resolveByType(contextName: String? = null): TypeRef = when (type) {
-        "string" -> STRING_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.STRING)
+        "string" -> inlineEnum(contextName, EnumBackingType.STRING)
+            ?: STRING_FORMAT_MAP[format]
+            ?: TypeRef.Primitive(PrimitiveType.STRING)
 
-        "integer" -> INTEGER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.INT)
+        "integer" -> inlineEnum(contextName, EnumBackingType.INTEGER)
+            ?: INTEGER_FORMAT_MAP[format]
+            ?: TypeRef.Primitive(PrimitiveType.INT)
 
         "number" -> NUMBER_FORMAT_MAP[format] ?: TypeRef.Primitive(PrimitiveType.DOUBLE)
 
         "boolean" -> TypeRef.Primitive(PrimitiveType.BOOLEAN)
 
-        "array" -> TypeRef.Array(items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown)
+        "array" -> TypeRef.Array(
+            items?.toTypeRef(contextName?.let { "${it}Item" }) ?: TypeRef.Unknown,
+            unique = uniqueItems == true,
+        )
 
         "object" -> when (val ap = additionalProperties) {
-            is Schema<*> -> TypeRef.Map(ap.toTypeRef())
+            is Schema<*> -> TypeRef.Map(ap.toTypeRef(contextName?.let { "${it}Value" }))
             is Boolean -> if (ap) TypeRef.Map(TypeRef.Unknown) else TypeRef.Unknown
             else -> title?.let(TypeRef::Reference) ?: TypeRef.Unknown
         }
@@ -498,17 +513,83 @@ object SpecParser {
 
     private val Schema<*>.isEnumSchema get(): Boolean = !enum.isNullOrEmpty()
 
+    /**
+     * True when a property of this type declares a `default` that should be honored, i.e. the
+     * property is not optional-null but carries a concrete value and must be generated as a
+     * non-nullable field initialized to that default rather than as `T? = null`.
+     *
+     * Honored for scalar/enum types (primitives, inline enums, references — the latter typically
+     * a named enum) and for arrays of such element types (emitted as `listOf(...)`/`emptyList()`).
+     * Object/map defaults are intentionally excluded and keep the previous nullable-null behavior.
+     */
+    private fun TypeRef.honorsDefault(default: Any?): Boolean = default != null &&
+        when (this) {
+            is TypeRef.Primitive, is TypeRef.InlineEnum, is TypeRef.Reference -> true
+            is TypeRef.Array -> items.honorsDefault(default)
+            is TypeRef.Inline, is TypeRef.Map, TypeRef.Unknown -> false
+        }
+
+    /**
+     * Normalizes a raw Swagger default into a plain Kotlin value the model layer can format
+     * without depending on Jackson. Jackson [JsonNode] defaults are unwrapped recursively into
+     * plain `List`/`Map`/scalar values; already-plain defaults pass through unchanged.
+     */
+    private fun normalizeDefault(default: Any?): Any? = when (default) {
+        is ArrayNode -> default.map { normalizeDefault(it) }
+        is ObjectNode -> default.properties().associate { (k, v) -> k to normalizeDefault(v) }
+        is NullNode, is MissingNode -> null
+        is BooleanNode -> default.booleanValue()
+        is BinaryNode -> default.binaryValue()
+        is NumericNode -> default.numberValue()
+        is TextNode -> default.textValue()
+        is POJONode -> normalizeDefault(default.pojo)
+        is JsonNode -> default.asText()
+        else -> default
+    }
+
+    /**
+     * True when the schema carries no structure at all — no `type`, `$ref`, properties, items,
+     * combinators, enum, or additionalProperties (e.g. `{}` or `{ "nullable": true }`). As a
+     * response body this means "no content", which is generated as a `Unit` return type.
+     */
+    private val Schema<*>.isEmptyContent: Boolean
+        get() = `$ref` == null &&
+            type == null &&
+            properties.isNullOrEmpty() &&
+            allOf.isNullOrEmpty() &&
+            oneOf.isNullOrEmpty() &&
+            anyOf.isNullOrEmpty() &&
+            enum.isNullOrEmpty() &&
+            additionalProperties == null &&
+            items == null
+
+    /**
+     * Builds a [TypeRef.InlineEnum] for an enum schema that is not a named component
+     * (e.g. an enum declared directly in array `items` or inline on a property).
+     * Named component enums are resolved to [TypeRef.Reference] before reaching here.
+     */
+    private fun Schema<*>.inlineEnum(contextName: String?, backingType: EnumBackingType): TypeRef.InlineEnum? =
+        enum?.filterNotNull()?.takeIf { it.isNotEmpty() }?.let { values ->
+            TypeRef.InlineEnum(
+                values = values.map { it.toString() },
+                backingType = backingType,
+                contextHint = contextName ?: "InlineEnum",
+            )
+        }
+
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
     private fun Schema<*>.propertyModels(required: Set<String>, createContext: (String) -> String? = { null }) =
         properties
             .orEmpty()
             .mapValues { (propName, propSchema) ->
+                val type = propSchema.toTypeRef(createContext(propName))
                 PropertyModel(
                     name = propName,
-                    type = propSchema.toTypeRef(createContext(propName)),
+                    type = type,
                     description = propSchema.description,
-                    nullable = propName !in required,
-                    defaultValue = propSchema.default,
+                    nullable = propSchema.nullable == true ||
+                        (propName !in required && !type.honorsDefault(propSchema.default)),
+                    defaultValue = normalizeDefault(propSchema.default),
                 )
             }
 
@@ -554,7 +635,7 @@ object SpecParser {
             is TypeRef.Array -> callRecursive(typeRef.items)
             is TypeRef.Map -> callRecursive(typeRef.valueType)
             is TypeRef.Inline -> typeRef.properties.any { callRecursive(it.type) }
-            is TypeRef.Primitive, is TypeRef.Reference -> false
+            is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum -> false
         }
     }
 

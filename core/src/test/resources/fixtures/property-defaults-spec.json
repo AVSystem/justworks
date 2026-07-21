@@ -1,0 +1,80 @@
+{
+  "openapi": "3.0.2",
+  "info": { "title": "defaults", "version": "1.0" },
+  "paths": {},
+  "components": {
+    "schemas": {
+      "Defaults": {
+        "type": "object",
+        "properties": {
+          "mode": {
+            "type": "string",
+            "enum": ["A", "B", "C"],
+            "default": "B"
+          },
+          "retries": {
+            "type": "integer",
+            "format": "int32",
+            "default": 3
+          },
+          "tags": {
+            "type": "array",
+            "items": { "type": "string", "enum": ["X", "Y"] },
+            "default": ["X", "Y"]
+          },
+          "note": {
+            "type": "string"
+          },
+          "nullDefault": {
+            "type": "string",
+            "default": null
+          },
+          "secret": {
+            "type": "string",
+            "format": "byte",
+            "default": "AAEC"
+          },
+          "uniqueTags": {
+            "type": "array",
+            "uniqueItems": true,
+            "items": { "type": "string" },
+            "default": ["X", "Y"]
+          },
+          "config": {
+            "allOf": [{ "$ref": "#/components/schemas/TaskConfig" }],
+            "default": {
+              "taskName": null,
+              "parameters": [],
+              "isActive": false
+            }
+          },
+          "rawMap": {
+            "type": "object",
+            "additionalProperties": { "type": "string" },
+            "default": { "k": "v" }
+          },
+          "configs": {
+            "type": "array",
+            "items": { "$ref": "#/components/schemas/TaskConfig" },
+            "default": [
+              { "taskName": "first", "isActive": true },
+              { "taskName": "second" }
+            ]
+          }
+        }
+      },
+      "TaskConfig": {
+        "type": "object",
+        "properties": {
+          "taskName": { "type": "string", "nullable": true, "default": null },
+          "parameters": {
+            "type": "array",
+            "items": { "type": "string" },
+            "default": []
+          },
+          "isActive": { "type": "boolean", "default": false }
+        }
+      }
+    }
+  }
+}
