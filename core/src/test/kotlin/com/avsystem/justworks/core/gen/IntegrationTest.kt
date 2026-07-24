@@ -289,13 +289,13 @@ class IntegrationTest {
             "public suspend fun getInventory(): HttpResult<JsonElement, Map<String, Int>>",
         )
 
-        // PetApi.getPetById: int64 path param -> Long, path templated via encodeParam.
+        // PetApi.getPetById: int64 path param -> Long, path templated via encodePathParam.
         val petApi = gen.client("PetApi")
         assertContains(
             petApi,
             "public suspend fun getPetById(petId: Long): HttpResult<JsonElement, Pet>",
         )
-        assertContains(petApi, "/pet/\${encodeParam(petId)}")
+        assertContains(petApi, "/pet/\${encodePathParam(petId)}")
     }
 
     @Test

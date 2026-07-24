@@ -80,6 +80,14 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
 
 internal fun TypeRef.isBinaryUpload(): Boolean = this is TypeRef.Primitive && this.type == PrimitiveType.BYTE_ARRAY
 
+internal fun TypeRef.containsUuid(): Boolean = when (this) {
+    is TypeRef.Primitive -> type == PrimitiveType.UUID
+    is TypeRef.Array -> items.containsUuid()
+    is TypeRef.Map -> valueType.containsUuid()
+    is TypeRef.Inline -> properties.any { it.type.containsUuid() }
+    is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> false
+}
+
 /**
  * Resolves the @SerialName value for a variant within a oneOf schema.
  */
