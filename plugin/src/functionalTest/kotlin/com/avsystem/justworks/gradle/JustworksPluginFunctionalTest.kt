@@ -1053,6 +1053,214 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
+    fun `query parameter that cannot serialize to a JSON primitive fails to compile, not to throw at runtime`() {
+        // encodeParam()/encodePathParam() are an explicit overload set (String, Number, Boolean, and
+        // a reified Enum<T>) rather than a generic <reified T> passthrough. Uuid/Instant/LocalDate are
+        // handled separately (see the call-site-encoding test below). A query param typed as an array
+        // has no matching overload, so the *generated client* now fails to compile instead of
+        // compiling and throwing "JsonArray is not a JsonPrimitive" the first time someone calls the
+        // endpoint.
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Petstore
+              version: '1.0'
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  summary: List pets
+                  tags:
+                    - pets
+                  parameters:
+                    - name: tags
+                      in: query
+                      required: true
+                      schema:
+                        type: array
+                        items:
+                          type: string
+                  responses:
+                    '200':
+                      description: A list of pets
+            """.trimIndent(),
+        )
+
+        writeBuildFile()
+
+        val result = runner("compileKotlin").buildAndFail()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "code generation itself should still succeed; only compilation of the generated code should fail",
+        )
+        assertEquals(
+            TaskOutcome.FAILED,
+            result.task(":compileKotlin")?.outcome,
+            "compileKotlin must fail: no encodeParam() overload accepts a List<String>",
+        )
+        assertTrue(
+            result.output.contains("encodeParam"),
+            "Expected the compiler error to point at the unresolved encodeParam(...) call, got: ${result.output}",
+        )
+    }
+
+    @Test
+    fun `Uuid, Instant, and LocalDate path, query, and header params compile against the real types`() {
+        // Uuid/Instant/LocalDate are JSON-primitive-safe but deliberately have no overload in the
+        // shared ApiClientBase.kt (see ApiClientBaseGeneratorTest) — BodyGenerator instead renders a
+        // direct .toString() call (plus .encodeURLPathPart() for path segments) at the call site, in
+        // the per-spec client file. ClientGeneratorTest already checks the exact generated source
+        // text; this test proves that text actually *compiles* against the real kotlin.uuid.Uuid,
+        // kotlin.time.Instant, and kotlinx.datetime.LocalDate types and real Ktor — not just that it
+        // looks right as a KotlinPoet string.
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Events
+              version: '1.0'
+            paths:
+              /events/{eventId}/at/{occurredAt}:
+                get:
+                  operationId: getEvent
+                  tags:
+                    - events
+                  parameters:
+                    - name: eventId
+                      in: path
+                      required: true
+                      schema:
+                        type: string
+                        format: uuid
+                    - name: occurredAt
+                      in: path
+                      required: true
+                      schema:
+                        type: string
+                        format: date-time
+                  responses:
+                    '200':
+                      description: OK
+              /events:
+                get:
+                  operationId: listEvents
+                  tags:
+                    - events
+                  parameters:
+                    - name: since
+                      in: query
+                      required: true
+                      schema:
+                        type: string
+                        format: date
+                    - name: X-Trace-Id
+                      in: header
+                      required: true
+                      schema:
+                        type: string
+                        format: uuid
+                  responses:
+                    '200':
+                      description: OK
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        // The generated client class isn't `open`, so it can't be subclassed with a mock HttpClient
+        // from a test — this test only proves the call-site .toString()/.encodeURLPathPart() code
+        // BodyGenerator emits for these three types actually compiles and type-checks, by referencing
+        // the generated function with real Uuid/Instant/LocalDate arguments. The exact encoded string
+        // shape is covered by ClientGeneratorTest at the KotlinPoet-source level, and the encoding
+        // primitives themselves (Ktor's encodeURLPathPart, LocalDate/Instant ISO-8601 toString) are
+        // exercised directly in the path-param-encoding functional test above.
+        writeFile(
+            "src/test/kotlin/DateTimeParamUsageTest.kt",
+            """
+            import com.example.api.EventsApi
+            import kotlin.test.Test
+            import kotlin.time.Instant
+            import kotlin.uuid.ExperimentalUuidApi
+            import kotlin.uuid.Uuid
+            import kotlinx.datetime.LocalDate
+
+            @OptIn(ExperimentalUuidApi::class)
+            class DateTimeParamUsageTest {
+                private val api = EventsApi("https://example.com")
+
+                // Never invoked (there is no mock server to call) — its BODY must still type-check,
+                // which is enough to prove every encodeParam(...)/.toString() call site BodyGenerator
+                // emitted for Uuid/Instant/LocalDate path/query/header params resolves against the
+                // real types. If any of them had no valid target, this file would fail to compile.
+                private suspend fun exerciseGeneratedCallSites() {
+                    val eventId = Uuid.parse("f47ac10b-58cc-4372-a567-0e02b2c3d479")
+                    val occurredAt = Instant.parse("2024-01-15T10:30:00Z")
+                    val since = LocalDate.parse("2024-01-15")
+                    val traceId = Uuid.parse("f47ac10b-58cc-4372-a567-0e02b2c3d479")
+                    api.getEvent(eventId, occurredAt)
+                    api.listEvents(since, traceId)
+                }
+
+                @Test
+                fun `compiles`() {
+                    // See exerciseGeneratedCallSites() above — that's the actual assertion.
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("compileTestKotlin").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":compileTestKotlin")?.outcome,
+            "Uuid/Instant/LocalDate params must compile against the real types",
+        )
+    }
+
+    @Test
     fun `multiple specs with identical security schemes pass the build`() {
         writeFile(
             "api/spec1.yaml",

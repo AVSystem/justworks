@@ -762,6 +762,136 @@ class ClientGeneratorTest {
         assertFalse(body.contains("encodePathParam(xTraceId)"), "Header param must not use encodePathParam")
     }
 
+    // -- Uuid/Instant/LocalDate params: encoded via a direct .toString() call site, not
+    // encodeParam/encodePathParam. These types are JSON-primitive-safe, but ApiClientBase.kt is
+    // generated once, independent of any spec, so giving them a shared overload there would force
+    // every generated client to opt into ExperimentalUuidApi / depend on kotlinx-datetime even for
+    // specs that never use them.
+
+    @Test
+    fun `Uuid path parameter is stringified and URL-path-encoded at the call site`() {
+        val ep = endpoint(
+            path = "/events/{eventId}",
+            operationId = "getEvent",
+            parameters = listOf(
+                Parameter("eventId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.UUID), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getEvent" }
+        val body = funSpec.body.toString()
+        // KotlinPoet fully-qualifies %M references (e.g. io.ktor.http.encodeURLPathPart) when
+        // rendering a bare FunSpec outside a FileSpec's import context, so check the pieces
+        // separately rather than one contiguous "toString().encodeURLPathPart()" substring.
+        assertTrue(body.contains("eventId.toString()"), "Expected a direct toString() call, got: $body")
+        assertTrue(body.contains("encodeURLPathPart()"), "Expected URL-path-encoding, got: $body")
+        assertFalse(body.contains("encodePathParam(eventId)"), "Uuid path param must not go through encodePathParam")
+    }
+
+    @Test
+    fun `Instant path parameter is stringified and URL-path-encoded at the call site`() {
+        val ep = endpoint(
+            path = "/events/{occurredAt}",
+            operationId = "getEvent",
+            parameters = listOf(
+                Parameter("occurredAt", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.DATE_TIME), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getEvent" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("occurredAt.toString()"), "Expected a direct toString() call, got: $body")
+        assertTrue(body.contains("encodeURLPathPart()"), "Expected URL-path-encoding, got: $body")
+        assertFalse(
+            body.contains("encodePathParam(occurredAt)"),
+            "Instant path param must not go through encodePathParam",
+        )
+    }
+
+    @Test
+    fun `optional LocalDate query parameter is stringified at the call site, inside the null guard`() {
+        val ep = endpoint(
+            operationId = "listEvents",
+            parameters = listOf(
+                Parameter("since", ParameterLocation.QUERY, false, TypeRef.Primitive(PrimitiveType.DATE), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listEvents" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("if (since != null)"), "Expected null guard for optional param")
+        assertTrue(
+            body.contains("""this.parameters.append("since", since.toString())"""),
+            "Expected direct toString() call, got: $body",
+        )
+        assertFalse(body.contains("encodeParam(since)"), "LocalDate query param must not go through encodeParam")
+    }
+
+    @Test
+    fun `optional Uuid header parameter is stringified at the call site, inside the null guard`() {
+        val ep = endpoint(
+            operationId = "listEvents",
+            parameters = listOf(
+                Parameter("traceId", ParameterLocation.HEADER, false, TypeRef.Primitive(PrimitiveType.UUID), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listEvents" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("if (traceId != null)"), "Expected null guard for optional param")
+        assertTrue(
+            body.contains("""append("traceId", traceId.toString())"""),
+            "Expected direct toString() call, got: $body",
+        )
+        assertFalse(body.contains("encodeParam(traceId)"), "Uuid header param must not go through encodeParam")
+    }
+
+    @Test
+    fun `Int query parameter still resolves through encodeParam via the Number overload`() {
+        val ep = endpoint(
+            operationId = "listEvents",
+            parameters = listOf(
+                Parameter("limit", ParameterLocation.QUERY, false, TypeRef.Primitive(PrimitiveType.INT), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listEvents" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("""this.parameters.append("limit","""), "Expected append(\"limit\", ...), got: $body")
+        assertTrue(body.contains("encodeParam(limit)"), "Expected Int query param to still go through encodeParam")
+    }
+
+    // -- Uuid-typed param/body/response forces the generated client file to opt into
+    // ExperimentalUuidApi, since the function signature references kotlin.uuid.Uuid directly
+    // (independent of how encodeParam/encodePathParam encode it).
+
+    @Test
+    fun `client file opts into ExperimentalUuidApi when a param is Uuid-typed`() {
+        val ep = endpoint(
+            path = "/events/{eventId}",
+            operationId = "getEvent",
+            parameters = listOf(
+                Parameter("eventId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.UUID), null),
+            ),
+        )
+        val file = generate(spec(ep)).first()
+        val optInAnnotation = file.annotations.firstOrNull { it.typeName.toString() == "kotlin.OptIn" }
+        assertNotNull(optInAnnotation, "Expected a file-level @OptIn annotation")
+        assertTrue(
+            optInAnnotation.members.any { it.toString().contains("ExperimentalUuidApi") },
+            "Expected @OptIn(ExperimentalUuidApi::class)",
+        )
+    }
+
+    @Test
+    fun `client file does not opt into ExperimentalUuidApi when no param is Uuid-typed`() {
+        val file = generate(spec(endpoint())).first()
+        assertTrue(
+            file.annotations.none { it.typeName.toString() == "kotlin.OptIn" },
+            "Expected no file-level @OptIn when no Uuid is involved",
+        )
+    }
+
     // -- URL interpolation: baseUrl must be interpolated, not literal --
 
     @Test
