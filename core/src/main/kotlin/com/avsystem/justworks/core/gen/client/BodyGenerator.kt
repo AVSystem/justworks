@@ -8,6 +8,7 @@ import com.avsystem.justworks.core.gen.CONTENT_TYPE_APPLICATION
 import com.avsystem.justworks.core.gen.CONTENT_TYPE_FUN
 import com.avsystem.justworks.core.gen.DELETE_FUN
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
+import com.avsystem.justworks.core.gen.ENCODE_PATH_PARAM_FUN
 import com.avsystem.justworks.core.gen.FORM_DATA_FUN
 import com.avsystem.justworks.core.gen.GET_FUN
 import com.avsystem.justworks.core.gen.HEADERS_CLASS
@@ -214,7 +215,9 @@ internal object BodyGenerator {
         val (format, args) = params[ParameterLocation.PATH]
             .orEmpty()
             .fold($$"${%L}" + endpoint.path to listOf<Any>(BASE_URL)) { (format, args), param ->
-                format.replace("{${param.name}}", $$"${%M(%L)}") to args + ENCODE_PARAM_FUN + param.name.toCamelCase()
+                val newFormat = format.replace("{${param.name}}", $$"${%M(%L)}")
+                val newArgs = args + ENCODE_PATH_PARAM_FUN + param.name.toCamelCase()
+                newFormat to newArgs
             }
         return CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
     }

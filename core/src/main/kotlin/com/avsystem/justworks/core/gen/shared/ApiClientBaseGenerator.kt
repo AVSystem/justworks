@@ -10,7 +10,9 @@ import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
 import com.avsystem.justworks.core.gen.DESERIALIZE_ERROR_BODY_FUN
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
-import com.avsystem.justworks.core.gen.ENCODE_TO_STRING_FUN
+import com.avsystem.justworks.core.gen.ENCODE_PATH_PARAM_FUN
+import com.avsystem.justworks.core.gen.ENCODE_TO_JSON_ELEMENT_FUN
+import com.avsystem.justworks.core.gen.ENCODE_URL_PATH_PART_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
 import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
@@ -21,6 +23,7 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.IO_EXCEPTION
 import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_FUN
+import com.avsystem.justworks.core.gen.JSON_PRIMITIVE_EXT
 import com.avsystem.justworks.core.gen.SAFE_CALL
 import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
 import com.squareup.kotlinpoet.ClassName
@@ -58,6 +61,7 @@ internal object ApiClientBaseGenerator {
         return FileSpec
             .builder(API_CLIENT_BASE)
             .addFunction(buildEncodeParam(t))
+            .addFunction(buildEncodePathParam(t))
             .addFunction(buildDeserializeErrorBody(e))
             .addFunction(buildMapToResult(e, t))
             .addFunction(buildToResult(e, t))
@@ -72,7 +76,16 @@ internal object ApiClientBaseGenerator {
         .addTypeVariable(t)
         .addParameter("value", TypeVariableName("T"))
         .returns(STRING)
-        .addStatement("return %T.%M(value).trim('\"')", JSON_CLASS, ENCODE_TO_STRING_FUN)
+        .addStatement("return %T.%M(value).%M.content", JSON_CLASS, ENCODE_TO_JSON_ELEMENT_FUN, JSON_PRIMITIVE_EXT)
+        .build()
+
+    private fun buildEncodePathParam(t: TypeVariableName): FunSpec = FunSpec
+        .builder(ENCODE_PATH_PARAM_FUN.simpleName)
+        .addModifiers(KModifier.INLINE)
+        .addTypeVariable(t)
+        .addParameter("value", TypeVariableName("T"))
+        .returns(STRING)
+        .addStatement("return %M(value).%M()", ENCODE_PARAM_FUN, ENCODE_URL_PATH_PART_FUN)
         .build()
 
     private fun buildDeserializeErrorBody(e: TypeVariableName): FunSpec = FunSpec

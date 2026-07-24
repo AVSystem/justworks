@@ -10,6 +10,7 @@ import com.squareup.kotlinpoet.MemberName
 val HTTP_CLIENT = ClassName("io.ktor.client", "HttpClient")
 val CONTENT_NEGOTIATION = ClassName("io.ktor.client.plugins.contentnegotiation", "ContentNegotiation")
 val HTTP_HEADERS = ClassName("io.ktor.http", "HttpHeaders")
+val ENCODE_URL_PATH_PART_FUN = MemberName("io.ktor.http", "encodeURLPathPart")
 
 val JSON_FUN = MemberName("io.ktor.serialization.kotlinx.json", "json")
 val BODY_FUN = MemberName("io.ktor.client.call", "body")
@@ -59,6 +60,8 @@ val JSON_ENCODER = ClassName("kotlinx.serialization.json", "JsonEncoder")
 val SERIALIZERS_MODULE = ClassName("kotlinx.serialization.modules", "SerializersModule")
 
 val JSON_OBJECT_EXT = MemberName("kotlinx.serialization.json", "jsonObject")
+val JSON_PRIMITIVE_EXT = MemberName("kotlinx.serialization.json", "jsonPrimitive")
+val ENCODE_TO_JSON_ELEMENT_FUN = MemberName("kotlinx.serialization.json", "encodeToJsonElement")
 
 val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
 val SERIAL_DESCRIPTOR = ClassName("kotlinx.serialization.descriptors", "SerialDescriptor")
@@ -68,7 +71,6 @@ val PRIMITIVE_KIND = ClassName("kotlinx.serialization.descriptors", "PrimitiveKi
 val DECODER = ClassName("kotlinx.serialization.encoding", "Decoder")
 val ENCODER = ClassName("kotlinx.serialization.encoding", "Encoder")
 
-val ENCODE_TO_STRING_FUN = MemberName("kotlinx.serialization", "encodeToString")
 val POLYMORPHIC_FUN = MemberName("kotlinx.serialization.modules", "polymorphic")
 val SUBCLASS_FUN = MemberName("kotlinx.serialization.modules", "subclass")
 
@@ -115,6 +117,7 @@ val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuild
 val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
 val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
 val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")
+val ENCODE_PATH_PARAM_FUN = MemberName("com.avsystem.justworks", "encodePathParam")
 val UUID_SERIALIZER = ClassName("com.avsystem.justworks", "UuidSerializer")
 
 // ============================================================================
