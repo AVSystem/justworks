@@ -29,10 +29,15 @@ class ClientGeneratorTest {
     private val apiPackage = "com.example.api"
     private val modelPackage = "com.example.model"
 
-    private fun generate(spec: ApiSpec, hasPolymorphicTypes: Boolean = false): List<FileSpec> = context(
+    private fun generate(
+        spec: ApiSpec,
+        hasPolymorphicTypes: Boolean = false,
+        options: OutputOptions = OutputOptions(),
+    ): List<FileSpec> = context(
         Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(spec.schemas)
         },
+        options,
         ApiPackage(apiPackage),
         NameRegistry(),
     ) {
@@ -107,6 +112,39 @@ class ClientGeneratorTest {
         assertEquals(listOf("PetsApi", "StoreApi"), classNames)
     }
 
+    // -- API class prefix / suffix --
+
+    private fun clientClassName(options: OutputOptions): String =
+        generate(spec(endpoint(tags = listOf("Pets"))), options = options)
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+            .name!!
+
+    @Test
+    fun `default api class name uses Api suffix`() {
+        assertEquals("PetsApi", clientClassName(OutputOptions()))
+    }
+
+    @Test
+    fun `custom api class suffix is applied`() {
+        assertEquals("PetsClient", clientClassName(OutputOptions(apiClassSuffix = "Client")))
+    }
+
+    @Test
+    fun `custom api class prefix is applied`() {
+        assertEquals("MyPetsApi", clientClassName(OutputOptions(apiClassPrefix = "My")))
+    }
+
+    @Test
+    fun `custom api class prefix and suffix combined`() {
+        assertEquals(
+            "MyPetsClient",
+            clientClassName(OutputOptions(apiClassPrefix = "My", apiClassSuffix = "Client")),
+        )
+    }
+
     // -- CLNT-02: Endpoint functions are suspend --
 
     @Test
@@ -114,6 +152,30 @@ class ClientGeneratorTest {
         val cls = clientClass(endpoint())
         val funSpec = cls.funSpecs.first { it.name == "listPets" }
         assertTrue(KModifier.SUSPEND in funSpec.modifiers, "Expected SUSPEND modifier")
+    }
+
+    // -- generateKdoc flag --
+
+    @Test
+    fun `generateKdoc false suppresses function KDoc`() {
+        val ep = endpoint(operationId = "listPets", summary = "List all pets")
+        val withKdoc = generate(spec(ep))
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+            .funSpecs
+            .first { it.name == "listPets" }
+        assertTrue(withKdoc.kdoc.toString().contains("List all pets"), "Expected KDoc by default")
+
+        val noKdoc = generate(spec(ep), options = OutputOptions(generateKdoc = false))
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+            .funSpecs
+            .first { it.name == "listPets" }
+        assertTrue(noKdoc.kdoc.toString().isEmpty(), "Expected no KDoc when generateKdoc=false")
     }
 
     // -- CLNT-03: All HTTP methods --

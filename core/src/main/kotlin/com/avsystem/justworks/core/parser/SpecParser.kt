@@ -17,7 +17,6 @@ import com.avsystem.justworks.core.accumulate
 import com.avsystem.justworks.core.accumulateAndReturnNull
 import com.avsystem.justworks.core.ensureNotNullOrAccumulate
 import com.avsystem.justworks.core.ensureOrAccumulate
-import com.avsystem.justworks.core.gen.properties
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.ContentType
@@ -38,6 +37,14 @@ import com.avsystem.justworks.core.model.TypeRef
 import com.avsystem.justworks.core.toEnumOrNull
 import com.fasterxml.jackson.databind.JsonNode
 import com.fasterxml.jackson.databind.node.ArrayNode
+import com.fasterxml.jackson.databind.node.BinaryNode
+import com.fasterxml.jackson.databind.node.BooleanNode
+import com.fasterxml.jackson.databind.node.MissingNode
+import com.fasterxml.jackson.databind.node.NullNode
+import com.fasterxml.jackson.databind.node.NumericNode
+import com.fasterxml.jackson.databind.node.ObjectNode
+import com.fasterxml.jackson.databind.node.POJONode
+import com.fasterxml.jackson.databind.node.TextNode
 import io.swagger.parser.OpenAPIParser
 import io.swagger.v3.oas.models.OpenAPI
 import io.swagger.v3.oas.models.PathItem
@@ -47,7 +54,6 @@ import io.swagger.v3.oas.models.security.SecurityRequirement
 import io.swagger.v3.parser.core.models.ParseOptions
 import java.io.File
 import java.util.IdentityHashMap
-import kotlin.collections.emptyMap
 import io.swagger.v3.oas.models.parameters.Parameter as SwaggerParameter
 import io.swagger.v3.oas.models.security.SecurityScheme as SwaggerSecurityScheme
 
@@ -325,7 +331,7 @@ object SpecParser {
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
-        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
+        val (oneOf, oneOfWrapperMapping) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
             ?: (schema.oneOf?.mapNotNull { it.resolveName() } to null)
 
         val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
@@ -346,7 +352,7 @@ object SpecParser {
                 props to requiredProps
             }
 
-        val discriminator = discriminatorFromWrapper ?: nullable {
+        val discriminator = nullable {
             val disc = schema.discriminator.bind()
             val propertyName = disc.propertyName.bind()
             Discriminator(propertyName = propertyName, mapping = disc.mapping.orEmpty())
@@ -369,6 +375,7 @@ object SpecParser {
             oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
+            oneOfWrapperMapping = oneOfWrapperMapping,
             underlyingType = underlyingType,
         )
     }
@@ -396,17 +403,15 @@ object SpecParser {
         val topRequired = schema.required.orEmpty().toSet()
         val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
 
-        val (required, properties) = schema.allOf
-            .orEmpty()
-            .fold(topRequired to emptyMap<String, PropertyModel>()) { (accRequired, accProperties), subSchema ->
-                val resolvedSchema = subSchema.resolveSubSchema()
-                val mergedRequired = accRequired + resolvedSchema.required.orEmpty().toSet()
-                mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired, contextCreator)
-            }
+        val subSchemas = schema.allOf.orEmpty().map { it.resolveSubSchema() }
 
-        val topLevelProperties = schema.propertyModels(required, contextCreator)
-        val finalProperties =
-            properties.plus(topLevelProperties).values.map { prop -> prop.copy(nullable = prop.name !in required) }
+        val required = topRequired + subSchemas.flatMap { it.required.orEmpty() }.toSet()
+
+        val properties = subSchemas.fold(emptyMap<String, PropertyModel>()) { accProperties, resolvedSchema ->
+            accProperties + resolvedSchema.propertyModels(required, contextCreator)
+        }
+
+        val finalProperties = properties.plus(schema.propertyModels(required, contextCreator)).values.toList()
 
         return finalProperties to required
     }
@@ -425,10 +430,11 @@ object SpecParser {
      * - Every variant has exactly one property
      * - The property value is either a $ref or an inline object
      *
-     * Returns: Pair of (unwrapped oneOf refs, synthetic discriminator) or null if pattern not matched.
+     * Returns: Pair of (unwrapped oneOf refs, wrapper-key -> variant-schema-name mapping) or null
+     * if the pattern is not matched. The mapping drives the bespoke externally-tagged serializer.
      */
     context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
-    private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Discriminator>? = nullable {
+    private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Map<String, String>>? = nullable {
         ensure(!schema.oneOf.isNullOrEmpty() && schema.discriminator == null)
 
         val variants = schema.oneOf.orEmpty()
@@ -456,8 +462,7 @@ object SpecParser {
 
         ensure(unwrapped.size == variants.size)
 
-        val mapping = unwrapped.mapValues { (_, schemaName) -> "$SCHEMA_PREFIX$schemaName" }
-        unwrapped.values.toList() to Discriminator(propertyName = "type", mapping = mapping)
+        unwrapped.values.toList() to unwrapped
     }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
@@ -533,27 +538,19 @@ object SpecParser {
 
     /**
      * Normalizes a raw Swagger default into a plain Kotlin value the model layer can format
-     * without depending on Jackson. Array defaults arrive as a Jackson [ArrayNode]; unwrap them
-     * into a `List` of plain scalar values. Scalar defaults are already plain and pass through.
+     * without depending on Jackson. Jackson [JsonNode] defaults are unwrapped recursively into
+     * plain `List`/`Map`/scalar values; already-plain defaults pass through unchanged.
      */
     private fun normalizeDefault(default: Any?): Any? = when (default) {
         is ArrayNode -> default.map { normalizeDefault(it) }
-
-        is JsonNode -> when {
-            default.isShort -> default.shortValue()
-            default.isInt -> default.intValue()
-            default.isLong -> default.longValue()
-            default.isFloat -> default.floatValue()
-            default.isDouble -> default.doubleValue()
-            default.isBigDecimal -> default.decimalValue()
-            default.isBigInteger -> default.bigIntegerValue()
-            default.isNumber -> default.numberValue()
-            default.isBoolean -> default.booleanValue()
-            default.isNull -> null
-            default.isBinary -> default.binaryValue()
-            else -> default.asText()
-        }
-
+        is ObjectNode -> default.properties().associate { (k, v) -> k to normalizeDefault(v) }
+        is NullNode, is MissingNode -> null
+        is BooleanNode -> default.booleanValue()
+        is BinaryNode -> default.binaryValue()
+        is NumericNode -> default.numberValue()
+        is TextNode -> default.textValue()
+        is POJONode -> normalizeDefault(default.pojo)
+        is JsonNode -> default.asText()
         else -> default
     }
 
@@ -597,7 +594,8 @@ object SpecParser {
                     name = propName,
                     type = type,
                     description = propSchema.description,
-                    nullable = propName !in required && !type.honorsDefault(propSchema.default),
+                    nullable = propSchema.nullable == true ||
+                        (propName !in required && !type.honorsDefault(propSchema.default)),
                     defaultValue = normalizeDefault(propSchema.default),
                 )
             }

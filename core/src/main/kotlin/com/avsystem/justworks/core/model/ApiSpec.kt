@@ -107,6 +107,13 @@ data class SchemaModel(
     val oneOf: List<TypeRef>?,
     val anyOf: List<TypeRef>?,
     val discriminator: Discriminator?,
+    /**
+     * Non-null marks an externally-tagged wrapper `oneOf` (each variant is a single-key wrapper
+     * object `{"TypeName": {...}}`). Maps the wrapper key to the variant schema name. Such unions
+     * are serialized via a bespoke `KSerializer` that unwraps/rewraps the key, not via a
+     * `@JsonClassDiscriminator` (which would wrongly expect internal tagging).
+     */
+    val oneOfWrapperMapping: Map<String, String>? = null,
     val underlyingType: TypeRef? = null,
 )
 

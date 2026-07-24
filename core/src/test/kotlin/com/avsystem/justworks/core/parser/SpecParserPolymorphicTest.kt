@@ -75,34 +75,30 @@ class SpecParserPolymorphicTest : SpecParserTestBase() {
     }
 
     @Test
-    fun `boolean discriminator mapping preserves original values as keys`() {
+    fun `wrapper oneOf maps wrapper keys to variant schema names, without a discriminator`() {
         val spec = parseSpec(loadResource("boolean-discriminator-spec.yaml"))
 
         val deviceStatus =
             spec.schemas.find { it.name == "DeviceStatus" }
                 ?: fail("DeviceStatus schema not found. Schemas: ${spec.schemas.map { it.name }}")
 
-        val discriminator = assertNotNull(deviceStatus.discriminator, "DeviceStatus should have discriminator")
-        val mappingKeys = discriminator.mapping.keys
-
-        assertTrue(
-            "true" in mappingKeys,
-            "Discriminator mapping should have 'true' as key. Keys: $mappingKeys",
-        )
-        assertTrue(
-            "false" in mappingKeys,
-            "Discriminator mapping should have 'false' as key. Keys: $mappingKeys",
+        // Externally-tagged wrapper unions must NOT get a synthetic internal discriminator:
+        // discrimination happens on the wrapper key via the bespoke serializer instead.
+        assertEquals(
+            null,
+            deviceStatus.discriminator,
+            "Wrapper oneOf must not synthesize an internal discriminator",
         )
 
-        // Values reference original schema names
-        assertTrue(
-            discriminator.mapping["true"]!!.endsWith("true"),
-            "Mapping for 'true' should reference 'true'. Value: ${discriminator.mapping["true"]}",
+        val mapping = assertNotNull(
+            deviceStatus.oneOfWrapperMapping,
+            "DeviceStatus should carry a oneOfWrapperMapping",
         )
-        assertTrue(
-            discriminator.mapping["false"]!!.endsWith("false"),
-            "Mapping for 'false' should reference 'false'. Value: ${discriminator.mapping["false"]}",
-        )
+
+        // Keys are the wrapper keys; values are the (original) variant schema names.
+        assertEquals(setOf("true", "false"), mapping.keys, "Wrapper keys should be preserved")
+        assertEquals("true", mapping["true"], "Wrapper key 'true' maps to variant schema 'true'")
+        assertEquals("false", mapping["false"], "Wrapper key 'false' maps to variant schema 'false'")
     }
 
     @Test
