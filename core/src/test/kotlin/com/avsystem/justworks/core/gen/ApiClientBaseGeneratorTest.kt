@@ -101,6 +101,32 @@ class ApiClientBaseGeneratorTest {
         assertTrue(typeVar.isReified, "Expected reified type variable")
     }
 
+    @Test
+    fun `encodeParam extracts raw JSON primitive content without URL-encoding`() {
+        val fn = topLevelFun("encodeParam")
+        val body = fn.body.toString()
+        assertTrue(body.contains("encodeToJsonElement"), "Expected encodeToJsonElement call")
+        assertTrue(body.contains("jsonPrimitive"), "Expected jsonPrimitive extraction")
+        assertTrue(body.contains(".content"), "Expected raw .content, not a URL-encoded value")
+        assertTrue(!body.contains("encodeURLPathPart"), "encodeParam must not URL-encode")
+    }
+
+    @Test
+    fun `encodePathParam is inline with reified type parameter`() {
+        val fn = topLevelFun("encodePathParam")
+        assertTrue(KModifier.INLINE in fn.modifiers)
+        val typeVar = fn.typeVariables.first()
+        assertTrue(typeVar.isReified, "Expected reified type variable")
+    }
+
+    @Test
+    fun `encodePathParam delegates to encodeParam and URL-encodes the path segment`() {
+        val fn = topLevelFun("encodePathParam")
+        val body = fn.body.toString()
+        assertTrue(body.contains("encodeParam(value)"), "Expected delegation to encodeParam")
+        assertTrue(body.contains("encodeURLPathPart"), "Expected encodeURLPathPart to escape the segment")
+    }
+
     @OptIn(ExperimentalKotlinPoetApi::class)
     @Test
     fun `toResult is suspend inline with reified E and T, no context parameter`() {

@@ -697,6 +697,43 @@ class ClientGeneratorTest {
         assertFalse(body.contains("if (body"), "Should NOT check body != null when no requestBody")
     }
 
+    // -- Path params must be URL-encoded via encodePathParam, not the raw encodeParam --
+
+    @Test
+    fun `path parameters are encoded via encodePathParam`() {
+        val ep = endpoint(
+            path = "/pets/{petId}",
+            operationId = "getPet",
+            parameters = listOf(
+                Parameter("petId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.STRING), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getPet" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("encodePathParam(petId)"), "Expected path param encoded via encodePathParam")
+    }
+
+    @Test
+    fun `query and header parameters still use encodeParam, not encodePathParam`() {
+        val ep = endpoint(
+            path = "/pets/{petId}",
+            operationId = "getPet",
+            parameters = listOf(
+                Parameter("petId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.STRING), null),
+                Parameter("filter", ParameterLocation.QUERY, true, TypeRef.Primitive(PrimitiveType.STRING), null),
+                Parameter("X-Trace-Id", ParameterLocation.HEADER, true, TypeRef.Primitive(PrimitiveType.STRING), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getPet" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("encodeParam(filter)"), "Expected query param encoded via encodeParam")
+        assertTrue(body.contains("encodeParam(xTraceId)"), "Expected header param encoded via encodeParam")
+        assertFalse(body.contains("encodePathParam(filter)"), "Query param must not use encodePathParam")
+        assertFalse(body.contains("encodePathParam(xTraceId)"), "Header param must not use encodePathParam")
+    }
+
     // -- URL interpolation: baseUrl must be interpolated, not literal --
 
     @Test

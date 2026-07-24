@@ -966,6 +966,93 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
+    fun `path parameter values with spaces and slashes are percent-encoded, not left raw`() {
+        // Regression test for issue #108: path params were previously interpolated via encodeParam,
+        // which strips the JSON quotes but does NOT URL-encode. A "/" would split the URL into an
+        // extra path segment, and a raw space would produce an invalid URL. Both must now go through
+        // the generated encodePathParam(), which additionally applies Ktor's encodeURLPathPart().
+        writeBuildFile()
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "src/test/kotlin/PathParamEncodingTest.kt",
+            """
+            import com.avsystem.justworks.encodePathParam
+            import kotlin.test.Test
+            import kotlin.test.assertEquals
+            import kotlin.test.assertFalse
+
+            class PathParamEncodingTest {
+                @Test
+                fun `space in a path param value is percent-encoded rather than left raw`() {
+                    val encoded = encodePathParam("free form")
+                    assertFalse(' ' in encoded, "Raw space in a URL path segment: ${'$'}encoded")
+                    assertEquals("free%20form", encoded)
+                }
+
+                @Test
+                fun `slash in a path param value is percent-encoded rather than splitting the path`() {
+                    val encoded = encodePathParam("a/b")
+                    assertFalse('/' in encoded, "A literal slash would introduce an extra path segment: ${'$'}encoded")
+                    assertEquals("a%2Fb", encoded)
+                }
+
+                @Test
+                fun `value with both a space and a slash is fully percent-encoded`() {
+                    val encoded = encodePathParam("a b/c")
+                    assertEquals("a%20b%2Fc", encoded)
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("test").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":test")?.outcome,
+            "path param encoding test against the generated encodePathParam() should pass",
+        )
+    }
+
+    @Test
     fun `multiple specs with identical security schemes pass the build`() {
         writeFile(
             "api/spec1.yaml",
