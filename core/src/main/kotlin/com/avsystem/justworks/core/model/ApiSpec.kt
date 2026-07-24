@@ -63,11 +63,11 @@ data class Parameter(
     val description: String?,
 )
 
-// todo: add cookie
 enum class ParameterLocation {
     PATH,
     QUERY,
-    HEADER
+    HEADER,
+    COOKIE
 }
 
 data class RequestBody(
