@@ -9,6 +9,7 @@ import com.avsystem.justworks.core.gen.CONTENT_TYPE_FUN
 import com.avsystem.justworks.core.gen.DELETE_FUN
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
 import com.avsystem.justworks.core.gen.ENCODE_PATH_PARAM_FUN
+import com.avsystem.justworks.core.gen.ENCODE_URL_PATH_PART_FUN
 import com.avsystem.justworks.core.gen.FORM_DATA_FUN
 import com.avsystem.justworks.core.gen.GET_FUN
 import com.avsystem.justworks.core.gen.HEADERS_CLASS
@@ -223,13 +224,27 @@ internal object BodyGenerator {
         }
     }
 
+    // These types are always JSON-primitive-safe but live outside the shared ApiClientBase.kt
+    // overload set (String/Number/Boolean/Enum<T>) so that referencing them doesn't force every
+    // generated client to depend on kotlinx-datetime or opt into ExperimentalUuidApi. Their values
+    // are stringified directly at the call site instead of going through encodeParam/encodePathParam.
+    private val CALLSITE_TO_STRING_TYPES = setOf(PrimitiveType.UUID, PrimitiveType.DATE_TIME, PrimitiveType.DATE)
+
+    private fun Parameter.needsCallsiteToString(): Boolean =
+        (schema as? TypeRef.Primitive)?.type in CALLSITE_TO_STRING_TYPES
+
     private fun buildUrlString(endpoint: Endpoint, params: Map<ParameterLocation, List<Parameter>>): CodeBlock {
         val (format, args) = params[ParameterLocation.PATH]
             .orEmpty()
             .fold($$"${%L}" + endpoint.path to listOf<Any>(BASE_URL)) { (format, args), param ->
-                val newFormat = format.replace("{${param.name}}", $$"${%M(%L)}")
-                val newArgs = args + ENCODE_PATH_PARAM_FUN + param.name.toCamelCase()
-                newFormat to newArgs
+                val paramName = param.name.toCamelCase()
+                val (placeholder, newArgs) = if (param.needsCallsiteToString()) {
+                    $$"${%L.toString().%M()}" to listOf(paramName, ENCODE_URL_PATH_PART_FUN)
+                } else {
+                    $$"${%M(%L)}" to listOf(ENCODE_PATH_PARAM_FUN, paramName)
+                }
+                val newFormat = format.replace("{${param.name}}", placeholder)
+                newFormat to args + newArgs
             }
         return CodeBlock.of("%P", CodeBlock.of(format, *args.toTypedArray<Any>()))
     }
@@ -241,7 +256,11 @@ internal object BodyGenerator {
             for (param in headerParams) {
                 val paramName = param.name.toCamelCase()
                 optionalGuard(param.required, paramName) {
-                    addStatement("append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
+                    if (param.needsCallsiteToString()) {
+                        addStatement("append(%S, %L.toString())", param.name, paramName)
+                    } else {
+                        addStatement("append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
+                    }
                 }
             }
             endControlFlow()
@@ -255,7 +274,11 @@ internal object BodyGenerator {
             for (param in queryParams) {
                 val paramName = param.name.toCamelCase()
                 optionalGuard(param.required, paramName) {
-                    addStatement("this.parameters.append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
+                    if (param.needsCallsiteToString()) {
+                        addStatement("this.parameters.append(%S, %L.toString())", param.name, paramName)
+                    } else {
+                        addStatement("this.parameters.append(%S, %M(%L))", param.name, ENCODE_PARAM_FUN, paramName)
+                    }
                 }
             }
             endControlFlow()
