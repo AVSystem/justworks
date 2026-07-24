@@ -126,6 +126,49 @@ class SpecParserTest : SpecParserTestBase() {
     }
 
     @Test
+    fun `parses non-JSON response content types`() {
+        val spec = File.createTempFile("response-content", ".yaml").apply { deleteOnExit() }
+        spec.writeText(
+            """
+            openapi: 3.0.0
+            info:
+              title: Content API
+              version: 1.0.0
+            paths:
+              /text:
+                get:
+                  operationId: getText
+                  responses:
+                    '200':
+                      description: ok
+                      content:
+                        text/plain:
+                          schema:
+                            type: string
+              /binary:
+                get:
+                  operationId: getBinary
+                  responses:
+                    '200':
+                      description: ok
+                      content:
+                        application/octet-stream: {}
+            """.trimIndent(),
+        )
+        val parsed = parseSpec(spec)
+
+        val text = parsed.endpoints.find { it.operationId == "getText" } ?: fail("getText not found")
+        val textResp = text.responses["200"] ?: fail("text 200 response not found")
+        assertEquals(ContentType.TEXT_PLAIN, textResp.contentType)
+        assertEquals(PrimitiveType.STRING, assertIs<TypeRef.Primitive>(textResp.schema).type)
+
+        val binary = parsed.endpoints.find { it.operationId == "getBinary" } ?: fail("getBinary not found")
+        val binaryResp = binary.responses["200"] ?: fail("binary 200 response not found")
+        assertEquals(ContentType.OCTET_STREAM, binaryResp.contentType)
+        assertEquals(PrimitiveType.BYTE_ARRAY, assertIs<TypeRef.Primitive>(binaryResp.schema).type)
+    }
+
+    @Test
     fun `parsed POST pets has requestBody referencing NewPet`() {
         val createPet =
             petstore.endpoints.find { it.operationId == "createPet" }
