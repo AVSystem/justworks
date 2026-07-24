@@ -7,6 +7,7 @@ import com.avsystem.justworks.core.gen.BASE64_CLASS
 import com.avsystem.justworks.core.gen.BASE_URL
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
+import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
 import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
@@ -17,11 +18,13 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
 import com.avsystem.justworks.core.gen.NameRegistry
+import com.avsystem.justworks.core.gen.OPT_IN
 import com.avsystem.justworks.core.gen.OutputOptions
 import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
+import com.avsystem.justworks.core.gen.containsUuid
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
@@ -32,6 +35,7 @@ import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.SecurityScheme
+import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -143,10 +147,28 @@ internal object ClientGenerator {
             classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })
         }
 
-        return FileSpec
-            .builder(className)
-            .addType(classBuilder.build())
-            .build()
+        val fileBuilder = FileSpec.builder(className).addType(classBuilder.build())
+        if (endpoints.usesUuid()) {
+            fileBuilder.addAnnotation(
+                AnnotationSpec
+                    .builder(OPT_IN)
+                    .addMember("%T::class", EXPERIMENTAL_UUID_API)
+                    .build(),
+            )
+        }
+        return fileBuilder.build()
+    }
+
+    // A Uuid-typed path/query/header param, request body, or response schema anywhere in this tag
+    // group means the generated function signatures reference kotlin.uuid.Uuid directly, which
+    // requires this file to opt into ExperimentalUuidApi (mirrors ModelGenerator's per-model check).
+    private fun List<Endpoint>.usesUuid(): Boolean = any { endpoint ->
+        val responseRefs = endpoint.responses.values
+            .asSequence()
+            .mapNotNull { it.schema }
+        val requestRef = endpoint.requestBody?.schema
+        val parameterRefs = endpoint.parameters.asSequence().map { it.schema }
+        (responseRefs + listOfNotNull(requestRef) + parameterRefs).any { it.containsUuid() }
     }
 
     private fun buildApplyAuth(
