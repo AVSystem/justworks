@@ -279,7 +279,7 @@ object SpecParser {
                         .orEmpty()
                         .mapValues { (code, resp) ->
                             val content: Content? = resp.content
-                            val responseContentType = content?.let { ContentType.entries.find { it in content } }
+                            val responseContentType = content?.let { ContentType.RESPONSE_TYPES.find { it in content } }
                             val typeName = "${operationId.replaceFirstChar { it.uppercase() }}Response"
                             val schema = responseContentType
                                 ?.let { content[it] }

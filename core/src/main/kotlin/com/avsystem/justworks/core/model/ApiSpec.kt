@@ -87,6 +87,7 @@ enum class ContentType(val value: String) {
 
     companion object {
         val REQUEST_TYPES = listOf(MULTIPART_FORM_DATA, FORM_URL_ENCODED, JSON_CONTENT_TYPE)
+        val RESPONSE_TYPES = listOf(JSON_CONTENT_TYPE, TEXT_PLAIN, OCTET_STREAM)
     }
 }
 
