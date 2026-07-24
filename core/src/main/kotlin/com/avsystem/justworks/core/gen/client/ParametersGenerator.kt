@@ -52,8 +52,20 @@ internal object ParametersGenerator {
 
     context(_: Hierarchy)
     fun buildBodyParams(requestBody: RequestBody) = when (requestBody.contentType) {
-        ContentType.MULTIPART_FORM_DATA -> buildMultipartParameters(requestBody)
-        ContentType.FORM_URL_ENCODED -> buildFormParameters(requestBody)
-        ContentType.JSON_CONTENT_TYPE -> listOf(buildNullableParameter(requestBody.schema, BODY, requestBody.required))
+        ContentType.MULTIPART_FORM_DATA -> {
+            buildMultipartParameters(requestBody)
+        }
+
+        ContentType.FORM_URL_ENCODED -> {
+            buildFormParameters(requestBody)
+        }
+
+        ContentType.JSON_CONTENT_TYPE -> {
+            listOf(buildNullableParameter(requestBody.schema, BODY, requestBody.required))
+        }
+
+        ContentType.TEXT_PLAIN, ContentType.OCTET_STREAM -> {
+            error("Unsupported request body content type: ${requestBody.contentType}")
+        }
     }
 }

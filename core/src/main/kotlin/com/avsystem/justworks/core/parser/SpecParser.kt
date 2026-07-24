@@ -266,7 +266,7 @@ object SpecParser {
                         val body = operation.requestBody.bind()
                         val content = body.content.bind()
 
-                        val contentType = ContentType.entries.find { it in content }.bind()
+                        val contentType = ContentType.REQUEST_TYPES.find { it in content }.bind()
 
                         val mediaType = content[contentType].bind()
 
@@ -284,14 +284,21 @@ object SpecParser {
                     val responses = operation.responses
                         .orEmpty()
                         .mapValues { (code, resp) ->
+                            val content: Content? = resp.content
+                            val responseContentType = content?.let { ContentType.RESPONSE_TYPES.find { it in content } }
+                            val typeName = "${operationId.replaceFirstChar { it.uppercase() }}Response"
+                            val schema = responseContentType
+                                ?.let { content[it] }
+                                ?.schema
+                                ?.takeUnless { it.isEmptyContent }
+                                ?.toTypeRef(typeName)
+                                ?: defaultResponseSchema(responseContentType)
+
                             Response(
                                 statusCode = code,
                                 description = resp.description,
-                                schema = resp.content
-                                    ?.get(ContentType.JSON_CONTENT_TYPE.value)
-                                    ?.schema
-                                    ?.takeUnless { it.isEmptyContent }
-                                    ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
+                                schema = schema,
+                                contentType = responseContentType,
                             )
                         }
 
@@ -651,6 +658,13 @@ object SpecParser {
                 }
             }
         return method.name.lowercase() + segments
+    }
+
+    /** Fallback response type when a non-JSON content type carries no explicit schema. */
+    private fun defaultResponseSchema(contentType: ContentType?): TypeRef? = when (contentType) {
+        ContentType.TEXT_PLAIN -> TypeRef.Primitive(PrimitiveType.STRING)
+        ContentType.OCTET_STREAM -> TypeRef.Primitive(PrimitiveType.BYTE_ARRAY)
+        else -> null
     }
 
     operator fun Content.get(contentType: ContentType) = this[contentType.value]
