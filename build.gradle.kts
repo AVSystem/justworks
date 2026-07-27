@@ -4,7 +4,7 @@ plugins {
     kotlin("jvm") version "2.4.0" apply false
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0" apply false
     id("org.jetbrains.kotlinx.kover") version "0.9.8" apply false
-    id("com.vanniktech.maven.publish") version "0.36.0" apply false
+    id("com.vanniktech.maven.publish") version "0.37.0" apply false
 }
 
 allprojects {
