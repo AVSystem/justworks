@@ -14,19 +14,26 @@ import com.squareup.kotlinpoet.LIST
 import com.squareup.kotlinpoet.LONG
 import com.squareup.kotlinpoet.MAP
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
+import com.squareup.kotlinpoet.SET
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 
 internal val TypeRef.properties: List<PropertyModel>
     get() = when (this) {
         is TypeRef.Inline -> properties
-        is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptyList()
+
+        is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum,
+        TypeRef.Unknown,
+        -> emptyList()
     }
 
 internal val TypeRef.requiredProperties: Set<String>
     get() = when (this) {
         is TypeRef.Inline -> requiredProperties
-        is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, TypeRef.Unknown -> emptySet()
+
+        is TypeRef.Array, is TypeRef.Map, is TypeRef.Primitive, is TypeRef.Reference, is TypeRef.InlineEnum,
+        TypeRef.Unknown,
+        -> emptySet()
     }
 
 context(hierarchy: Hierarchy)
@@ -47,7 +54,7 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
     }
 
     is TypeRef.Array -> {
-        LIST.parameterizedBy(items.toTypeName())
+        (if (unique) SET else LIST).parameterizedBy(items.toTypeName())
     }
 
     is TypeRef.Map -> {
@@ -60,6 +67,10 @@ internal fun TypeRef.toTypeName(): TypeName = when (this) {
 
     is TypeRef.Inline -> {
         error("TypeRef.Inline should have been resolved by InlineTypeResolver (contextHint=$contextHint)")
+    }
+
+    is TypeRef.InlineEnum -> {
+        error("TypeRef.InlineEnum should have been resolved by InlineTypeResolver (contextHint=$contextHint)")
     }
 
     is TypeRef.Unknown -> {

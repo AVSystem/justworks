@@ -56,9 +56,21 @@ internal object BodyGenerator {
 
         val urlString = buildUrlString(endpoint, params)
         when (endpoint.requestBody?.contentType) {
-            ContentType.MULTIPART_FORM_DATA -> code.buildMultipartBody(endpoint, params, urlString)
-            ContentType.FORM_URL_ENCODED -> code.buildFormUrlEncodedBody(endpoint, params, urlString)
-            ContentType.JSON_CONTENT_TYPE, null -> code.buildJsonBody(endpoint, params, urlString)
+            ContentType.MULTIPART_FORM_DATA -> {
+                code.buildMultipartBody(endpoint, params, urlString)
+            }
+
+            ContentType.FORM_URL_ENCODED -> {
+                code.buildFormUrlEncodedBody(endpoint, params, urlString)
+            }
+
+            ContentType.JSON_CONTENT_TYPE, null -> {
+                code.buildJsonBody(endpoint, params, urlString)
+            }
+
+            ContentType.TEXT_PLAIN, ContentType.OCTET_STREAM -> {
+                error("Unsupported request body content type: ${endpoint.requestBody.contentType}")
+            }
         }
 
         // Close the HTTP call block and chain .toResult() / .toEmptyResult()

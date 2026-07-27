@@ -24,7 +24,7 @@ internal data class InlineSchemaKey(val properties: Set<PropertyKey>) {
             val keys = properties.map {
                 PropertyKey(
                     name = it.name,
-                    type = normalizeType(it.type),
+                    type = it.type.normalized(),
                     required = it.name in required,
                     nullable = it.nullable,
                     defaultValue = it.defaultValue,
@@ -33,20 +33,22 @@ internal data class InlineSchemaKey(val properties: Set<PropertyKey>) {
             return InlineSchemaKey(keys.toSet())
         }
 
-        private fun normalizeType(type: TypeRef): TypeRef = when (type) {
+        private fun TypeRef.normalized(): TypeRef = when (this) {
             is TypeRef.Inline -> TypeRef.Inline(
-                properties = type.properties
-                    .map { it.copy(type = normalizeType(it.type)) }
+                properties = properties
+                    .map { it.copy(type = it.type.normalized()) }
                     .sortedBy { it.name },
-                requiredProperties = type.requiredProperties,
+                requiredProperties = this.requiredProperties,
                 contextHint = "",
             )
 
-            is TypeRef.Array -> TypeRef.Array(normalizeType(type.items))
+            is TypeRef.Array -> TypeRef.Array(items.normalized(), unique)
 
-            is TypeRef.Map -> TypeRef.Map(normalizeType(type.valueType))
+            is TypeRef.Map -> TypeRef.Map(valueType.normalized())
 
-            else -> type
+            is TypeRef.InlineEnum -> copy(contextHint = "")
+
+            else -> this
         }
     }
 }

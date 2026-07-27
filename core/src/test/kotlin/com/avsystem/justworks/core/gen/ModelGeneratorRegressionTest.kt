@@ -15,6 +15,7 @@ class ModelGeneratorRegressionTest {
         Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(spec.schemas)
         },
+        OutputOptions(),
         NameRegistry(),
     ) {
         ModelGenerator.generate(spec)

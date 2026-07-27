@@ -87,6 +87,20 @@ class TypeMappingTest {
         assertEquals("kotlin.collections.List<kotlin.String>", result.toString())
     }
 
+    @Test
+    fun `maps unique Array of String to Set of String`() {
+        val ref = TypeRef.Array(TypeRef.Primitive(PrimitiveType.STRING), unique = true)
+        val result = map(ref)
+        assertEquals("kotlin.collections.Set<kotlin.String>", result.toString())
+    }
+
+    @Test
+    fun `maps unique Array of Reference to Set of model class`() {
+        val ref = TypeRef.Array(TypeRef.Reference("Pet"), unique = true)
+        val result = map(ref)
+        assertEquals("kotlin.collections.Set<com.example.model.Pet>", result.toString())
+    }
+
     // -- Map --
 
     @Test

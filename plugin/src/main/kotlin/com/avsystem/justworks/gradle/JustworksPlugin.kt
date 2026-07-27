@@ -55,6 +55,9 @@ class JustworksPlugin : Plugin<Project> {
                     task.specFile.set(spec.specFile)
                     task.apiPackage.set(spec.apiPackage.orElse(spec.packageName.map { "$it.api" }))
                     task.modelPackage.set(spec.modelPackage.orElse(spec.packageName.map { "$it.model" }))
+                    task.generateKdoc.set(spec.generateKdoc.orElse(true))
+                    task.apiClassPrefix.set(spec.apiClassPrefix.orElse(""))
+                    task.apiClassSuffix.set(spec.apiClassSuffix.orElse("Api"))
                     task.outputDir.set(project.layout.buildDirectory.dir("generated/justworks/${spec.name}"))
                     task.group = "code generation"
                     task.description = "Generate Kotlin client from '${spec.name}' OpenAPI spec"

@@ -4,6 +4,7 @@ import com.avsystem.justworks.core.gen.model.ModelGenerator
 import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Discriminator
+import com.avsystem.justworks.core.model.EnumBackingType
 import com.avsystem.justworks.core.model.EnumModel
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.PropertyModel
@@ -24,6 +25,7 @@ class ModelGeneratorPolymorphicTest {
         Hierarchy(ModelPackage(modelPackage)).apply {
             addSchemas(spec.schemas)
         },
+        OutputOptions(),
         NameRegistry(),
     ) {
         ModelGenerator.generate(spec)
@@ -46,6 +48,7 @@ class ModelGeneratorPolymorphicTest {
         anyOf: List<TypeRef>? = null,
         allOf: List<TypeRef>? = null,
         discriminator: Discriminator? = null,
+        oneOfWrapperMapping: Map<String, String>? = null,
     ) = SchemaModel(
         name = name,
         description = null,
@@ -55,6 +58,7 @@ class ModelGeneratorPolymorphicTest {
         oneOf = oneOf,
         anyOf = anyOf,
         discriminator = discriminator,
+        oneOfWrapperMapping = oneOfWrapperMapping,
     )
 
     /**
@@ -437,10 +441,10 @@ class ModelGeneratorPolymorphicTest {
         }
     }
 
-    // -- POLY-07: oneOf with wrapper objects --
+    // -- POLY-07: oneOf with explicit discriminator --
 
     @Test
-    fun `oneOf with wrapper objects generates sealed class with JsonClassDiscriminator`() {
+    fun `oneOf with explicit discriminator generates sealed class with JsonClassDiscriminator`() {
         val extenderPropsSchema =
             schema(
                 name = "ExtenderDeviceProperties",
@@ -489,7 +493,7 @@ class ModelGeneratorPolymorphicTest {
     }
 
     @Test
-    fun `oneOf with wrapper objects generates correct SerialName on nested variants`() {
+    fun `oneOf with explicit discriminator generates correct SerialName on nested variants`() {
         val extenderPropsSchema =
             schema(
                 name = "ExtenderDeviceProperties",
@@ -519,6 +523,117 @@ class ModelGeneratorPolymorphicTest {
         assertTrue(
             serialNameAnnotation.members.any { it.toString().contains("\"ExtenderDevice\"") },
             "Expected @SerialName(\"ExtenderDevice\") from wrapper property name",
+        )
+    }
+
+    // -- POLY-07b: externally-tagged wrapper oneOf -> bespoke KSerializer (issue #104) --
+
+    /** Builds the recursive file-tree wrapper union from issue #104. */
+    private fun nodeWrapperSpec(): ApiSpec {
+        val node = schema(
+            name = "Node",
+            oneOf = listOf(TypeRef.Reference("File"), TypeRef.Reference("Directory")),
+            oneOfWrapperMapping = linkedMapOf("File" to "File", "Directory" to "Directory"),
+        )
+        val file = schema(
+            name = "File",
+            properties = listOf(
+                PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                PropertyModel("sizeBytes", TypeRef.Primitive(PrimitiveType.INT), null, false),
+            ),
+            requiredProperties = setOf("name", "sizeBytes"),
+        )
+        val directory = schema(
+            name = "Directory",
+            properties = listOf(
+                PropertyModel("name", TypeRef.Primitive(PrimitiveType.STRING), null, false),
+                PropertyModel("children", TypeRef.Array(TypeRef.Reference("Node")), null, false),
+            ),
+            requiredProperties = setOf("name", "children"),
+        )
+        return spec(schemas = listOf(node, file, directory))
+    }
+
+    @Test
+    fun `wrapper oneOf binds a custom serializer and emits no JsonClassDiscriminator`() {
+        val files = generate(nodeWrapperSpec())
+        val nodeType = findType(files, "Node")
+
+        assertEquals(TypeSpec.Kind.INTERFACE, nodeType.kind, "Wrapper union should be a sealed interface")
+        assertTrue(KModifier.SEALED in nodeType.modifiers, "Node should be SEALED")
+
+        assertTrue(
+            nodeType.annotations.none {
+                it.typeName.toString() == "kotlinx.serialization.json.JsonClassDiscriminator"
+            },
+            "Wrapper union must NOT emit @JsonClassDiscriminator",
+        )
+
+        val serializable = nodeType.annotations.find {
+            it.typeName.toString() == "kotlinx.serialization.Serializable"
+        }
+        assertNotNull(serializable, "Node should have @Serializable")
+        assertTrue(
+            serializable.members.any { it.toString().contains("NodeSerializer") },
+            "Expected @Serializable(with = NodeSerializer::class), got: ${serializable.members}",
+        )
+
+        // Variants stay nested inside the parent.
+        val nestedNames = nodeType.typeSpecs.map { it.name }
+        assertTrue("File" in nestedNames && "Directory" in nestedNames, "Variants should be nested. Got: $nestedNames")
+    }
+
+    @Test
+    fun `wrapper oneOf serializer discriminates on the wrapper key and round-trips the wrapper shape`() {
+        val files = generate(nodeWrapperSpec())
+        val serializerType = findType(files, "NodeSerializer")
+
+        assertEquals(TypeSpec.Kind.OBJECT, serializerType.kind, "NodeSerializer should be an object")
+        assertTrue(
+            "KSerializer" in serializerType.superinterfaces.keys
+                .map { it.toString() }
+                .joinToString(),
+            "NodeSerializer should implement KSerializer",
+        )
+
+        val deserialize = serializerType.funSpecs.find { it.name == "deserialize" }
+        assertNotNull(deserialize, "NodeSerializer should have deserialize")
+        val deserializeBody = deserialize.body.toString()
+        // Discriminates on the wrapper KEY, not on an internal "type" field.
+        assertTrue("element.keys.singleOrNull()" in deserializeBody, "Should read the single wrapper key")
+        assertTrue("\"File\" ->" in deserializeBody, "Should branch on wrapper key 'File'. Body: $deserializeBody")
+        assertTrue(
+            "\"Directory\" ->" in deserializeBody,
+            "Should branch on wrapper key 'Directory'. Body: $deserializeBody",
+        )
+        assertTrue(
+            "decodeFromJsonElement" in deserializeBody,
+            "Should delegate to variant serializer on the wrapped value",
+        )
+
+        val serialize = serializerType.funSpecs.find { it.name == "serialize" }
+        assertNotNull(serialize, "NodeSerializer should have serialize")
+        val serializeBody = serialize.body.toString()
+        // Re-wraps under the wrapper key (external tagging), not {"type": ...}.
+        assertTrue("JsonObject" in serializeBody, "serialize should build a JsonObject wrapper")
+        assertTrue("\"File\"" in serializeBody, "serialize should re-wrap under key 'File'. Body: $serializeBody")
+        assertTrue(
+            "\"Directory\"" in serializeBody,
+            "serialize should re-wrap under key 'Directory'. Body: $serializeBody",
+        )
+    }
+
+    @Test
+    fun `wrapper oneOf is not registered in the SerializersModule`() {
+        val files = generate(nodeWrapperSpec())
+
+        // The bespoke serializer is bound via @Serializable(with = ...), so no polymorphic
+        // registration is needed — and none must be emitted (there are no discriminated hierarchies).
+        val serializersModuleFile = files.find { it.name == "SerializersModule" }
+        assertEquals(
+            null,
+            serializersModuleFile,
+            "Wrapper-only spec should not generate a SerializersModule",
         )
     }
 
@@ -947,6 +1062,67 @@ class ModelGeneratorPolymorphicTest {
             ClassName(modelPackage, "Circle"),
             result,
             "Should resolve Circle to flat ClassName without hierarchy entry",
+        )
+    }
+
+    @Test
+    fun `discriminator property is not hoisted into a standalone enum`() {
+        val animal =
+            schema(
+                name = "Animal",
+                oneOf = listOf(TypeRef.Reference("Cat")),
+                discriminator =
+                    Discriminator(
+                        propertyName = "type",
+                        mapping = mapOf("Cat" to "#/components/schemas/Cat"),
+                    ),
+            )
+        val cat =
+            schema(
+                name = "Cat",
+                properties =
+                    listOf(
+                        PropertyModel(
+                            "type",
+                            TypeRef.InlineEnum(listOf("Cat"), EnumBackingType.STRING, "Cat.Type"),
+                            null,
+                            false,
+                        ),
+                        PropertyModel(
+                            "sound",
+                            TypeRef.InlineEnum(listOf("MEOW", "PURR"), EnumBackingType.STRING, "Cat.Sound"),
+                            null,
+                            false,
+                        ),
+                    ),
+            )
+
+        val files = generate(spec(schemas = listOf(animal, cat)))
+        val enumNames = files
+            .flatMap { it.members }
+            .filterIsInstance<TypeSpec>()
+            .filter { it.kind == TypeSpec.Kind.CLASS && KModifier.ENUM in it.modifiers }
+            .mapNotNull { it.name }
+
+        // The single-value `type` discriminator enum must NOT be generated...
+        assertTrue(
+            enumNames.none { it.contains("Type", ignoreCase = true) },
+            "Discriminator enum must not be hoisted, found: $enumNames",
+        )
+        // ...while a genuine non-discriminator inline enum on the variant still is.
+        assertTrue(
+            enumNames.any { it.contains("Sound", ignoreCase = true) },
+            "Non-discriminator inline enum should still be generated, found: $enumNames",
+        )
+
+        // The variant carries no `type` field (it is expressed via @SerialName instead).
+        val catType = findType(files, "Cat")
+        assertTrue(
+            catType.primaryConstructor
+                ?.parameters
+                .orEmpty()
+                .none { it.name == "type" },
+            "Variant must not declare the discriminator property as a field",
         )
     }
 }
