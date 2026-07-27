@@ -16,7 +16,9 @@ import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
 import com.avsystem.justworks.core.gen.HTTP_RESULT
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
+import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
+import com.avsystem.justworks.core.gen.JSON_PROPERTY
 import com.avsystem.justworks.core.gen.NameRegistry
 import com.avsystem.justworks.core.gen.OPT_IN
 import com.avsystem.justworks.core.gen.OutputOptions
@@ -34,6 +36,7 @@ import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
+import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.squareup.kotlinpoet.AnnotationSpec
 import com.squareup.kotlinpoet.ClassName
@@ -78,12 +81,7 @@ internal object ClientGenerator {
         val simpleName = "${options.apiClassPrefix}${tag.toPascalCase()}${options.apiClassSuffix}"
         val className = ClassName(apiPackage, nameRegistry.register(simpleName))
 
-        val clientInitializer = if (hasPolymorphicTypes) {
-            val generatedSerializersModule = MemberName(hierarchy.modelPackage, GENERATED_SERIALIZERS_MODULE)
-            CodeBlock.of("${CREATE_HTTP_CLIENT}(%M)", generatedSerializersModule)
-        } else {
-            CodeBlock.of("${CREATE_HTTP_CLIENT}()")
-        }
+        val clientInitializer = CodeBlock.of("${CREATE_HTTP_CLIENT}()")
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
         val isSingleBearer = securitySchemes.singleOrNull() is SecurityScheme.Bearer
@@ -96,6 +94,15 @@ internal object ClientGenerator {
             .classBuilder(className)
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
+
+        if (hasPolymorphicTypes) {
+            val generatedSerializersModule = MemberName(hierarchy.modelPackage, GENERATED_SERIALIZERS_MODULE)
+            classBuilder.addSuperclassConstructorParameter(
+                "$JSON_PROPERTY = %T { serializersModule = %M }",
+                JSON_CLASS,
+                generatedSerializersModule,
+            )
+        }
 
         if (isSingleBearer) {
             // Single Bearer: use plain "token" param name for ergonomics
@@ -246,6 +253,7 @@ internal object ClientGenerator {
     private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
+        val responseContentType = resolveSuccessResponse(endpoint)?.contentType
         val errorType = resolveErrorType(endpoint)
         val returnType = HTTP_RESULT.parameterizedBy(errorType, returnBodyType)
 
@@ -295,7 +303,7 @@ internal object ClientGenerator {
             }
         }
 
-        funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
+        funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType, responseContentType))
 
         return funBuilder.build()
     }
@@ -317,16 +325,20 @@ internal object ClientGenerator {
     }
 
     context(_: Hierarchy)
-    private fun resolveReturnType(endpoint: Endpoint): TypeName {
-        val twoXxSchema = endpoint.responses
+    private fun resolveReturnType(endpoint: Endpoint): TypeName =
+        resolveSuccessResponse(endpoint)?.schema?.toTypeName() ?: UNIT
+
+    // The response whose schema/contentType determine the endpoint's return type: the first 2xx
+    // response with a schema, or (only when there's no 2xx response at all) the default response.
+    private fun resolveSuccessResponse(endpoint: Endpoint): Response? {
+        val twoXxResponse = endpoint.responses.entries
             .asSequence()
             .filter { it.key.startsWith("2") }
-            .firstNotNullOfOrNull { it.value.schema }
+            .map { it.value }
+            .firstOrNull { it.schema != null }
 
-        val schema = twoXxSchema ?: endpoint.responses["default"]?.schema.takeIf {
+        return twoXxResponse ?: endpoint.responses["default"]?.takeIf {
             endpoint.responses.none { it.key.startsWith("2") }
         }
-
-        return schema?.toTypeName() ?: UNIT
     }
 }

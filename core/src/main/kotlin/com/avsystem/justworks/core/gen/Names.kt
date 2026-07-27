@@ -95,7 +95,6 @@ val EXPERIMENTAL_UUID_API = ClassName("kotlin.uuid", "ExperimentalUuidApi")
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
 val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
 val HTTP_RESULT = ClassName("com.avsystem.justworks", "HttpResult")
-val DESERIALIZE_ERROR_BODY_FUN = MemberName("com.avsystem.justworks", "deserializeErrorBody")
 
 // ============================================================================
 // Kotlin stdlib
@@ -115,8 +114,8 @@ val ENUM_CLASS = ClassName("kotlin", "Enum")
 val API_CLIENT_BASE = ClassName("com.avsystem.justworks", "ApiClientBase")
 val HTTP_RESPONSE = ClassName("io.ktor.client.statement", "HttpResponse")
 val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuilder")
-val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
-val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
+val BODY_AS_TEXT_FUN = MemberName("io.ktor.client.statement", "bodyAsText")
+val DECODE_FROM_STRING_FUN = MemberName("kotlinx.serialization", "decodeFromString")
 val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")
 val ENCODE_PATH_PARAM_FUN = MemberName("com.avsystem.justworks", "encodePathParam")
 val UUID_SERIALIZER = ClassName("com.avsystem.justworks", "UuidSerializer")
@@ -129,7 +128,15 @@ const val BASE_URL = "baseUrl"
 const val TOKEN = "token"
 const val CLIENT = "client"
 const val BODY = "body"
+const val JSON_PROPERTY = "json"
 const val APPLY_AUTH = "applyAuth"
 const val SAFE_CALL = "safeCall"
 const val CREATE_HTTP_CLIENT = "createHttpClient"
 const val GENERATED_SERIALIZERS_MODULE = "generatedSerializersModule"
+
+// toResult/toRawResult/toEmptyResult/deserializeErrorBody are members of ApiClientBase (they need
+// access to its `json` property), so call sites reference them by plain name — no import required.
+const val TO_RESULT_FUN = "toResult"
+const val TO_RAW_RESULT_FUN = "toRawResult"
+const val TO_EMPTY_RESULT_FUN = "toEmptyResult"
+const val DESERIALIZE_ERROR_BODY_FUN = "deserializeErrorBody"
