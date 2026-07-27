@@ -47,6 +47,7 @@ jobs:
         run: |
           for attempt in 1 2 3; do
             if ./gradlew --version; then exit 0; fi
+            if [ "${attempt}" -eq 3 ]; then break; fi
             delay=$((attempt * 15))
             echo "::warning::Gradle distribution download failed (attempt ${attempt}/3), retrying in ${delay}s"
             sleep "${delay}"
