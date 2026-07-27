@@ -266,7 +266,7 @@ object SpecParser {
                         val body = operation.requestBody.bind()
                         val content = body.content.bind()
 
-                        val contentType = ContentType.entries.find { it in content }.bind()
+                        val contentType = ContentType.REQUEST_TYPES.find { it in content }.bind()
 
                         val mediaType = content[contentType].bind()
 
@@ -284,14 +284,21 @@ object SpecParser {
                     val responses = operation.responses
                         .orEmpty()
                         .mapValues { (code, resp) ->
+                            val content: Content? = resp.content
+                            val responseContentType = content?.let { ContentType.RESPONSE_TYPES.find { it in content } }
+                            val typeName = "${operationId.replaceFirstChar { it.uppercase() }}Response"
+                            val schema = responseContentType
+                                ?.let { content[it] }
+                                ?.schema
+                                ?.takeUnless { it.isEmptyContent }
+                                ?.toTypeRef(typeName)
+                                ?: defaultResponseSchema(responseContentType)
+
                             Response(
                                 statusCode = code,
                                 description = resp.description,
-                                schema = resp.content
-                                    ?.get(ContentType.JSON_CONTENT_TYPE.value)
-                                    ?.schema
-                                    ?.takeUnless { it.isEmptyContent }
-                                    ?.toTypeRef("${operationId.replaceFirstChar { it.uppercase() }}Response"),
+                                schema = schema,
+                                contentType = responseContentType,
                             )
                         }
 
@@ -324,7 +331,7 @@ object SpecParser {
     private fun extractSchemaModel(name: String, schema: Schema<*>): SchemaModel {
         val allOf = schema.allOf?.mapNotNull { it.resolveName() }
 
-        val (oneOf, discriminatorFromWrapper) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
+        val (oneOf, oneOfWrapperMapping) = detectAndUnwrapOneOfWrappers(schema) // may register new schemas
             ?: (schema.oneOf?.mapNotNull { it.resolveName() } to null)
 
         val anyOf = schema.anyOf?.mapNotNull { it.resolveName() }
@@ -345,7 +352,7 @@ object SpecParser {
                 props to requiredProps
             }
 
-        val discriminator = discriminatorFromWrapper ?: nullable {
+        val discriminator = nullable {
             val disc = schema.discriminator.bind()
             val propertyName = disc.propertyName.bind()
             Discriminator(propertyName = propertyName, mapping = disc.mapping.orEmpty())
@@ -368,6 +375,7 @@ object SpecParser {
             oneOf = oneOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             anyOf = anyOf?.let { it.map(TypeRef::Reference).ifEmpty { null } },
             discriminator = discriminator,
+            oneOfWrapperMapping = oneOfWrapperMapping,
             underlyingType = underlyingType,
         )
     }
@@ -395,17 +403,15 @@ object SpecParser {
         val topRequired = schema.required.orEmpty().toSet()
         val contextCreator: (String) -> String? = { propName -> "$parentName.${propName.toPascalCase()}" }
 
-        val (required, properties) = schema.allOf
-            .orEmpty()
-            .fold(topRequired to emptyMap<String, PropertyModel>()) { (accRequired, accProperties), subSchema ->
-                val resolvedSchema = subSchema.resolveSubSchema()
-                val mergedRequired = accRequired + resolvedSchema.required.orEmpty().toSet()
-                mergedRequired to accProperties + resolvedSchema.propertyModels(mergedRequired, contextCreator)
-            }
+        val subSchemas = schema.allOf.orEmpty().map { it.resolveSubSchema() }
 
-        val topLevelProperties = schema.propertyModels(required, contextCreator)
-        val finalProperties =
-            properties.plus(topLevelProperties).values.map { prop -> prop.copy(nullable = prop.name !in required) }
+        val required = topRequired + subSchemas.flatMap { it.required.orEmpty() }.toSet()
+
+        val properties = subSchemas.fold(emptyMap<String, PropertyModel>()) { accProperties, resolvedSchema ->
+            accProperties + resolvedSchema.propertyModels(required, contextCreator)
+        }
+
+        val finalProperties = properties.plus(schema.propertyModels(required, contextCreator)).values.toList()
 
         return finalProperties to required
     }
@@ -424,10 +430,11 @@ object SpecParser {
      * - Every variant has exactly one property
      * - The property value is either a $ref or an inline object
      *
-     * Returns: Pair of (unwrapped oneOf refs, synthetic discriminator) or null if pattern not matched.
+     * Returns: Pair of (unwrapped oneOf refs, wrapper-key -> variant-schema-name mapping) or null
+     * if the pattern is not matched. The mapping drives the bespoke externally-tagged serializer.
      */
     context(componentSchemaIdentity: ComponentSchemaIdentity, componentSchemas: ComponentSchemas)
-    private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Discriminator>? = nullable {
+    private fun detectAndUnwrapOneOfWrappers(schema: Schema<*>): Pair<List<String>, Map<String, String>>? = nullable {
         ensure(!schema.oneOf.isNullOrEmpty() && schema.discriminator == null)
 
         val variants = schema.oneOf.orEmpty()
@@ -455,8 +462,7 @@ object SpecParser {
 
         ensure(unwrapped.size == variants.size)
 
-        val mapping = unwrapped.mapValues { (_, schemaName) -> "$SCHEMA_PREFIX$schemaName" }
-        unwrapped.values.toList() to Discriminator(propertyName = "type", mapping = mapping)
+        unwrapped.values.toList() to unwrapped
     }
 
     context(_: ComponentSchemaIdentity, _: ComponentSchemas)
@@ -588,7 +594,8 @@ object SpecParser {
                     name = propName,
                     type = type,
                     description = propSchema.description,
-                    nullable = propName !in required && !type.honorsDefault(propSchema.default),
+                    nullable = propSchema.nullable == true ||
+                        (propName !in required && !type.honorsDefault(propSchema.default)),
                     defaultValue = normalizeDefault(propSchema.default),
                 )
             }
@@ -651,6 +658,13 @@ object SpecParser {
                 }
             }
         return method.name.lowercase() + segments
+    }
+
+    /** Fallback response type when a non-JSON content type carries no explicit schema. */
+    private fun defaultResponseSchema(contentType: ContentType?): TypeRef? = when (contentType) {
+        ContentType.TEXT_PLAIN -> TypeRef.Primitive(PrimitiveType.STRING)
+        ContentType.OCTET_STREAM -> TypeRef.Primitive(PrimitiveType.BYTE_ARRAY)
+        else -> null
     }
 
     operator fun Content.get(contentType: ContentType) = this[contentType.value]

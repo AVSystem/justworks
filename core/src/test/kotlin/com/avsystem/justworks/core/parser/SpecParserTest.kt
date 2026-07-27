@@ -126,6 +126,49 @@ class SpecParserTest : SpecParserTestBase() {
     }
 
     @Test
+    fun `parses non-JSON response content types`() {
+        val spec = File.createTempFile("response-content", ".yaml").apply { deleteOnExit() }
+        spec.writeText(
+            """
+            openapi: 3.0.0
+            info:
+              title: Content API
+              version: 1.0.0
+            paths:
+              /text:
+                get:
+                  operationId: getText
+                  responses:
+                    '200':
+                      description: ok
+                      content:
+                        text/plain:
+                          schema:
+                            type: string
+              /binary:
+                get:
+                  operationId: getBinary
+                  responses:
+                    '200':
+                      description: ok
+                      content:
+                        application/octet-stream: {}
+            """.trimIndent(),
+        )
+        val parsed = parseSpec(spec)
+
+        val text = parsed.endpoints.find { it.operationId == "getText" } ?: fail("getText not found")
+        val textResp = text.responses["200"] ?: fail("text 200 response not found")
+        assertEquals(ContentType.TEXT_PLAIN, textResp.contentType)
+        assertEquals(PrimitiveType.STRING, assertIs<TypeRef.Primitive>(textResp.schema).type)
+
+        val binary = parsed.endpoints.find { it.operationId == "getBinary" } ?: fail("getBinary not found")
+        val binaryResp = binary.responses["200"] ?: fail("binary 200 response not found")
+        assertEquals(ContentType.OCTET_STREAM, binaryResp.contentType)
+        assertEquals(PrimitiveType.BYTE_ARRAY, assertIs<TypeRef.Primitive>(binaryResp.schema).type)
+    }
+
+    @Test
     fun `parsed POST pets has requestBody referencing NewPet`() {
         val createPet =
             petstore.endpoints.find { it.operationId == "createPet" }
@@ -139,6 +182,81 @@ class SpecParserTest : SpecParserTestBase() {
 
         val bodyType = assertIs<TypeRef.Reference>(body.schema)
         assertEquals("NewPet", bodyType.schemaName)
+    }
+
+    @Test
+    fun `schema-level nullable controls property nullability independent of required`() {
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: Nullable API
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Thing:
+                  type: object
+                  required:
+                    - requiredNullable
+                    - requiredPlain
+                  properties:
+                    requiredNullable:
+                      type: string
+                      nullable: true
+                    requiredPlain:
+                      type: string
+                    optionalNullable:
+                      type: string
+                      nullable: true
+                    optionalPlain:
+                      type: string
+            """.trimIndent().toTempFile(),
+        )
+        val thing = spec.schemas.find { it.name == "Thing" } ?: fail("Thing not found")
+        val props = thing.properties.associateBy { it.name }
+
+        assertTrue(props.getValue("requiredNullable").nullable, "required + nullable:true should be nullable")
+        assertFalse(props.getValue("requiredPlain").nullable, "required without nullable should be non-nullable")
+        assertTrue(props.getValue("optionalNullable").nullable, "optional + nullable:true should be nullable")
+        assertTrue(props.getValue("optionalPlain").nullable, "optional should be nullable")
+    }
+
+    @Test
+    fun `allOf property required in a later member is not nullable`() {
+        // `foo` is declared (optional) in the first allOf member and marked required in the
+        // second. After merging it is required, so it must be non-nullable — regardless of the
+        // order the members are listed. Regression test: nullability must be derived from the
+        // full merged `required` set, not one accumulated mid-fold.
+        val spec = parseSpec(
+            """
+            openapi: 3.0.0
+            info:
+              title: AllOf API
+              version: 1.0.0
+            paths: {}
+            components:
+              schemas:
+                Base:
+                  type: object
+                  properties:
+                    foo:
+                      type: string
+                RequiresFoo:
+                  type: object
+                  required:
+                    - foo
+                Combined:
+                  allOf:
+                    - ${'$'}ref: '#/components/schemas/Base'
+                    - ${'$'}ref: '#/components/schemas/RequiresFoo'
+            """.trimIndent().toTempFile(),
+        )
+        val combined = spec.schemas.find { it.name == "Combined" } ?: fail("Combined not found")
+        val foo = combined.properties.first { it.name == "foo" }
+
+        assertTrue("foo" in combined.requiredProperties, "sanity: foo should be required after merge")
+        assertFalse(foo.nullable, "foo is required (via a later allOf member) and must be non-nullable")
     }
 
     @Test
