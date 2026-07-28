@@ -42,29 +42,20 @@ import com.avsystem.justworks.core.model.Parameter
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.TypeRef
+import com.squareup.kotlinpoet.BYTE_ARRAY
 import com.squareup.kotlinpoet.CodeBlock
+import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.UNIT
 
 internal object BodyGenerator {
-    // Responses declared as text/plain (-> String) or application/octet-stream (-> ByteArray) must
-    // keep Ktor's native body<T>() converter (toRawResult) instead of going through
-    // json.decodeFromString (toResult) — the raw bytes/text aren't necessarily valid JSON, unlike a
-    // JSON-schema-typed String response (e.g. a bare {"type": "string"}), which IS JSON-quoted on
-    // the wire and must be decoded through the shared Json instance to strip the quotes (#110).
-    private val RAW_RESPONSE_CONTENT_TYPES = setOf(ContentType.TEXT_PLAIN, ContentType.OCTET_STREAM)
-
     fun buildFunctionBody(
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
         responseContentType: ContentType?,
     ): CodeBlock {
-        val resultFun = when {
-            returnBodyType == UNIT -> TO_EMPTY_RESULT_FUN
-            responseContentType in RAW_RESPONSE_CONTENT_TYPES -> TO_RAW_RESULT_FUN
-            else -> TO_RESULT_FUN
-        }
+        val resultFun = resolveResultFun(returnBodyType, responseContentType)
         val code = CodeBlock.builder()
 
         code.beginControlFlow("return $SAFE_CALL")
@@ -94,6 +85,13 @@ internal object BodyGenerator {
         code.endControlFlow() // safeCall
 
         return code.build()
+    }
+
+    private fun resolveResultFun(returnBodyType: TypeName, responseContentType: ContentType?): String = when {
+        returnBodyType == UNIT -> TO_EMPTY_RESULT_FUN
+        returnBodyType == BYTE_ARRAY -> TO_RAW_RESULT_FUN
+        returnBodyType == STRING && responseContentType != ContentType.JSON_CONTENT_TYPE -> TO_RAW_RESULT_FUN
+        else -> TO_RESULT_FUN
     }
 
     private fun CodeBlock.Builder.buildJsonBody(

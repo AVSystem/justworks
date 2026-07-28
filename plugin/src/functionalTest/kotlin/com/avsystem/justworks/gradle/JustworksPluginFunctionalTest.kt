@@ -1401,6 +1401,7 @@ class JustworksPluginFunctionalTest {
             "src/test/kotlin/QuoteStrippingTest.kt",
             """
             import com.avsystem.justworks.ApiClientBase
+            import com.avsystem.justworks.HttpError
             import com.avsystem.justworks.HttpSuccess
             import io.ktor.client.HttpClient
             import io.ktor.client.engine.mock.MockEngine
@@ -1454,6 +1455,26 @@ class JustworksPluginFunctionalTest {
                     }
                     val result = TestClient("http://test", engine).rawText()
                     assertEquals(HttpSuccess(200, "abc-123"), result)
+                }
+
+                @Test
+                fun `a text-plain 404 error body decodes to its raw text, not null`() {
+                    val engine = MockEngine {
+                        respond(
+                            "Not found",
+                            HttpStatusCode.NotFound,
+                            headersOf(HttpHeaders.ContentType, listOf("text/plain")),
+                        )
+                    }
+                    val result = TestClient("http://test", engine).jsonToken()
+                    assertEquals(HttpError.NotFound("Not found"), result)
+                }
+
+                @Test
+                fun `a 404 error body with no Content-Type decodes to its raw text, not null`() {
+                    val engine = MockEngine { respond("Not found", HttpStatusCode.NotFound) }
+                    val result = TestClient("http://test", engine).jsonToken()
+                    assertEquals(HttpError.NotFound("Not found"), result)
                 }
             }
             """.trimIndent(),

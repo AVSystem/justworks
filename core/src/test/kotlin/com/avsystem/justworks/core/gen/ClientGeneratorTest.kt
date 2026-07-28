@@ -544,6 +544,90 @@ class ClientGeneratorTest {
         assertFalse(body.contains(".toRawResult()"), "Got: $body")
     }
 
+    // A `format: byte` (ByteArray) schema under application/json is a base64 *string* on the wire,
+    // not a JSON byte array — kotlinx.serialization's built-in ByteArraySerializer can't decode
+    // it, and claiming a decoded ByteArray here would be misleading. Downgrade the return type to
+    // String (still base64-encoded) instead, which already decodes correctly via the existing
+    // JSON-string path
+    @Test
+    fun `byte array response under application json downgrades to String and uses toResult`() {
+        val ep = endpoint(
+            operationId = "getEncodedBinary",
+            responses = mapOf(
+                "200" to Response(
+                    "200",
+                    "OK",
+                    TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+                    ContentType.JSON_CONTENT_TYPE,
+                ),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getEncodedBinary" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.String", returnType.typeArguments[1].toString(), "Expected String, not ByteArray")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toResult()"), "Expected JSON-decoding toResult(), got: $body")
+        assertFalse(body.contains(".toRawResult()"), "Got: $body")
+    }
+
+    @Test
+    fun `byte array response under application octet stream keeps ByteArray and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getBinaryOctetStream",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getBinaryOctetStream" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString())
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
+    // text/plain is always raw text, so String is always a faithful representation of it,
+    // regardless of what the schema claims — body<String>() always works, and a caller wanting
+    // the parsed type (e.g. Int) can convert it themselves.
+    @Test
+    fun `text plain response with a non-String schema downgrades to String and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getCount",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.INT), ContentType.TEXT_PLAIN),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getCount" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.String", returnType.typeArguments[1].toString(), "Expected String, not Int")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
+    // application/octet-stream is arbitrary binary, not necessarily valid UTF-8 text, so ByteArray
+    // is the only safe universal representation of it — unlike text/plain, this is never
+    // downgraded to String, since that risks throwing or corrupting non-UTF8 bytes.
+    @Test
+    fun `octet stream response with a non-ByteArray schema downgrades to ByteArray and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getCount",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.INT), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getCount" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString(), "Expected ByteArray, not Int")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
     @Test
     fun `mixed 200 and 204 responses uses 200 schema type`() {
         val ep = endpoint(

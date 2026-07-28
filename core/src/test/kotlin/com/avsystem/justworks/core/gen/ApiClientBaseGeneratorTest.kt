@@ -347,6 +347,15 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
+    fun `deserializeErrorBody dispatches on the response content type at runtime, falling back to native body()`() {
+        val fn = classFun("deserializeErrorBody")
+        val body = fn.body.toString()
+        assertTrue(body.contains("contentType"), "Expected a runtime contentType() check, got: $body")
+        assertTrue(body.contains("withoutParameters"), "Expected charset params to be stripped, got: $body")
+        assertTrue(body.contains("body()"), "Expected fallback to the native body() converter, got: $body")
+    }
+
+    @Test
     fun `generates single file named ApiClientBase`() {
         assertEquals("ApiClientBase", file.name)
     }

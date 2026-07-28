@@ -8,6 +8,8 @@ import com.avsystem.justworks.core.gen.BODY_FUN
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CLOSEABLE
 import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
+import com.avsystem.justworks.core.gen.CONTENT_TYPE_APPLICATION
+import com.avsystem.justworks.core.gen.CONTENT_TYPE_FUN
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
 import com.avsystem.justworks.core.gen.DECODE_FROM_STRING_FUN
 import com.avsystem.justworks.core.gen.DESERIALIZE_ERROR_BODY_FUN
@@ -151,7 +153,15 @@ internal object ApiClientBaseGenerator {
         .receiver(HTTP_RESPONSE)
         .returns(TypeVariableName("E").copy(nullable = true))
         .beginControlFlow("return try")
-        .addStatement("%L.%M(%M())", JSON_PROPERTY, DECODE_FROM_STRING_FUN, BODY_AS_TEXT_FUN)
+        .beginControlFlow("when (%M()?.withoutParameters())", CONTENT_TYPE_FUN)
+        .addStatement(
+            "%T.Json -> %L.%M(%M())",
+            CONTENT_TYPE_APPLICATION,
+            JSON_PROPERTY,
+            DECODE_FROM_STRING_FUN,
+            BODY_AS_TEXT_FUN,
+        ).addStatement("else -> %M()", BODY_FUN)
+        .endControlFlow()
         .nextControlFlow("catch (e: %T)", Exception::class)
         .addStatement("if (e is %T) throw e", ClassName("kotlinx.coroutines", "CancellationException"))
         .addStatement("null")

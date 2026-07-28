@@ -34,11 +34,13 @@ import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SecurityScheme
 import com.squareup.kotlinpoet.AnnotationSpec
+import com.squareup.kotlinpoet.BYTE_ARRAY
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -325,8 +327,30 @@ internal object ClientGenerator {
     }
 
     context(_: Hierarchy)
-    private fun resolveReturnType(endpoint: Endpoint): TypeName =
-        resolveSuccessResponse(endpoint)?.schema?.toTypeName() ?: UNIT
+    private fun resolveReturnType(endpoint: Endpoint): TypeName {
+        val response = resolveSuccessResponse(endpoint) ?: return UNIT
+        val schemaType = response.schema?.toTypeName() ?: return UNIT
+
+        // The declared schema type isn't always the type that can actually be decoded off the
+        // wire for a given content type, so it's overridden with whatever IS a faithful, safely
+        // decodable representation of that content type — rather than either forcing a decode
+        // that throws on every call, or failing generation over a spec inconsistency:
+        //  - application/json: a `{type: string, format: byte}` (ByteArray) schema is a base64
+        //    *string* on the wire, not a JSON byte array — kotlinx.serialization's built-in
+        //    ByteArraySerializer can't decode it. Surface the (still base64-encoded) String as-is.
+        //  - text/plain is always raw text, so String is always a faithful representation of it,
+        //    regardless of what the schema claims (e.g. `type: integer`) — body<String>() always
+        //    works, and a caller wanting the parsed type can convert it themselves.
+        //  - application/octet-stream is arbitrary binary, not necessarily valid UTF-8 text, so
+        //    ByteArray is the only safe universal representation — never downgrade this one to
+        //    String, unlike text/plain, since that risks throwing or corrupting non-UTF8 bytes.
+        return when {
+            schemaType == BYTE_ARRAY && response.contentType == ContentType.JSON_CONTENT_TYPE -> STRING
+            response.contentType == ContentType.TEXT_PLAIN -> STRING
+            response.contentType == ContentType.OCTET_STREAM -> BYTE_ARRAY
+            else -> schemaType
+        }
+    }
 
     // The response whose schema/contentType determine the endpoint's return type: the first 2xx
     // response with a schema, or (only when there's no 2xx response at all) the default response.
