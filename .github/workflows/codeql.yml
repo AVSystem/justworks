@@ -1,0 +1,77 @@
+name: CodeQL
+
+on:
+  push:
+    branches: [ master ]
+  pull_request:
+    branches: [ master ]
+  schedule:
+    - cron: '27 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  analyze:
+    name: Analyze (java-kotlin)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    permissions:
+      security-events: write
+      contents: read
+      actions: read
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 21
+
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          # Only master writes the cache; PRs read it. Keeps the cache from being
+          # polluted by branch builds while still avoiding the wrapper download.
+          cache-read-only: ${{ github.ref != 'refs/heads/master' }}
+
+      # The distribution download from services.gradle.org is the flaky part.
+      # Do it here, outside the traced build, and retry instead of failing the run.
+      - name: Warm up Gradle
+        run: |
+          for attempt in 1 2 3; do
+            if ./gradlew --version; then exit 0; fi
+            if [ "${attempt}" -eq 3 ]; then break; fi
+            delay=$((attempt * 15))
+            echo "::warning::Gradle distribution download failed (attempt ${attempt}/3), retrying in ${delay}s"
+            sleep "${delay}"
+          done
+          echo "::error::Could not provision Gradle after 3 attempts"
+          exit 1
+
+      - name: Initialize CodeQL
+        uses: github/codeql-action/init@v3
+        with:
+          languages: java-kotlin
+          build-mode: manual
+          # Drop this line to fall back to the default suite if the extra
+          # lower-precision queries turn out to be too noisy.
+          queries: security-extended
+
+      # CodeQL builds its database by tracing the compiler, so compilation must
+      # actually happen: gradle.properties enables the build and configuration
+      # caches, both of which would let Gradle skip the work and leave CodeQL
+      # with an empty database.
+      - name: Build
+        run: ./gradlew classes --no-daemon --no-build-cache --no-configuration-cache
+
+      - name: Perform CodeQL Analysis
+        uses: github/codeql-action/analyze@v3
+        with:
+          category: /language:java-kotlin
