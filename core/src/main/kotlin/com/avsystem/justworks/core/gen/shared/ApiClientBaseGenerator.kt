@@ -3,14 +3,21 @@ package com.avsystem.justworks.core.gen.shared
 import com.avsystem.justworks.core.gen.API_CLIENT_BASE
 import com.avsystem.justworks.core.gen.APPLY_AUTH
 import com.avsystem.justworks.core.gen.BASE_URL
+import com.avsystem.justworks.core.gen.BODY_AS_TEXT_FUN
 import com.avsystem.justworks.core.gen.BODY_FUN
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CLOSEABLE
 import com.avsystem.justworks.core.gen.CONTENT_NEGOTIATION
+import com.avsystem.justworks.core.gen.CONTENT_TYPE_APPLICATION
+import com.avsystem.justworks.core.gen.CONTENT_TYPE_FUN
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
+import com.avsystem.justworks.core.gen.DECODE_FROM_STRING_FUN
 import com.avsystem.justworks.core.gen.DESERIALIZE_ERROR_BODY_FUN
 import com.avsystem.justworks.core.gen.ENCODE_PARAM_FUN
-import com.avsystem.justworks.core.gen.ENCODE_TO_STRING_FUN
+import com.avsystem.justworks.core.gen.ENCODE_PATH_PARAM_FUN
+import com.avsystem.justworks.core.gen.ENCODE_TO_JSON_ELEMENT_FUN
+import com.avsystem.justworks.core.gen.ENCODE_URL_PATH_PART_FUN
+import com.avsystem.justworks.core.gen.ENUM_CLASS
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
 import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
@@ -21,69 +28,140 @@ import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.IO_EXCEPTION
 import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_FUN
+import com.avsystem.justworks.core.gen.JSON_PRIMITIVE_EXT
+import com.avsystem.justworks.core.gen.JSON_PROPERTY
 import com.avsystem.justworks.core.gen.SAFE_CALL
-import com.avsystem.justworks.core.gen.SERIALIZERS_MODULE
+import com.avsystem.justworks.core.gen.TO_EMPTY_RESULT_FUN
+import com.avsystem.justworks.core.gen.TO_RAW_RESULT_FUN
+import com.avsystem.justworks.core.gen.TO_RESULT_FUN
+import com.squareup.kotlinpoet.BOOLEAN
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.FileSpec
 import com.squareup.kotlinpoet.FunSpec
 import com.squareup.kotlinpoet.KModifier
 import com.squareup.kotlinpoet.LambdaTypeName
+import com.squareup.kotlinpoet.NUMBER
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
 import com.squareup.kotlinpoet.STRING
+import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
 import com.squareup.kotlinpoet.TypeVariableName
 import com.squareup.kotlinpoet.UNIT
 
 /**
  * Generates the shared `ApiClientBase.kt` file containing:
- * - `encodeParam<T>()` top-level utility function
- * - `HttpResponse.deserializeErrorBody<E>()` internal helper for error body deserialization
- * - `HttpResponse.mapToResult<E, T>()` private extension with response mapping logic
- * - `HttpResponse.toResult<E, T>()` extension for typed response mapping
- * - `HttpResponse.toEmptyResult<E>()` extension for Unit response mapping
- * - `ApiClientBase` abstract class with common client infrastructure
+ * - `encodeParam()` / `encodePathParam()` top-level overload sets — String/Number/Boolean plus a
+ *   reified `Enum<T>` overload — no generic passthrough, so a value that can't serialize to a JSON
+ *   primitive (an object, a list, a map, a raw byte array) fails to compile instead of throwing at
+ *   runtime. Int/Long/Double/Float are covered by the Number overload via ordinary subtyping.
+ *   Uuid/Instant/LocalDate are deliberately NOT overloads here: since this file is generated once,
+ *   independent of any spec, an unconditional Uuid/LocalDate reference would force every consumer
+ *   to opt into ExperimentalUuidApi / depend on kotlinx-datetime even if their spec never uses
+ *   them. BodyGenerator instead renders those three as a direct `.toString()` call at the call
+ *   site, in the per-spec client file that already imports the type only when it's actually used.
+ * - `ApiClientBase` abstract class with common client infrastructure, including:
+ *   - `json` — the shared `Json` instance, also installed into `ContentNegotiation` by
+ *     `createHttpClient()`, so success/error bodies are decoded through the exact same
+ *     configuration (incl. `serializersModule`) rather than Ktor's implicit `body<T>()` converter.
+ *   - `deserializeErrorBody<E>()` / `mapToResult<E, T>()` internal helpers for response mapping.
+ *   - `toResult<E, T>()` — decodes a JSON success body via `json.decodeFromString`.
+ *   - `toRawResult<E, T>()` — keeps Ktor's native `body<T>()` converter, for responses whose
+ *     declared content type is `text/plain` (String) or `application/octet-stream` (ByteArray),
+ *     which must NOT be run through JSON decoding.
+ *   - `toEmptyResult<E>()` for Unit response mapping.
  */
 internal object ApiClientBaseGenerator {
-    private const val SERIALIZERS_MODULE_PARAM = "serializersModule"
-    private const val SUCCESS_BODY = "successBody"
     private const val MAP_TO_RESULT = "mapToResult"
+    private const val SUCCESS_BODY = "successBody"
     private const val BLOCK = "block"
 
-    fun generate(): FileSpec {
-        val t = TypeVariableName("T").copy(reified = true)
-        val e = TypeVariableName("E").copy(reified = true)
+    // Kotlin types that are always JSON primitives, mapped to how to render them as a String.
+    // `null` conversion means the value already is a String (returned as-is).
+    private val PRIMITIVE_SAFE_TYPES: List<Pair<TypeName, String?>> = listOf(
+        STRING to null,
+        NUMBER to "toString",
+        BOOLEAN to "toString",
+    )
 
-        return FileSpec
-            .builder(API_CLIENT_BASE)
-            .addFunction(buildEncodeParam(t))
-            .addFunction(buildDeserializeErrorBody(e))
-            .addFunction(buildMapToResult(e, t))
-            .addFunction(buildToResult(e, t))
-            .addFunction(buildToEmptyResult(e))
-            .addType(buildApiClientBaseClass())
-            .build()
-    }
-
-    private fun buildEncodeParam(t: TypeVariableName): FunSpec = FunSpec
-        .builder(ENCODE_PARAM_FUN.simpleName)
-        .addModifiers(KModifier.INLINE)
-        .addTypeVariable(t)
-        .addParameter("value", TypeVariableName("T"))
-        .returns(STRING)
-        .addStatement("return %T.%M(value).trim('\"')", JSON_CLASS, ENCODE_TO_STRING_FUN)
+    fun generate(): FileSpec = FileSpec
+        .builder(API_CLIENT_BASE)
+        .addFunctions(buildEncodeParamOverloads())
+        .addFunctions(buildEncodePathParamOverloads())
+        .addType(buildApiClientBaseClass())
         .build()
 
+    private fun enumTypeVariable(): TypeVariableName = TypeVariableName(
+        "T",
+        ENUM_CLASS.parameterizedBy(TypeVariableName("T")),
+    ).copy(reified = true)
+
+    private fun buildEncodeParamOverloads(): List<FunSpec> {
+        val simpleOverloads = PRIMITIVE_SAFE_TYPES.map { (type, conversion) ->
+            FunSpec
+                .builder(ENCODE_PARAM_FUN.simpleName)
+                .addParameter("value", type)
+                .returns(STRING)
+                .addStatement(if (conversion == null) "return value" else "return value.$conversion()")
+                .build()
+        }
+
+        val enumOverload = FunSpec
+            .builder(ENCODE_PARAM_FUN.simpleName)
+            .addModifiers(KModifier.INLINE)
+            .addTypeVariable(enumTypeVariable())
+            .addParameter("value", TypeVariableName("T"))
+            .returns(STRING)
+            .addStatement(
+                "return %T.%M(value).%M.content",
+                JSON_CLASS,
+                ENCODE_TO_JSON_ELEMENT_FUN,
+                JSON_PRIMITIVE_EXT,
+            ).build()
+
+        return simpleOverloads + enumOverload
+    }
+
+    private fun buildEncodePathParamOverloads(): List<FunSpec> {
+        val simpleOverloads = PRIMITIVE_SAFE_TYPES.map { (type, _) ->
+            FunSpec
+                .builder(ENCODE_PATH_PARAM_FUN.simpleName)
+                .addParameter("value", type)
+                .returns(STRING)
+                .addStatement("return %M(value).%M()", ENCODE_PARAM_FUN, ENCODE_URL_PATH_PART_FUN)
+                .build()
+        }
+
+        val enumOverload = FunSpec
+            .builder(ENCODE_PATH_PARAM_FUN.simpleName)
+            .addModifiers(KModifier.INLINE)
+            .addTypeVariable(enumTypeVariable())
+            .addParameter("value", TypeVariableName("T"))
+            .returns(STRING)
+            .addStatement("return %M(value).%M()", ENCODE_PARAM_FUN, ENCODE_URL_PATH_PART_FUN)
+            .build()
+
+        return simpleOverloads + enumOverload
+    }
+
     private fun buildDeserializeErrorBody(e: TypeVariableName): FunSpec = FunSpec
-        .builder("deserializeErrorBody")
+        .builder(DESERIALIZE_ERROR_BODY_FUN)
         .addAnnotation(PublishedApi::class)
         .addModifiers(KModifier.INTERNAL, KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(e)
         .receiver(HTTP_RESPONSE)
         .returns(TypeVariableName("E").copy(nullable = true))
         .beginControlFlow("return try")
-        .addStatement("%M()", BODY_FUN)
+        .beginControlFlow("when (%M()?.withoutParameters())", CONTENT_TYPE_FUN)
+        .addStatement(
+            "%T.Json -> %L.%M(%M())",
+            CONTENT_TYPE_APPLICATION,
+            JSON_PROPERTY,
+            DECODE_FROM_STRING_FUN,
+            BODY_AS_TEXT_FUN,
+        ).addStatement("else -> %M()", BODY_FUN)
+        .endControlFlow()
         .nextControlFlow("catch (e: %T)", Exception::class)
         .addStatement("if (e is %T) throw e", ClassName("kotlinx.coroutines", "CancellationException"))
         .addStatement("null")
@@ -105,27 +183,42 @@ internal object ApiClientBaseGenerator {
             HTTP_SUCCESS,
             SUCCESS_BODY,
         ).addStatement(
-            "in 300..399 -> %T.Redirect(status.value, %M())",
+            "in 300..399 -> %T.Redirect(status.value, %L())",
             HTTP_ERROR,
             DESERIALIZE_ERROR_BODY_FUN,
         ).apply {
             for ((name, code) in ApiResponseGenerator.HTTP_ERROR_SUBTYPES) {
                 addStatement(
-                    "$code -> %T.$name(%M())",
+                    "$code -> %T.$name(%L())",
                     HTTP_ERROR,
                     DESERIALIZE_ERROR_BODY_FUN,
                 )
             }
         }.addStatement(
-            "else -> %T.Other(status.value, %M())",
+            "else -> %T.Other(status.value, %L())",
             HTTP_ERROR,
             DESERIALIZE_ERROR_BODY_FUN,
         ).endControlFlow()
         .build()
 
     private fun buildToResult(e: TypeVariableName, t: TypeVariableName): FunSpec = FunSpec
-        .builder("toResult")
-        .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
+        .builder(TO_RESULT_FUN)
+        .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND, KModifier.INLINE)
+        .addTypeVariable(e)
+        .addTypeVariable(t)
+        .receiver(HTTP_RESPONSE)
+        .returns(HTTP_RESULT.parameterizedBy(TypeVariableName("E"), TypeVariableName("T")))
+        .addStatement(
+            "return %L { %L.%M(%M()) }",
+            MAP_TO_RESULT,
+            JSON_PROPERTY,
+            DECODE_FROM_STRING_FUN,
+            BODY_AS_TEXT_FUN,
+        ).build()
+
+    private fun buildToRawResult(e: TypeVariableName, t: TypeVariableName): FunSpec = FunSpec
+        .builder(TO_RAW_RESULT_FUN)
+        .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(e)
         .addTypeVariable(t)
         .receiver(HTTP_RESPONSE)
@@ -134,8 +227,8 @@ internal object ApiClientBaseGenerator {
         .build()
 
     private fun buildToEmptyResult(e: TypeVariableName): FunSpec = FunSpec
-        .builder("toEmptyResult")
-        .addModifiers(KModifier.SUSPEND, KModifier.INLINE)
+        .builder(TO_EMPTY_RESULT_FUN)
+        .addModifiers(KModifier.PROTECTED, KModifier.SUSPEND, KModifier.INLINE)
         .addTypeVariable(e)
         .receiver(HTTP_RESPONSE)
         .returns(HTTP_RESULT.parameterizedBy(TypeVariableName("E"), UNIT))
@@ -143,15 +236,28 @@ internal object ApiClientBaseGenerator {
         .build()
 
     private fun buildApiClientBaseClass(): TypeSpec {
+        val jsonParam = ParameterSpec
+            .builder(JSON_PROPERTY, JSON_CLASS)
+            .defaultValue("%T", JSON_CLASS)
+            .build()
+
         val constructor = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
+            .addParameter(jsonParam)
             .build()
 
         val baseUrlProp = PropertySpec
             .builder(BASE_URL, STRING)
             .initializer(BASE_URL)
             .addModifiers(KModifier.PROTECTED)
+            .build()
+
+        val jsonProp = PropertySpec
+            .builder(JSON_PROPERTY, JSON_CLASS)
+            .initializer(JSON_PROPERTY)
+            .addAnnotation(PublishedApi::class)
+            .addModifiers(KModifier.INTERNAL)
             .build()
 
         val clientProp = PropertySpec
@@ -165,17 +271,25 @@ internal object ApiClientBaseGenerator {
             .addStatement("$CLIENT.close()")
             .build()
 
+        val e = TypeVariableName("E").copy(reified = true)
+
         return TypeSpec
             .classBuilder(API_CLIENT_BASE)
             .addModifiers(KModifier.ABSTRACT)
             .addSuperinterface(CLOSEABLE)
             .primaryConstructor(constructor)
             .addProperty(baseUrlProp)
+            .addProperty(jsonProp)
             .addProperty(clientProp)
             .addFunction(closeFun)
             .addFunction(buildApplyAuth())
             .addFunction(buildSafeCall())
             .addFunction(buildCreateHttpClient())
+            .addFunction(buildDeserializeErrorBody(e))
+            .addFunction(buildMapToResult(e, TypeVariableName("T").copy(reified = true)))
+            .addFunction(buildToResult(e, TypeVariableName("T").copy(reified = true)))
+            .addFunction(buildToRawResult(e, TypeVariableName("T").copy(reified = true)))
+            .addFunction(buildToEmptyResult(e))
             .build()
     }
 
@@ -211,22 +325,10 @@ internal object ApiClientBaseGenerator {
     private fun buildCreateHttpClient(): FunSpec = FunSpec
         .builder(CREATE_HTTP_CLIENT)
         .addModifiers(KModifier.PROTECTED)
-        .addParameter(
-            ParameterSpec
-                .builder(SERIALIZERS_MODULE_PARAM, SERIALIZERS_MODULE.copy(nullable = true))
-                .defaultValue("null")
-                .build(),
-        ).returns(HTTP_CLIENT)
+        .returns(HTTP_CLIENT)
         .beginControlFlow("return %T", HTTP_CLIENT)
         .beginControlFlow("install(%T)", CONTENT_NEGOTIATION)
-        .beginControlFlow("if ($SERIALIZERS_MODULE_PARAM != null)")
-        .addStatement(
-            "%M(%T { this.$SERIALIZERS_MODULE_PARAM = $SERIALIZERS_MODULE_PARAM })",
-            JSON_FUN,
-            JSON_CLASS,
-        ).nextControlFlow("else")
-        .addStatement("%M()", JSON_FUN)
-        .endControlFlow()
+        .addStatement("%M(%L)", JSON_FUN, JSON_PROPERTY)
         .endControlFlow()
         .addStatement("expectSuccess = false")
         .endControlFlow()

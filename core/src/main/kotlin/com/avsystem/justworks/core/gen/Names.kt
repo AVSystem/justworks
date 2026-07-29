@@ -10,6 +10,7 @@ import com.squareup.kotlinpoet.MemberName
 val HTTP_CLIENT = ClassName("io.ktor.client", "HttpClient")
 val CONTENT_NEGOTIATION = ClassName("io.ktor.client.plugins.contentnegotiation", "ContentNegotiation")
 val HTTP_HEADERS = ClassName("io.ktor.http", "HttpHeaders")
+val ENCODE_URL_PATH_PART_FUN = MemberName("io.ktor.http", "encodeURLPathPart")
 
 val JSON_FUN = MemberName("io.ktor.serialization.kotlinx.json", "json")
 val BODY_FUN = MemberName("io.ktor.client.call", "body")
@@ -59,6 +60,8 @@ val JSON_ENCODER = ClassName("kotlinx.serialization.json", "JsonEncoder")
 val SERIALIZERS_MODULE = ClassName("kotlinx.serialization.modules", "SerializersModule")
 
 val JSON_OBJECT_EXT = MemberName("kotlinx.serialization.json", "jsonObject")
+val JSON_PRIMITIVE_EXT = MemberName("kotlinx.serialization.json", "jsonPrimitive")
+val ENCODE_TO_JSON_ELEMENT_FUN = MemberName("kotlinx.serialization.json", "encodeToJsonElement")
 
 val K_SERIALIZER = ClassName("kotlinx.serialization", "KSerializer")
 val SERIAL_DESCRIPTOR = ClassName("kotlinx.serialization.descriptors", "SerialDescriptor")
@@ -68,7 +71,6 @@ val PRIMITIVE_KIND = ClassName("kotlinx.serialization.descriptors", "PrimitiveKi
 val DECODER = ClassName("kotlinx.serialization.encoding", "Decoder")
 val ENCODER = ClassName("kotlinx.serialization.encoding", "Encoder")
 
-val ENCODE_TO_STRING_FUN = MemberName("kotlinx.serialization", "encodeToString")
 val POLYMORPHIC_FUN = MemberName("kotlinx.serialization.modules", "polymorphic")
 val SUBCLASS_FUN = MemberName("kotlinx.serialization.modules", "subclass")
 
@@ -93,7 +95,6 @@ val EXPERIMENTAL_UUID_API = ClassName("kotlin.uuid", "ExperimentalUuidApi")
 val HTTP_ERROR = ClassName("com.avsystem.justworks", "HttpError")
 val HTTP_SUCCESS = ClassName("com.avsystem.justworks", "HttpSuccess")
 val HTTP_RESULT = ClassName("com.avsystem.justworks", "HttpResult")
-val DESERIALIZE_ERROR_BODY_FUN = MemberName("com.avsystem.justworks", "deserializeErrorBody")
 
 // ============================================================================
 // Kotlin stdlib
@@ -104,6 +105,7 @@ val CLOSEABLE = ClassName("java.io", "Closeable")
 val IO_EXCEPTION = ClassName("java.io", "IOException")
 val HTTP_REQUEST_TIMEOUT_EXCEPTION = ClassName("io.ktor.client.plugins", "HttpRequestTimeoutException")
 val OPT_IN = ClassName("kotlin", "OptIn")
+val ENUM_CLASS = ClassName("kotlin", "Enum")
 
 // ============================================================================
 // Shared client base (generated)
@@ -112,9 +114,10 @@ val OPT_IN = ClassName("kotlin", "OptIn")
 val API_CLIENT_BASE = ClassName("com.avsystem.justworks", "ApiClientBase")
 val HTTP_RESPONSE = ClassName("io.ktor.client.statement", "HttpResponse")
 val HTTP_REQUEST_BUILDER = ClassName("io.ktor.client.request", "HttpRequestBuilder")
-val TO_RESULT_FUN = MemberName("com.avsystem.justworks", "toResult")
-val TO_EMPTY_RESULT_FUN = MemberName("com.avsystem.justworks", "toEmptyResult")
+val BODY_AS_TEXT_FUN = MemberName("io.ktor.client.statement", "bodyAsText")
+val DECODE_FROM_STRING_FUN = MemberName("kotlinx.serialization", "decodeFromString")
 val ENCODE_PARAM_FUN = MemberName("com.avsystem.justworks", "encodeParam")
+val ENCODE_PATH_PARAM_FUN = MemberName("com.avsystem.justworks", "encodePathParam")
 val UUID_SERIALIZER = ClassName("com.avsystem.justworks", "UuidSerializer")
 
 // ============================================================================
@@ -125,7 +128,15 @@ const val BASE_URL = "baseUrl"
 const val TOKEN = "token"
 const val CLIENT = "client"
 const val BODY = "body"
+const val JSON_PROPERTY = "json"
 const val APPLY_AUTH = "applyAuth"
 const val SAFE_CALL = "safeCall"
 const val CREATE_HTTP_CLIENT = "createHttpClient"
 const val GENERATED_SERIALIZERS_MODULE = "generatedSerializersModule"
+
+// toResult/toRawResult/toEmptyResult/deserializeErrorBody are members of ApiClientBase (they need
+// access to its `json` property), so call sites reference them by plain name — no import required.
+const val TO_RESULT_FUN = "toResult"
+const val TO_RAW_RESULT_FUN = "toRawResult"
+const val TO_EMPTY_RESULT_FUN = "toEmptyResult"
+const val DESERIALIZE_ERROR_BODY_FUN = "deserializeErrorBody"

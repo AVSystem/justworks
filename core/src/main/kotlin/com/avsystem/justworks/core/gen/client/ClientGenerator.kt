@@ -7,6 +7,7 @@ import com.avsystem.justworks.core.gen.BASE64_CLASS
 import com.avsystem.justworks.core.gen.BASE_URL
 import com.avsystem.justworks.core.gen.CLIENT
 import com.avsystem.justworks.core.gen.CREATE_HTTP_CLIENT
+import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
 import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
@@ -15,13 +16,17 @@ import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
 import com.avsystem.justworks.core.gen.HTTP_RESULT
 import com.avsystem.justworks.core.gen.HTTP_SUCCESS
 import com.avsystem.justworks.core.gen.Hierarchy
+import com.avsystem.justworks.core.gen.JSON_CLASS
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
+import com.avsystem.justworks.core.gen.JSON_PROPERTY
 import com.avsystem.justworks.core.gen.NameRegistry
+import com.avsystem.justworks.core.gen.OPT_IN
 import com.avsystem.justworks.core.gen.OutputOptions
 import com.avsystem.justworks.core.gen.TOKEN
 import com.avsystem.justworks.core.gen.client.BodyGenerator.buildFunctionBody
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildBodyParams
 import com.avsystem.justworks.core.gen.client.ParametersGenerator.buildNullableParameter
+import com.avsystem.justworks.core.gen.containsUuid
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.shared.toAuthParam
 import com.avsystem.justworks.core.gen.toCamelCase
@@ -29,9 +34,13 @@ import com.avsystem.justworks.core.gen.toPascalCase
 import com.avsystem.justworks.core.gen.toTypeName
 import com.avsystem.justworks.core.model.ApiKeyLocation
 import com.avsystem.justworks.core.model.ApiSpec
+import com.avsystem.justworks.core.model.ContentType
 import com.avsystem.justworks.core.model.Endpoint
 import com.avsystem.justworks.core.model.ParameterLocation
+import com.avsystem.justworks.core.model.Response
 import com.avsystem.justworks.core.model.SecurityScheme
+import com.squareup.kotlinpoet.AnnotationSpec
+import com.squareup.kotlinpoet.BYTE_ARRAY
 import com.squareup.kotlinpoet.ClassName
 import com.squareup.kotlinpoet.CodeBlock
 import com.squareup.kotlinpoet.FileSpec
@@ -74,12 +83,7 @@ internal object ClientGenerator {
         val simpleName = "${options.apiClassPrefix}${tag.toPascalCase()}${options.apiClassSuffix}"
         val className = ClassName(apiPackage, nameRegistry.register(simpleName))
 
-        val clientInitializer = if (hasPolymorphicTypes) {
-            val generatedSerializersModule = MemberName(hierarchy.modelPackage, GENERATED_SERIALIZERS_MODULE)
-            CodeBlock.of("${CREATE_HTTP_CLIENT}(%M)", generatedSerializersModule)
-        } else {
-            CodeBlock.of("${CREATE_HTTP_CLIENT}()")
-        }
+        val clientInitializer = CodeBlock.of("${CREATE_HTTP_CLIENT}()")
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
         val isSingleBearer = securitySchemes.singleOrNull() is SecurityScheme.Bearer
@@ -92,6 +96,15 @@ internal object ClientGenerator {
             .classBuilder(className)
             .superclass(API_CLIENT_BASE)
             .addSuperclassConstructorParameter(BASE_URL)
+
+        if (hasPolymorphicTypes) {
+            val generatedSerializersModule = MemberName(hierarchy.modelPackage, GENERATED_SERIALIZERS_MODULE)
+            classBuilder.addSuperclassConstructorParameter(
+                "$JSON_PROPERTY = %T { serializersModule = %M }",
+                JSON_CLASS,
+                generatedSerializersModule,
+            )
+        }
 
         if (isSingleBearer) {
             // Single Bearer: use plain "token" param name for ergonomics
@@ -143,10 +156,28 @@ internal object ClientGenerator {
             classBuilder.addFunctions(endpoints.map { generateEndpointFunction(it) })
         }
 
-        return FileSpec
-            .builder(className)
-            .addType(classBuilder.build())
-            .build()
+        val fileBuilder = FileSpec.builder(className).addType(classBuilder.build())
+        if (endpoints.usesUuid()) {
+            fileBuilder.addAnnotation(
+                AnnotationSpec
+                    .builder(OPT_IN)
+                    .addMember("%T::class", EXPERIMENTAL_UUID_API)
+                    .build(),
+            )
+        }
+        return fileBuilder.build()
+    }
+
+    // A Uuid-typed path/query/header param, request body, or response schema anywhere in this tag
+    // group means the generated function signatures reference kotlin.uuid.Uuid directly, which
+    // requires this file to opt into ExperimentalUuidApi (mirrors ModelGenerator's per-model check).
+    private fun List<Endpoint>.usesUuid(): Boolean = any { endpoint ->
+        val responseRefs = endpoint.responses.values
+            .asSequence()
+            .mapNotNull { it.schema }
+        val requestRef = endpoint.requestBody?.schema
+        val parameterRefs = endpoint.parameters.asSequence().map { it.schema }
+        (responseRefs + listOfNotNull(requestRef) + parameterRefs).any { it.containsUuid() }
     }
 
     private fun buildApplyAuth(
@@ -224,6 +255,7 @@ internal object ClientGenerator {
     private fun generateEndpointFunction(endpoint: Endpoint): FunSpec {
         val functionName = methodRegistry.register(endpoint.operationId.toCamelCase())
         val returnBodyType = resolveReturnType(endpoint)
+        val responseContentType = resolveSuccessResponse(endpoint)?.contentType
         val errorType = resolveErrorType(endpoint)
         val returnType = HTTP_RESULT.parameterizedBy(errorType, returnBodyType)
 
@@ -273,7 +305,7 @@ internal object ClientGenerator {
             }
         }
 
-        funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType))
+        funBuilder.addCode(buildFunctionBody(endpoint, params, returnBodyType, responseContentType))
 
         return funBuilder.build()
     }
@@ -296,15 +328,41 @@ internal object ClientGenerator {
 
     context(_: Hierarchy)
     private fun resolveReturnType(endpoint: Endpoint): TypeName {
-        val twoXxSchema = endpoint.responses
+        val response = resolveSuccessResponse(endpoint) ?: return UNIT
+        val schemaType = response.schema?.toTypeName() ?: return UNIT
+
+        // The declared schema type isn't always the type that can actually be decoded off the
+        // wire for a given content type, so it's overridden with whatever IS a faithful, safely
+        // decodable representation of that content type — rather than either forcing a decode
+        // that throws on every call, or failing generation over a spec inconsistency:
+        //  - application/json: a `{type: string, format: byte}` (ByteArray) schema is a base64
+        //    *string* on the wire, not a JSON byte array — kotlinx.serialization's built-in
+        //    ByteArraySerializer can't decode it. Surface the (still base64-encoded) String as-is.
+        //  - text/plain is always raw text, so String is always a faithful representation of it,
+        //    regardless of what the schema claims (e.g. `type: integer`) — body<String>() always
+        //    works, and a caller wanting the parsed type can convert it themselves.
+        //  - application/octet-stream is arbitrary binary, not necessarily valid UTF-8 text, so
+        //    ByteArray is the only safe universal representation — never downgrade this one to
+        //    String, unlike text/plain, since that risks throwing or corrupting non-UTF8 bytes.
+        return when {
+            schemaType == BYTE_ARRAY && response.contentType == ContentType.JSON_CONTENT_TYPE -> STRING
+            response.contentType == ContentType.TEXT_PLAIN -> STRING
+            response.contentType == ContentType.OCTET_STREAM -> BYTE_ARRAY
+            else -> schemaType
+        }
+    }
+
+    // The response whose schema/contentType determine the endpoint's return type: the first 2xx
+    // response with a schema, or (only when there's no 2xx response at all) the default response.
+    private fun resolveSuccessResponse(endpoint: Endpoint): Response? {
+        val twoXxResponse = endpoint.responses.entries
             .asSequence()
             .filter { it.key.startsWith("2") }
-            .firstNotNullOfOrNull { it.value.schema }
+            .map { it.value }
+            .firstOrNull { it.schema != null }
 
-        val schema = twoXxSchema ?: endpoint.responses["default"]?.schema.takeIf {
+        return twoXxResponse ?: endpoint.responses["default"]?.takeIf {
             endpoint.responses.none { it.key.startsWith("2") }
         }
-
-        return schema?.toTypeName() ?: UNIT
     }
 }

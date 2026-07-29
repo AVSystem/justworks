@@ -32,6 +32,7 @@ import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
 import com.avsystem.justworks.core.gen.collectInlineEnums
 import com.avsystem.justworks.core.gen.collectInlineSchemas
+import com.avsystem.justworks.core.gen.containsUuid
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
 import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
@@ -769,14 +770,6 @@ internal object ModelGenerator {
 
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
-
-    private fun TypeRef.containsUuid(): Boolean = when (this) {
-        is TypeRef.Primitive -> type == PrimitiveType.UUID
-        is TypeRef.Array -> items.containsUuid()
-        is TypeRef.Map -> valueType.containsUuid()
-        is TypeRef.Inline -> properties.any { it.type.containsUuid() }
-        is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> false
-    }
 
     private fun ApiSpec.usesUuid(): Boolean {
         val schemaRefs = schemas.asSequence().flatMap { schema -> schema.properties.map { it.type } }
