@@ -28,6 +28,7 @@ import com.avsystem.justworks.core.gen.SET_BODY_FUN
 import com.avsystem.justworks.core.gen.SUBMIT_FORM_FUN
 import com.avsystem.justworks.core.gen.SUBMIT_FORM_WITH_BINARY_DATA_FUN
 import com.avsystem.justworks.core.gen.TO_EMPTY_RESULT_FUN
+import com.avsystem.justworks.core.gen.TO_RAW_RESULT_FUN
 import com.avsystem.justworks.core.gen.TO_RESULT_FUN
 import com.avsystem.justworks.core.gen.isBinaryUpload
 import com.avsystem.justworks.core.gen.properties
@@ -41,7 +42,9 @@ import com.avsystem.justworks.core.model.Parameter
 import com.avsystem.justworks.core.model.ParameterLocation
 import com.avsystem.justworks.core.model.PrimitiveType
 import com.avsystem.justworks.core.model.TypeRef
+import com.squareup.kotlinpoet.BYTE_ARRAY
 import com.squareup.kotlinpoet.CodeBlock
+import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.UNIT
 
@@ -50,8 +53,9 @@ internal object BodyGenerator {
         endpoint: Endpoint,
         params: Map<ParameterLocation, List<Parameter>>,
         returnBodyType: TypeName,
+        responseContentType: ContentType?,
     ): CodeBlock {
-        val resultFun = if (returnBodyType == UNIT) TO_EMPTY_RESULT_FUN else TO_RESULT_FUN
+        val resultFun = resolveResultFun(returnBodyType, responseContentType)
         val code = CodeBlock.builder()
 
         code.beginControlFlow("return $SAFE_CALL")
@@ -75,12 +79,19 @@ internal object BodyGenerator {
             }
         }
 
-        // Close the HTTP call block and chain .toResult() / .toEmptyResult()
+        // Close the HTTP call block and chain .toResult() / .toRawResult() / .toEmptyResult()
         code.unindent()
-        code.add("}.%M()\n", resultFun)
+        code.add("}.$resultFun()\n")
         code.endControlFlow() // safeCall
 
         return code.build()
+    }
+
+    private fun resolveResultFun(returnBodyType: TypeName, responseContentType: ContentType?): String = when {
+        returnBodyType == UNIT -> TO_EMPTY_RESULT_FUN
+        returnBodyType == BYTE_ARRAY -> TO_RAW_RESULT_FUN
+        returnBodyType == STRING && responseContentType != ContentType.JSON_CONTENT_TYPE -> TO_RAW_RESULT_FUN
+        else -> TO_RESULT_FUN
     }
 
     private fun CodeBlock.Builder.buildJsonBody(

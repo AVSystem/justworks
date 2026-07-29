@@ -1322,4 +1322,185 @@ class JustworksPluginFunctionalTest {
 
         runner("justworksSharedTypes").build()
     }
+
+    @Test
+    fun `json string responses strip quotes at runtime, text-plain responses stay raw`() {
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Quoting Test
+              version: '1.0'
+            paths:
+              /token:
+                get:
+                  operationId: getToken
+                  tags:
+                    - quoting
+                  responses:
+                    '200':
+                      description: A JSON-quoted string
+                      content:
+                        application/json:
+                          schema:
+                            type: string
+              /raw:
+                get:
+                  operationId: getRaw
+                  tags:
+                    - quoting
+                  responses:
+                    '200':
+                      description: A raw text/plain string
+                      content:
+                        text/plain:
+                          schema:
+                            type: string
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+                testImplementation("io.ktor:ktor-client-mock:3.1.1")
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        // A hand-written ApiClientBase subclass with a MockEngine swapped in for `client` — this
+        // exercises the real (generated) toResult()/toRawResult() member functions against a fake
+        // HTTP response, proving the decoding behavior at runtime rather than just inspecting source.
+        writeFile(
+            "src/test/kotlin/QuoteStrippingTest.kt",
+            """
+            import com.avsystem.justworks.ApiClientBase
+            import com.avsystem.justworks.HttpError
+            import com.avsystem.justworks.HttpSuccess
+            import io.ktor.client.HttpClient
+            import io.ktor.client.engine.mock.MockEngine
+            import io.ktor.client.engine.mock.respond
+            import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+            import io.ktor.client.request.get
+            import io.ktor.http.HttpHeaders
+            import io.ktor.http.HttpStatusCode
+            import io.ktor.http.headersOf
+            import io.ktor.serialization.kotlinx.json.json
+            import kotlinx.coroutines.runBlocking
+            import kotlin.test.Test
+            import kotlin.test.assertEquals
+
+            class QuoteStrippingTest {
+                private class TestClient(baseUrl: String, engine: MockEngine) : ApiClientBase(baseUrl) {
+                    override val client: HttpClient = HttpClient(engine) {
+                        install(ContentNegotiation) { json() }
+                    }
+
+                    fun jsonToken() = runBlocking {
+                        client.get("${'$'}baseUrl/token").toResult<String, String>()
+                    }
+
+                    fun rawText() = runBlocking {
+                        client.get("${'$'}baseUrl/raw").toRawResult<String, String>()
+                    }
+                }
+
+                @Test
+                fun `a JSON-quoted String success body decodes without the surrounding quotes`() {
+                    val engine = MockEngine {
+                        respond(
+                            "\"abc-123\"",
+                            HttpStatusCode.OK,
+                            headersOf(HttpHeaders.ContentType, listOf("application/json")),
+                        )
+                    }
+                    val result = TestClient("http://test", engine).jsonToken()
+                    assertEquals(HttpSuccess(200, "abc-123"), result)
+                }
+
+                @Test
+                fun `a text-plain String success body is passed through untouched, not JSON-decoded`() {
+                    val engine = MockEngine {
+                        respond(
+                            "abc-123",
+                            HttpStatusCode.OK,
+                            headersOf(HttpHeaders.ContentType, listOf("text/plain")),
+                        )
+                    }
+                    val result = TestClient("http://test", engine).rawText()
+                    assertEquals(HttpSuccess(200, "abc-123"), result)
+                }
+
+                @Test
+                fun `a text-plain 404 error body decodes to its raw text, not null`() {
+                    val engine = MockEngine {
+                        respond(
+                            "Not found",
+                            HttpStatusCode.NotFound,
+                            headersOf(HttpHeaders.ContentType, listOf("text/plain")),
+                        )
+                    }
+                    val result = TestClient("http://test", engine).jsonToken()
+                    assertEquals(HttpError.NotFound("Not found"), result)
+                }
+
+                @Test
+                fun `a 404 error body with no Content-Type decodes to its raw text, not null`() {
+                    val engine = MockEngine { respond("Not found", HttpStatusCode.NotFound) }
+                    val result = TestClient("http://test", engine).jsonToken()
+                    assertEquals(HttpError.NotFound("Not found"), result)
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("test").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":test")?.outcome,
+            "MockEngine round-trip test for issue #110 should pass",
+        )
+
+        // Also verify codegen wires each response's declared content type to the right helper:
+        // the JSON string response to toResult(), the text/plain response to toRawResult().
+        val clientFile = projectDir.resolve("build/generated/justworks/main/com/example/api/QuotingApi.kt")
+        assertTrue(clientFile.exists(), "QuotingApi.kt should exist")
+        val functions = clientFile.readText().split(Regex("(?=suspend fun )"))
+        val getTokenFn = functions.first { it.contains("getToken(") }
+        val getRawFn = functions.first { it.contains("getRaw(") }
+        assertTrue(getTokenFn.contains(".toResult()"), "getToken (JSON string) should use toResult(), got: $getTokenFn")
+        assertTrue(getRawFn.contains(".toRawResult()"), "getRaw (text/plain) should use toRawResult(), got: $getRawFn")
+    }
 }

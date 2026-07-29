@@ -489,6 +489,145 @@ class ClientGeneratorTest {
         assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString())
     }
 
+    // -- text/plain and octet-stream responses must keep Ktor's native body<T>()
+    // converter (toRawResult), NOT the JSON-decoding toResult() — a raw text/plain body isn't
+    // necessarily valid JSON, so running it through json.decodeFromString would break it.
+
+    @Test
+    fun `text plain response is chained with toRawResult, not toResult`() {
+        val ep = endpoint(
+            operationId = "getText",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.STRING), ContentType.TEXT_PLAIN),
+            ),
+        )
+        val cls = clientClass(ep)
+        val body = cls.funSpecs
+            .first { it.name == "getText" }
+            .body
+            .toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected toRawResult() for text/plain, got: $body")
+        assertFalse(body.contains(".toResult()"), "text/plain must not use JSON-decoding toResult(), got: $body")
+    }
+
+    @Test
+    fun `octet stream response is chained with toRawResult, not toResult`() {
+        val ep = endpoint(
+            operationId = "getBinary",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val body = cls.funSpecs
+            .first { it.name == "getBinary" }
+            .body
+            .toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected toRawResult() for octet-stream, got: $body")
+        assertFalse(body.contains(".toResult()"), "octet-stream must not use JSON-decoding toResult(), got: $body")
+    }
+
+    @Test
+    fun `JSON string response (bare type string schema) is chained with toResult, not toRawResult`() {
+        val ep = endpoint(
+            operationId = "getToken",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.STRING), ContentType.JSON_CONTENT_TYPE),
+            ),
+        )
+        val cls = clientClass(ep)
+        val body = cls.funSpecs
+            .first { it.name == "getToken" }
+            .body
+            .toString()
+        assertTrue(body.contains(".toResult()"), "Expected JSON-decoding toResult() for a JSON string, got: $body")
+        assertFalse(body.contains(".toRawResult()"), "Got: $body")
+    }
+
+    // A `format: byte` (ByteArray) schema under application/json is a base64 *string* on the wire,
+    // not a JSON byte array — kotlinx.serialization's built-in ByteArraySerializer can't decode
+    // it, and claiming a decoded ByteArray here would be misleading. Downgrade the return type to
+    // String (still base64-encoded) instead, which already decodes correctly via the existing
+    // JSON-string path
+    @Test
+    fun `byte array response under application json downgrades to String and uses toResult`() {
+        val ep = endpoint(
+            operationId = "getEncodedBinary",
+            responses = mapOf(
+                "200" to Response(
+                    "200",
+                    "OK",
+                    TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+                    ContentType.JSON_CONTENT_TYPE,
+                ),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getEncodedBinary" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.String", returnType.typeArguments[1].toString(), "Expected String, not ByteArray")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toResult()"), "Expected JSON-decoding toResult(), got: $body")
+        assertFalse(body.contains(".toRawResult()"), "Got: $body")
+    }
+
+    @Test
+    fun `byte array response under application octet stream keeps ByteArray and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getBinaryOctetStream",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getBinaryOctetStream" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString())
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
+    // text/plain is always raw text, so String is always a faithful representation of it,
+    // regardless of what the schema claims — body<String>() always works, and a caller wanting
+    // the parsed type (e.g. Int) can convert it themselves.
+    @Test
+    fun `text plain response with a non-String schema downgrades to String and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getCount",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.INT), ContentType.TEXT_PLAIN),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getCount" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.String", returnType.typeArguments[1].toString(), "Expected String, not Int")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
+    // application/octet-stream is arbitrary binary, not necessarily valid UTF-8 text, so ByteArray
+    // is the only safe universal representation of it — unlike text/plain, this is never
+    // downgraded to String, since that risks throwing or corrupting non-UTF8 bytes.
+    @Test
+    fun `octet stream response with a non-ByteArray schema downgrades to ByteArray and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getCount",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.INT), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getCount" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString(), "Expected ByteArray, not Int")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
     @Test
     fun `mixed 200 and 204 responses uses 200 schema type`() {
         val ep = endpoint(
@@ -577,21 +716,24 @@ class ClientGeneratorTest {
     // -- SER-01: Polymorphic spec wires SerializersModule --
 
     @Test
-    fun `polymorphic spec wires serializersModule in createHttpClient call`() {
+    fun `polymorphic spec wires serializersModule into the json passed to the ApiClientBase superclass`() {
         val files = generate(spec(endpoint()), hasPolymorphicTypes = true)
-        val clientProperty = files
+        val cls = files
             .first()
             .members
             .filterIsInstance<TypeSpec>()
             .first()
-            .propertySpecs
-            .first { it.name == "client" }
-        val clientInitializer = clientProperty.initializer.toString()
+        val superParams = cls.superclassConstructorParameters.map { it.toString() }
         assertTrue(
-            clientInitializer.contains("generatedSerializersModule"),
-            "Expected generatedSerializersModule reference",
+            superParams.any { it.contains("json") && it.contains("generatedSerializersModule") },
+            "Expected a json = Json { serializersModule = generatedSerializersModule } superclass param, got: $superParams",
         )
-        assertTrue(clientInitializer.contains("createHttpClient"), "Expected createHttpClient call")
+
+        val clientInitializer = cls.propertySpecs
+            .first { it.name == "client" }
+            .initializer
+            .toString()
+        assertEquals("createHttpClient()", clientInitializer, "createHttpClient() no longer takes serializersModule")
     }
 
     // -- CONT-01: Multipart form-data code generation --
