@@ -5,6 +5,7 @@ plugins {
     id("org.jlleitschuh.gradle.ktlint") version "14.2.0" apply false
     id("org.jetbrains.kotlinx.kover") version "0.9.9" apply false
     id("com.vanniktech.maven.publish") version "0.37.0" apply false
+    id("org.jetbrains.dokka") version "2.2.0"
 }
 
 allprojects {
@@ -61,5 +62,19 @@ subprojects {
                 }
             }
         }
+    }
+}
+
+dependencies {
+    dokka(project(":core"))
+    dokka(project(":plugin"))
+}
+
+dokka {
+    moduleName.set("justworks")
+
+    dokkaPublications.html {
+        outputDirectory.set(layout.buildDirectory.dir("dokka"))
+        includes.from("README.md")
     }
 }

@@ -2,6 +2,8 @@
 
 A Gradle plugin that generates type-safe Kotlin [Ktor](https://ktor.io/) client code from OpenAPI 3.0 specifications.
 
+API documentation: https://avsystem.github.io/justworks/
+
 ## Installation
 
 Add the plugin to your `build.gradle.kts`:
