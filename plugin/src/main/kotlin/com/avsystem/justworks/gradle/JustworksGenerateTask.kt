@@ -51,6 +51,10 @@ abstract class JustworksGenerateTask : DefaultTask() {
     @get:Input
     abstract val apiClassSuffix: Property<String>
 
+    /** Whether to generate an interface per API tag implemented by the client. */
+    @get:Input
+    abstract val generateInterfaces: Property<Boolean>
+
     /** Output directory for generated Kotlin source files. */
     @get:OutputDirectory
     abstract val outputDir: DirectoryProperty
@@ -78,6 +82,7 @@ abstract class JustworksGenerateTask : DefaultTask() {
                         generateKdoc = generateKdoc.get(),
                         apiClassPrefix = apiClassPrefix.get(),
                         apiClassSuffix = apiClassSuffix.get(),
+                        generateInterfaces = generateInterfaces.get(),
                     ),
                 )
 

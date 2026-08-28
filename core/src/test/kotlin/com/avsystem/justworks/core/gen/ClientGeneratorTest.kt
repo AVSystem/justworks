@@ -145,6 +145,47 @@ class ClientGeneratorTest {
         )
     }
 
+    // -- generateInterfaces --
+
+    @Test
+    fun `generateInterfaces false produces only the client class`() {
+        val files = generate(spec(endpoint(tags = listOf("Pets"))))
+        val typeNames = files.flatMap { it.members.filterIsInstance<TypeSpec>() }.map { it.name }
+        assertEquals(listOf("PetsApi"), typeNames)
+    }
+
+    @Test
+    fun `generateInterfaces true produces interface and Impl class`() {
+        val files = generate(
+            spec(endpoint(operationId = "listPets", tags = listOf("Pets"))),
+            options = OutputOptions(generateInterfaces = true),
+        )
+        val types = files.flatMap { it.members.filterIsInstance<TypeSpec>() }.associateBy { it.name }
+
+        val iface = assertNotNull(types["PetsApi"], "Expected PetsApi interface")
+        assertEquals(TypeSpec.Kind.INTERFACE, iface.kind)
+        val ifaceFun = iface.funSpecs.first { it.name == "listPets" }
+        assertTrue(KModifier.SUSPEND in ifaceFun.modifiers, "Interface method should be suspend")
+        assertTrue(ifaceFun.body.isEmpty(), "Interface method should have no body")
+
+        val impl = assertNotNull(types["PetsApiImpl"], "Expected PetsApiImpl class")
+        assertTrue(impl.superinterfaces.keys.any { it.toString().endsWith("PetsApi") }, "Impl should implement PetsApi")
+        val implFun = impl.funSpecs.first { it.name == "listPets" }
+        assertTrue(KModifier.OVERRIDE in implFun.modifiers, "Impl method should override")
+        assertFalse(implFun.body.isEmpty(), "Impl method should have a body")
+    }
+
+    @Test
+    fun `generateInterfaces respects custom prefix and suffix`() {
+        val files = generate(
+            spec(endpoint(tags = listOf("Pets"))),
+            options = OutputOptions(apiClassSuffix = "Client", generateInterfaces = true),
+        )
+        val typeNames = files.flatMap { it.members.filterIsInstance<TypeSpec>() }.mapNotNull { it.name }.toSet()
+        assertTrue("PetsClient" in typeNames, "Expected interface PetsClient; got $typeNames")
+        assertTrue("PetsClientImpl" in typeNames, "Expected class PetsClientImpl; got $typeNames")
+    }
+
     // -- CLNT-02: Endpoint functions are suspend --
 
     @Test

@@ -64,5 +64,12 @@ abstract class JustworksSpecConfiguration
          */
         abstract val apiClassSuffix: Property<String>
 
+        /**
+         * Whether to generate an interface per API tag that the client class implements.
+         * Defaults to `false`. When enabled, the interface keeps the configured name
+         * (e.g. `PetsApi`) and the concrete client gets an `Impl` suffix (`PetsApiImpl`).
+         */
+        abstract val generateInterfaces: Property<Boolean>
+
         override fun getName(): String = name
     }

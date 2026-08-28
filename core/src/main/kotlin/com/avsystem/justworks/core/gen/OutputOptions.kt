@@ -10,4 +10,5 @@ data class OutputOptions(
     val generateKdoc: Boolean = true,
     val apiClassPrefix: String = "",
     val apiClassSuffix: String = "Api",
+    val generateInterfaces: Boolean = false,
 )
