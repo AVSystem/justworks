@@ -1,6 +1,7 @@
 package com.avsystem.justworks.core.gen.model
 
 import arrow.core.raise.catch
+import com.avsystem.justworks.core.gen.BUILD_CLASS_SERIAL_DESCRIPTOR_FUN
 import com.avsystem.justworks.core.gen.DECODER
 import com.avsystem.justworks.core.gen.ENCODER
 import com.avsystem.justworks.core.gen.EXPERIMENTAL_SERIALIZATION_API
@@ -9,7 +10,10 @@ import com.avsystem.justworks.core.gen.Hierarchy
 import com.avsystem.justworks.core.gen.INSTANT
 import com.avsystem.justworks.core.gen.JSON_CLASS_DISCRIMINATOR
 import com.avsystem.justworks.core.gen.JSON_CONTENT_POLYMORPHIC_SERIALIZER
+import com.avsystem.justworks.core.gen.JSON_DECODER
 import com.avsystem.justworks.core.gen.JSON_ELEMENT
+import com.avsystem.justworks.core.gen.JSON_ENCODER
+import com.avsystem.justworks.core.gen.JSON_OBJECT
 import com.avsystem.justworks.core.gen.JSON_OBJECT_EXT
 import com.avsystem.justworks.core.gen.K_SERIALIZER
 import com.avsystem.justworks.core.gen.LOCAL_DATE
@@ -28,6 +32,7 @@ import com.avsystem.justworks.core.gen.UUID_SERIALIZER
 import com.avsystem.justworks.core.gen.UUID_TYPE
 import com.avsystem.justworks.core.gen.collectInlineEnums
 import com.avsystem.justworks.core.gen.collectInlineSchemas
+import com.avsystem.justworks.core.gen.containsUuid
 import com.avsystem.justworks.core.gen.invoke
 import com.avsystem.justworks.core.gen.model.ModelGenerator.buildNestedVariant
 import com.avsystem.justworks.core.gen.model.ModelGenerator.generateDataClass
@@ -136,13 +141,18 @@ internal object ModelGenerator {
     context(hierarchy: Hierarchy, _: OutputOptions)
     private fun generateSchemaFiles(schema: SchemaModel): List<FileSpec> = when {
         !schema.anyOf.isNullOrEmpty() || !schema.oneOf.isNullOrEmpty() -> {
-            if (schema.name in hierarchy.anyOfWithoutDiscriminator) {
-                listOf(
+            when (schema.name) {
+                in hierarchy.anyOfWithoutDiscriminator -> listOf(
                     generateSealedInterface(schema),
                     generatePolymorphicSerializer(schema),
                 )
-            } else {
-                listOf(generateSealedHierarchy(schema))
+
+                in hierarchy.oneOfWrappers -> listOf(
+                    generateWrapperUnion(schema),
+                    generateWrapperSerializer(schema),
+                )
+
+                else -> listOf(generateSealedHierarchy(schema))
             }
         }
 
@@ -404,6 +414,143 @@ internal object ModelGenerator {
     }
 
     /**
+     * Generates the sealed interface for an externally-tagged wrapper oneOf, with nested variant
+     * subtypes and a `@Serializable(with = …Serializer::class)` binding to its bespoke serializer.
+     *
+     * Unlike [generateSealedHierarchy] this emits no `@JsonClassDiscriminator`: the wire payload is
+     * externally tagged (`{"TypeName": {...}}`), so discrimination happens in the serializer, not
+     * via an internal `"type"` field.
+     */
+    context(hierarchy: Hierarchy, options: OutputOptions)
+    private fun generateWrapperUnion(schema: SchemaModel): FileSpec {
+        val className = ClassName(hierarchy.modelPackage, schema.name)
+        val serializerClassName = ClassName(hierarchy.modelPackage, "${schema.name}Serializer")
+
+        val parentBuilder = TypeSpec.interfaceBuilder(className).addModifiers(KModifier.SEALED)
+        parentBuilder.addAnnotation(
+            AnnotationSpec
+                .builder(SERIALIZABLE)
+                .addMember("with = %T::class", serializerClassName)
+                .build(),
+        )
+
+        if (options.generateKdoc && schema.description != null) {
+            parentBuilder.addKdoc("%L", schema.description)
+        }
+
+        // Drive the nested variants from the same source as generateWrapperSerializer's `when`
+        // branches (oneOfWrapperMapping), so the interface's subtypes and the serializer's arms
+        // can never diverge into a non-exhaustive `when`.
+        schema.oneOfWrapperMapping.orEmpty().forEach { (_, variantName) ->
+            parentBuilder.addType(
+                buildNestedVariant(
+                    variantSchema = hierarchy.schemasById[variantName],
+                    variantName = variantName,
+                    parentClassName = className,
+                    serialName = schema.resolveSerialName(variantName),
+                ),
+            )
+        }
+
+        return FileSpec.builder(className).addType(parentBuilder.build()).build()
+    }
+
+    /**
+     * Generates the bespoke [kotlinx.serialization.KSerializer] for an externally-tagged wrapper
+     * oneOf. Deserialization reads the single wrapper key and delegates to the matching variant
+     * serializer on the wrapped value; serialization re-wraps the encoded variant under its key.
+     */
+    context(hierarchy: Hierarchy, _: OutputOptions)
+    private fun generateWrapperSerializer(schema: SchemaModel): FileSpec {
+        val sealedClassName = ClassName(hierarchy.modelPackage, schema.name)
+        val serializerClassName = ClassName(hierarchy.modelPackage, "${schema.name}Serializer")
+        val mapping = schema.oneOfWrapperMapping.orEmpty()
+
+        val descriptorProp = PropertySpec
+            .builder("descriptor", SERIAL_DESCRIPTOR)
+            .addModifiers(KModifier.OVERRIDE)
+            .initializer("%M(%S)", BUILD_CLASS_SERIAL_DESCRIPTOR_FUN, schema.name)
+            .build()
+
+        val deserializeBody = CodeBlock
+            .builder()
+            .addStatement(
+                "val input = decoder as? %T ?: throw %T(%S)",
+                JSON_DECODER,
+                SERIALIZATION_EXCEPTION,
+                "${schema.name} can only be deserialized from JSON",
+            ).addStatement("val element = input.decodeJsonElement().%M", JSON_OBJECT_EXT)
+            .addStatement(
+                "val key = element.keys.singleOrNull() ?: throw %T(%S + element.keys)",
+                SERIALIZATION_EXCEPTION,
+                "Expected a single-key wrapper object for ${schema.name} but got keys: ",
+            ).beginControlFlow("return when (key)")
+        mapping.forEach { (wrapperKey, variantSchemaName) ->
+            deserializeBody.addStatement(
+                "%S -> input.json.decodeFromJsonElement(%T.serializer(), element.getValue(key))",
+                wrapperKey,
+                hierarchy[variantSchemaName],
+            )
+        }
+        deserializeBody.addStatement(
+            "else -> throw %T(%S + key)",
+            SERIALIZATION_EXCEPTION,
+            "Unknown ${schema.name} variant key: ",
+        )
+        deserializeBody.endControlFlow()
+
+        val deserializeFun = FunSpec
+            .builder("deserialize")
+            .addModifiers(KModifier.OVERRIDE)
+            .addParameter("decoder", DECODER)
+            .returns(sealedClassName)
+            .addCode(deserializeBody.build())
+            .build()
+
+        val serializeBody = CodeBlock
+            .builder()
+            .addStatement(
+                "val output = encoder as? %T ?: throw %T(%S)",
+                JSON_ENCODER,
+                SERIALIZATION_EXCEPTION,
+                "${schema.name} can only be serialized to JSON",
+            ).beginControlFlow("val element = when (value)")
+        mapping.forEach { (wrapperKey, variantSchemaName) ->
+            val variantClass = hierarchy[variantSchemaName]
+            serializeBody.addStatement(
+                "is %T -> %T(mapOf(%S to output.json.encodeToJsonElement(%T.serializer(), value)))",
+                variantClass,
+                JSON_OBJECT,
+                wrapperKey,
+                variantClass,
+            )
+        }
+        serializeBody.endControlFlow()
+        serializeBody.addStatement("output.encodeJsonElement(element)")
+
+        val serializeFun = FunSpec
+            .builder("serialize")
+            .addModifiers(KModifier.OVERRIDE)
+            .addParameter("encoder", ENCODER)
+            .addParameter("value", sealedClassName)
+            .addCode(serializeBody.build())
+            .build()
+
+        val objectSpec = TypeSpec
+            .objectBuilder(serializerClassName)
+            .addSuperinterface(K_SERIALIZER.parameterizedBy(sealedClassName))
+            .addProperty(descriptorProp)
+            .addFunction(deserializeFun)
+            .addFunction(serializeFun)
+            .build()
+
+        return FileSpec
+            .builder(serializerClassName)
+            .addType(objectSpec)
+            .build()
+    }
+
+    /**
      * Generates a data class FileSpec, with superinterfaces and @SerialName resolved from hierarchy.
      * Used for: standalone schemas, allOf composed classes, and anyOf-without-discriminator variants.
      */
@@ -542,17 +689,47 @@ internal object ModelGenerator {
         }
 
         is TypeRef.Reference -> {
-            val constantName = value.toString().toEnumConstantName()
-            CodeBlock.of("%T.%L", ClassName(hierarchy.modelPackage, type.schemaName), constantName)
+            val className = hierarchy[type.schemaName]
+            when (value) {
+                is Map<*, *> -> {
+                    val schema = hierarchy.schemasById[type.schemaName]
+                        ?: throw IllegalArgumentException(
+                            "Cannot build object default for property $propName: unknown schema '${type.schemaName}'",
+                        )
+
+                    val args = schema.properties
+                        .asSequence()
+                        .filter { it.name in value }
+                        .map { prop ->
+                            val valueCode = when (val rawValue = value[prop.name]) {
+                                null -> CodeBlock.of("null")
+                                else -> formatDefaultValue(prop.type, rawValue, prop.name)
+                            }
+                            CodeBlock.of("%N = %L", prop.name.toCamelCase(), valueCode)
+                        }.toList()
+                    CodeBlock.of("%T(%L)", className, args.joinToCode(separator = ", "))
+                }
+
+                is String -> {
+                    CodeBlock.of("%T.%N", className, value.toEnumConstantName())
+                }
+
+                else -> {
+                    error(
+                        "${value?.javaClass?.name} is not a valid default value for reference type $type (property $propName)",
+                    )
+                }
+            }
         }
 
         is TypeRef.Array -> {
             val elements = (value as? List<*>).orEmpty()
             if (elements.isEmpty()) {
-                CodeBlock.of("emptyList()")
+                CodeBlock.of(if (type.unique) "emptySet()" else "emptyList()")
             } else {
                 val items = elements.map { formatDefaultValue(type.items, it, propName) }
-                CodeBlock.of("listOf(%L)", items.joinToCode(separator = ", "))
+                val factory = if (type.unique) "setOf" else "listOf"
+                CodeBlock.of("$factory(%L)", items.joinToCode(separator = ", "))
             }
         }
 
@@ -593,14 +770,6 @@ internal object ModelGenerator {
 
     private val SchemaModel.isPrimitiveOnly: Boolean
         get() = properties.isEmpty() && allOf == null && oneOf == null && anyOf == null
-
-    private fun TypeRef.containsUuid(): Boolean = when (this) {
-        is TypeRef.Primitive -> type == PrimitiveType.UUID
-        is TypeRef.Array -> items.containsUuid()
-        is TypeRef.Map -> valueType.containsUuid()
-        is TypeRef.Inline -> properties.any { it.type.containsUuid() }
-        is TypeRef.Reference, is TypeRef.InlineEnum, TypeRef.Unknown -> false
-    }
 
     private fun ApiSpec.usesUuid(): Boolean {
         val schemaRefs = schemas.asSequence().flatMap { schema -> schema.properties.map { it.type } }

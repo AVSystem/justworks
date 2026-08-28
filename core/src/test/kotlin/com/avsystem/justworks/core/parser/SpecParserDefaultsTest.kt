@@ -61,4 +61,53 @@ class SpecParserDefaultsTest : SpecParserTestBase() {
         assertFalse(secret.nullable, "property with a byte-array default must not be nullable")
         assertNotNull(secret.defaultValue, "byte-array default value must be retained")
     }
+
+    @Test
+    fun `unique array default is normalized to a plain List and property is non-nullable`() {
+        val uniqueTags = props.getValue("uniqueTags")
+        assertFalse(uniqueTags.nullable)
+        assertEquals(listOf("X", "Y"), uniqueTags.defaultValue)
+    }
+
+    @Test
+    fun `object reference default is normalized to a plain Map and property is non-nullable`() {
+        val config = props.getValue("config")
+        assertFalse(config.nullable, "property with an object default must not be nullable")
+        assertEquals(
+            mapOf("taskName" to null, "parameters" to emptyList<Any?>(), "isActive" to false),
+            config.defaultValue,
+        )
+    }
+
+    @Test
+    fun `map-type default is not honored and property stays nullable`() {
+        // A free-form map default is not honored: the property stays nullable, so the model
+        // layer emits `= null` regardless of the retained raw default value.
+        val rawMap = props.getValue("rawMap")
+        assertTrue(rawMap.nullable, "free-form map default must not be honored")
+    }
+
+    @Test
+    fun `array of object defaults is normalized to a List of Maps`() {
+        val configs = props.getValue("configs")
+        assertFalse(configs.nullable)
+        assertEquals(
+            listOf(
+                mapOf("taskName" to "first", "isActive" to true),
+                mapOf("taskName" to "second"),
+            ),
+            configs.defaultValue,
+        )
+    }
+
+    @Test
+    fun `object default preserves nested scalar values and types`() {
+        val config = props.getValue("config")
+
+        @Suppress("UNCHECKED_CAST")
+        val map = config.defaultValue as Map<String, Any?>
+        assertEquals(false, map["isActive"])
+        assertTrue(map.containsKey("taskName"))
+        assertEquals(null, map["taskName"])
+    }
 }

@@ -100,6 +100,7 @@ class JustworksPluginFunctionalTest {
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
                 implementation("io.ktor:ktor-client-core:3.1.1")
                 implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
@@ -184,6 +185,125 @@ class JustworksPluginFunctionalTest {
         val content = clientFile.readText()
         assertTrue(content.contains("suspend fun"), "PetsApi should contain suspend functions")
         assertTrue(content.contains("class PetsApi"), "PetsApi should define PetsApi class")
+    }
+
+    @Test
+    fun `generated code for a feature-rich spec compiles`() {
+        // Exercises models, enums, oneOf polymorphism, allOf, all parameter locations,
+        // a JSON request body, UUID / date / date-time formats, and bearer security.
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Featureful
+              version: '1.0'
+            security:
+              - bearerAuth: []
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  summary: List pets
+                  tags: [pets]
+                  parameters:
+                    - { name: limit, in: query, schema: { type: integer, format: int32 } }
+                    - { name: X-Trace, in: header, schema: { type: string } }
+                  responses:
+                    '200':
+                      description: ok
+                      content:
+                        application/json:
+                          schema: { type: array, items: { ${'$'}ref: '#/components/schemas/Pet' } }
+                post:
+                  operationId: createPet
+                  tags: [pets]
+                  requestBody:
+                    required: true
+                    content:
+                      application/json:
+                        schema: { ${'$'}ref: '#/components/schemas/NewPet' }
+                  responses:
+                    '201':
+                      description: created
+                      content:
+                        application/json:
+                          schema: { ${'$'}ref: '#/components/schemas/Pet' }
+              /pets/{petId}:
+                get:
+                  operationId: getPet
+                  tags: [pets]
+                  parameters:
+                    - { name: petId, in: path, required: true, schema: { type: integer, format: int64 } }
+                  responses:
+                    '200':
+                      description: ok
+                      content:
+                        application/json:
+                          schema: { ${'$'}ref: '#/components/schemas/Pet' }
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+              schemas:
+                Pet:
+                  type: object
+                  required: [id, name]
+                  properties:
+                    id: { type: integer, format: int64 }
+                    uuid: { type: string, format: uuid }
+                    birthday: { type: string, format: date }
+                    name: { type: string }
+                    status: { ${'$'}ref: '#/components/schemas/PetStatus' }
+                NewPet:
+                  type: object
+                  required: [name]
+                  properties:
+                    name: { type: string }
+                Identified:
+                  type: object
+                  required: [id]
+                  properties:
+                    id: { type: integer, format: int64 }
+                NamedPet:
+                  allOf:
+                    - ${'$'}ref: '#/components/schemas/Identified'
+                    - type: object
+                      properties:
+                        name: { type: string }
+                PetStatus:
+                  type: string
+                  enum: [available, pending, sold]
+                Shape:
+                  oneOf:
+                    - ${'$'}ref: '#/components/schemas/Circle'
+                    - ${'$'}ref: '#/components/schemas/Square'
+                  discriminator:
+                    propertyName: kind
+                Circle:
+                  type: object
+                  required: [kind, radius]
+                  properties:
+                    kind: { type: string }
+                    radius: { type: number, format: double }
+                Square:
+                  type: object
+                  required: [kind, side]
+                  properties:
+                    kind: { type: string }
+                    side: { type: number, format: double }
+            """.trimIndent(),
+        )
+        writeBuildFile()
+
+        val result = runner("compileKotlin").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":compileKotlin")?.outcome,
+            "Generated code from a feature-rich spec should compile",
+        )
     }
 
     @Test
@@ -277,6 +397,202 @@ class JustworksPluginFunctionalTest {
             TaskOutcome.SUCCESS,
             result.task(":compileKotlin")?.outcome,
             "compileKotlin should succeed with generated sources",
+        )
+    }
+
+    @Test
+    fun `externally-tagged wrapper oneOf compiles and round-trips the wrapper wire shape`() {
+        // Recursive file-tree union from issue #104: each variant is a single-key wrapper object.
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Wrapper Union Test
+              version: '1.0'
+            paths:
+              /tree:
+                get:
+                  operationId: getTree
+                  summary: Get the file tree
+                  tags:
+                    - tree
+                  responses:
+                    '200':
+                      description: The root node
+                      content:
+                        application/json:
+                          schema:
+                            ${'$'}ref: '#/components/schemas/Node'
+            components:
+              schemas:
+                Node:
+                  oneOf:
+                    - type: object
+                      required: [File]
+                      properties:
+                        File:
+                          type: object
+                          required: [name, sizeBytes]
+                          properties:
+                            name: { type: string }
+                            sizeBytes: { type: integer }
+                    - type: object
+                      required: [Directory]
+                      properties:
+                        Directory:
+                          type: object
+                          required: [name, children]
+                          properties:
+                            name: { type: string }
+                            children:
+                              type: array
+                              items:
+                                ${'$'}ref: '#/components/schemas/Node'
+            """.trimIndent(),
+        )
+
+        // Build file with a test source set that exercises the generated serializer at runtime.
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "src/test/kotlin/WrapperUnionRoundTripTest.kt",
+            """
+            import com.example.model.Node
+            import kotlinx.serialization.SerializationException
+            import kotlinx.serialization.json.Json
+            import kotlin.test.Test
+            import kotlin.test.assertEquals
+            import kotlin.test.assertFailsWith
+
+            class WrapperUnionRoundTripTest {
+                private val json = Json
+
+                @Test
+                fun `decodes the externally-tagged wire payload`() {
+                    val wire = ""${'"'}{"File":{"name":"a.txt","sizeBytes":12}}""${'"'}
+                    val node = json.decodeFromString<Node>(wire)
+                    val file = node as Node.File
+                    assertEquals("a.txt", file.name)
+                    assertEquals(12, file.sizeBytes)
+                }
+
+                @Test
+                fun `encodes back to the wrapper shape, not an internal type field`() {
+                    val node: Node = Node.File(name = "a.txt", sizeBytes = 12)
+                    val encoded = json.encodeToString(node)
+                    assertEquals(
+                        json.parseToJsonElement(""${'"'}{"File":{"name":"a.txt","sizeBytes":12}}""${'"'}),
+                        json.parseToJsonElement(encoded),
+                    )
+                }
+
+                @Test
+                fun `round-trips a recursive directory tree`() {
+                    val wire =
+                        ""${'"'}{"Directory":{"name":"root","children":[{"File":{"name":"a.txt","sizeBytes":1}},{"Directory":{"name":"sub","children":[]}}]}}""${'"'}
+                    val node = json.decodeFromString<Node>(wire)
+                    // Encode with the static Node type (an `as` cast below would smart-cast `node`
+                    // to Node.Directory and pick the wrong serializer).
+                    val encoded = json.encodeToString<Node>(node)
+                    assertEquals(
+                        json.parseToJsonElement(wire),
+                        json.parseToJsonElement(encoded),
+                    )
+                    val dir = node as Node.Directory
+                    assertEquals("root", dir.name)
+                    assertEquals(2, dir.children.size)
+                    val nested = dir.children[1] as Node.Directory
+                    assertEquals("sub", nested.name)
+                    assertEquals(0, nested.children.size)
+                }
+
+                @Test
+                fun `rejects an unknown wrapper key`() {
+                    // Hits the `else ->` branch in deserialize.
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>(""${'"'}{"Bogus":{}}""${'"'})
+                    }
+                }
+
+                @Test
+                fun `rejects an empty wrapper object`() {
+                    // Hits the `singleOrNull() ?: throw` branch (zero keys).
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>("{}")
+                    }
+                }
+
+                @Test
+                fun `rejects a multi-key wrapper object`() {
+                    // Hits the `singleOrNull() ?: throw` branch (two keys).
+                    assertFailsWith<SerializationException> {
+                        json.decodeFromString<Node>(""${'"'}{"File":{"name":"a.txt","sizeBytes":1},"Directory":{"name":"x","children":[]}}""${'"'})
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("test").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":test")?.outcome,
+            "runtime round-trip test against the generated wrapper serializer should pass",
+        )
+
+        // The generated union must not fall back to internal tagging.
+        val nodeFile = projectDir.resolve("build/generated/justworks/main/com/example/model/Node.kt")
+        assertTrue(nodeFile.exists(), "Node.kt should exist")
+        val nodeContent = nodeFile.readText()
+        assertFalse(
+            nodeContent.contains("JsonClassDiscriminator"),
+            "Wrapper union must NOT emit @JsonClassDiscriminator",
+        )
+        assertTrue(
+            nodeContent.contains("with = NodeSerializer::class"),
+            "Node should bind the bespoke NodeSerializer",
+        )
+        assertTrue(
+            projectDir.resolve("build/generated/justworks/main/com/example/model/NodeSerializer.kt").exists(),
+            "NodeSerializer.kt should be generated",
         )
     }
 
@@ -609,6 +925,7 @@ class JustworksPluginFunctionalTest {
             dependencies {
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
                 implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
                 implementation("io.ktor:ktor-client-core:3.1.1")
                 implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
                 implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
@@ -792,6 +1109,301 @@ class JustworksPluginFunctionalTest {
     }
 
     @Test
+    fun `path parameter values with spaces and slashes are percent-encoded, not left raw`() {
+        // Regression test for issue #108: path params were previously interpolated via encodeParam,
+        // which strips the JSON quotes but does NOT URL-encode. A "/" would split the URL into an
+        // extra path segment, and a raw space would produce an invalid URL. Both must now go through
+        // the generated encodePathParam(), which additionally applies Ktor's encodeURLPathPart().
+        writeBuildFile()
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "src/test/kotlin/PathParamEncodingTest.kt",
+            """
+            import com.avsystem.justworks.encodePathParam
+            import kotlin.test.Test
+            import kotlin.test.assertEquals
+            import kotlin.test.assertFalse
+
+            class PathParamEncodingTest {
+                @Test
+                fun `space in a path param value is percent-encoded rather than left raw`() {
+                    val encoded = encodePathParam("free form")
+                    assertFalse(' ' in encoded, "Raw space in a URL path segment: ${'$'}encoded")
+                    assertEquals("free%20form", encoded)
+                }
+
+                @Test
+                fun `slash in a path param value is percent-encoded rather than splitting the path`() {
+                    val encoded = encodePathParam("a/b")
+                    assertFalse('/' in encoded, "A literal slash would introduce an extra path segment: ${'$'}encoded")
+                    assertEquals("a%2Fb", encoded)
+                }
+
+                @Test
+                fun `value with both a space and a slash is fully percent-encoded`() {
+                    val encoded = encodePathParam("a b/c")
+                    assertEquals("a%20b%2Fc", encoded)
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("test").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":test")?.outcome,
+            "path param encoding test against the generated encodePathParam() should pass",
+        )
+    }
+
+    @Test
+    fun `query parameter that cannot serialize to a JSON primitive fails to compile, not to throw at runtime`() {
+        // encodeParam()/encodePathParam() are an explicit overload set (String, Number, Boolean, and
+        // a reified Enum<T>) rather than a generic <reified T> passthrough. Uuid/Instant/LocalDate are
+        // handled separately (see the call-site-encoding test below). A query param typed as an array
+        // has no matching overload, so the *generated client* now fails to compile instead of
+        // compiling and throwing "JsonArray is not a JsonPrimitive" the first time someone calls the
+        // endpoint.
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Petstore
+              version: '1.0'
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  summary: List pets
+                  tags:
+                    - pets
+                  parameters:
+                    - name: tags
+                      in: query
+                      required: true
+                      schema:
+                        type: array
+                        items:
+                          type: string
+                  responses:
+                    '200':
+                      description: A list of pets
+            """.trimIndent(),
+        )
+
+        writeBuildFile()
+
+        val result = runner("compileKotlin").buildAndFail()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "code generation itself should still succeed; only compilation of the generated code should fail",
+        )
+        assertEquals(
+            TaskOutcome.FAILED,
+            result.task(":compileKotlin")?.outcome,
+            "compileKotlin must fail: no encodeParam() overload accepts a List<String>",
+        )
+        assertTrue(
+            result.output.contains("encodeParam"),
+            "Expected the compiler error to point at the unresolved encodeParam(...) call, got: ${result.output}",
+        )
+    }
+
+    @Test
+    fun `Uuid, Instant, and LocalDate path, query, and header params compile against the real types`() {
+        // Uuid/Instant/LocalDate are JSON-primitive-safe but deliberately have no overload in the
+        // shared ApiClientBase.kt (see ApiClientBaseGeneratorTest) — BodyGenerator instead renders a
+        // direct .toString() call (plus .encodeURLPathPart() for path segments) at the call site, in
+        // the per-spec client file. ClientGeneratorTest already checks the exact generated source
+        // text; this test proves that text actually *compiles* against the real kotlin.uuid.Uuid,
+        // kotlin.time.Instant, and kotlinx.datetime.LocalDate types and real Ktor — not just that it
+        // looks right as a KotlinPoet string.
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Events
+              version: '1.0'
+            paths:
+              /events/{eventId}/at/{occurredAt}:
+                get:
+                  operationId: getEvent
+                  tags:
+                    - events
+                  parameters:
+                    - name: eventId
+                      in: path
+                      required: true
+                      schema:
+                        type: string
+                        format: uuid
+                    - name: occurredAt
+                      in: path
+                      required: true
+                      schema:
+                        type: string
+                        format: date-time
+                  responses:
+                    '200':
+                      description: OK
+              /events:
+                get:
+                  operationId: listEvents
+                  tags:
+                    - events
+                  parameters:
+                    - name: since
+                      in: query
+                      required: true
+                      schema:
+                        type: string
+                        format: date
+                    - name: X-Trace-Id
+                      in: header
+                      required: true
+                      schema:
+                        type: string
+                        format: uuid
+                  responses:
+                    '200':
+                      description: OK
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-datetime:0.8.0")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        // The generated client class isn't `open`, so it can't be subclassed with a mock HttpClient
+        // from a test — this test only proves the call-site .toString()/.encodeURLPathPart() code
+        // BodyGenerator emits for these three types actually compiles and type-checks, by referencing
+        // the generated function with real Uuid/Instant/LocalDate arguments. The exact encoded string
+        // shape is covered by ClientGeneratorTest at the KotlinPoet-source level, and the encoding
+        // primitives themselves (Ktor's encodeURLPathPart, LocalDate/Instant ISO-8601 toString) are
+        // exercised directly in the path-param-encoding functional test above.
+        writeFile(
+            "src/test/kotlin/DateTimeParamUsageTest.kt",
+            """
+            import com.example.api.EventsApi
+            import kotlin.test.Test
+            import kotlin.time.Instant
+            import kotlin.uuid.ExperimentalUuidApi
+            import kotlin.uuid.Uuid
+            import kotlinx.datetime.LocalDate
+
+            @OptIn(ExperimentalUuidApi::class)
+            class DateTimeParamUsageTest {
+                private val api = EventsApi("https://example.com")
+
+                // Never invoked (there is no mock server to call) — its BODY must still type-check,
+                // which is enough to prove every encodeParam(...)/.toString() call site BodyGenerator
+                // emitted for Uuid/Instant/LocalDate path/query/header params resolves against the
+                // real types. If any of them had no valid target, this file would fail to compile.
+                private suspend fun exerciseGeneratedCallSites() {
+                    val eventId = Uuid.parse("f47ac10b-58cc-4372-a567-0e02b2c3d479")
+                    val occurredAt = Instant.parse("2024-01-15T10:30:00Z")
+                    val since = LocalDate.parse("2024-01-15")
+                    val traceId = Uuid.parse("f47ac10b-58cc-4372-a567-0e02b2c3d479")
+                    api.getEvent(eventId, occurredAt)
+                    api.listEvents(since, traceId)
+                }
+
+                @Test
+                fun `compiles`() {
+                    // See exerciseGeneratedCallSites() above — that's the actual assertion.
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("compileTestKotlin").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":compileTestKotlin")?.outcome,
+            "Uuid/Instant/LocalDate params must compile against the real types",
+        )
+    }
+
+    @Test
     fun `multiple specs with identical security schemes pass the build`() {
         writeFile(
             "api/spec1.yaml",
@@ -852,5 +1464,186 @@ class JustworksPluginFunctionalTest {
         )
 
         runner("justworksSharedTypes").build()
+    }
+
+    @Test
+    fun `json string responses strip quotes at runtime, text-plain responses stay raw`() {
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Quoting Test
+              version: '1.0'
+            paths:
+              /token:
+                get:
+                  operationId: getToken
+                  tags:
+                    - quoting
+                  responses:
+                    '200':
+                      description: A JSON-quoted string
+                      content:
+                        application/json:
+                          schema:
+                            type: string
+              /raw:
+                get:
+                  operationId: getRaw
+                  tags:
+                    - quoting
+                  responses:
+                    '200':
+                      description: A raw text/plain string
+                      content:
+                        text/plain:
+                          schema:
+                            type: string
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+                testImplementation("io.ktor:ktor-client-mock:3.1.1")
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        // A hand-written ApiClientBase subclass with a MockEngine swapped in for `client` — this
+        // exercises the real (generated) toResult()/toRawResult() member functions against a fake
+        // HTTP response, proving the decoding behavior at runtime rather than just inspecting source.
+        writeFile(
+            "src/test/kotlin/QuoteStrippingTest.kt",
+            """
+            import com.avsystem.justworks.ApiClientBase
+            import com.avsystem.justworks.HttpError
+            import com.avsystem.justworks.HttpSuccess
+            import io.ktor.client.HttpClient
+            import io.ktor.client.engine.mock.MockEngine
+            import io.ktor.client.engine.mock.respond
+            import io.ktor.client.plugins.contentnegotiation.ContentNegotiation
+            import io.ktor.client.request.get
+            import io.ktor.http.HttpHeaders
+            import io.ktor.http.HttpStatusCode
+            import io.ktor.http.headersOf
+            import io.ktor.serialization.kotlinx.json.json
+            import kotlinx.coroutines.runBlocking
+            import kotlin.test.Test
+            import kotlin.test.assertEquals
+
+            class QuoteStrippingTest {
+                private class TestClient(baseUrl: String, engine: MockEngine) : ApiClientBase(baseUrl) {
+                    override val client: HttpClient = HttpClient(engine) {
+                        install(ContentNegotiation) { json() }
+                    }
+
+                    fun jsonToken() = runBlocking {
+                        client.get("${'$'}baseUrl/token").toResult<String, String>()
+                    }
+
+                    fun rawText() = runBlocking {
+                        client.get("${'$'}baseUrl/raw").toRawResult<String, String>()
+                    }
+                }
+
+                @Test
+                fun `a JSON-quoted String success body decodes without the surrounding quotes`() {
+                    val engine = MockEngine {
+                        respond(
+                            "\"abc-123\"",
+                            HttpStatusCode.OK,
+                            headersOf(HttpHeaders.ContentType, listOf("application/json")),
+                        )
+                    }
+                    val result = TestClient("http://test", engine).jsonToken()
+                    assertEquals(HttpSuccess(200, "abc-123"), result)
+                }
+
+                @Test
+                fun `a text-plain String success body is passed through untouched, not JSON-decoded`() {
+                    val engine = MockEngine {
+                        respond(
+                            "abc-123",
+                            HttpStatusCode.OK,
+                            headersOf(HttpHeaders.ContentType, listOf("text/plain")),
+                        )
+                    }
+                    val result = TestClient("http://test", engine).rawText()
+                    assertEquals(HttpSuccess(200, "abc-123"), result)
+                }
+
+                @Test
+                fun `a text-plain 404 error body decodes to its raw text, not null`() {
+                    val engine = MockEngine {
+                        respond(
+                            "Not found",
+                            HttpStatusCode.NotFound,
+                            headersOf(HttpHeaders.ContentType, listOf("text/plain")),
+                        )
+                    }
+                    val result = TestClient("http://test", engine).jsonToken()
+                    assertEquals(HttpError.NotFound("Not found"), result)
+                }
+
+                @Test
+                fun `a 404 error body with no Content-Type decodes to its raw text, not null`() {
+                    val engine = MockEngine { respond("Not found", HttpStatusCode.NotFound) }
+                    val result = TestClient("http://test", engine).jsonToken()
+                    assertEquals(HttpError.NotFound("Not found"), result)
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("test").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":test")?.outcome,
+            "MockEngine round-trip test for issue #110 should pass",
+        )
+
+        // Also verify codegen wires each response's declared content type to the right helper:
+        // the JSON string response to toResult(), the text/plain response to toRawResult().
+        val clientFile = projectDir.resolve("build/generated/justworks/main/com/example/api/QuotingApi.kt")
+        assertTrue(clientFile.exists(), "QuotingApi.kt should exist")
+        val functions = clientFile.readText().split(Regex("(?=suspend fun )"))
+        val getTokenFn = functions.first { it.contains("getToken(") }
+        val getRawFn = functions.first { it.contains("getRaw(") }
+        assertTrue(getTokenFn.contains(".toResult()"), "getToken (JSON string) should use toResult(), got: $getTokenFn")
+        assertTrue(getRawFn.contains(".toRawResult()"), "getRaw (text/plain) should use toRawResult(), got: $getRawFn")
     }
 }

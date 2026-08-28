@@ -50,6 +50,15 @@ internal class Hierarchy(val modelPackage: ModelPackage) {
             .toSet()
     }
 
+    /** Parent schema names that use the externally-tagged wrapper oneOf pattern (bespoke KSerializer). */
+    val oneOfWrappers: Set<String> by memoized(memoScope) {
+        polymorphicSchemas
+            .asSequence()
+            .filter { it.oneOfWrapperMapping != null }
+            .map { it.name }
+            .toSet()
+    }
+
     /** Inverse of [sealedHierarchies] for anyOf-without-discriminator: variant name to its parent names. */
     val anyOfParents: Map<String, Set<String>> by memoized(memoScope) {
         sealedHierarchies

@@ -503,6 +503,173 @@ class ClientGeneratorTest {
     }
 
     @Test
+    fun `text plain response returns String`() {
+        val ep = endpoint(
+            operationId = "getText",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.STRING), ContentType.TEXT_PLAIN),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getText" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.String", returnType.typeArguments[1].toString())
+    }
+
+    @Test
+    fun `octet stream response returns ByteArray`() {
+        val ep = endpoint(
+            operationId = "getBinary",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getBinary" }
+        val returnType = funSpec.returnType as ParameterizedTypeName
+        assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString())
+    }
+
+    // -- text/plain and octet-stream responses must keep Ktor's native body<T>()
+    // converter (toRawResult), NOT the JSON-decoding toResult() — a raw text/plain body isn't
+    // necessarily valid JSON, so running it through json.decodeFromString would break it.
+
+    @Test
+    fun `text plain response is chained with toRawResult, not toResult`() {
+        val ep = endpoint(
+            operationId = "getText",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.STRING), ContentType.TEXT_PLAIN),
+            ),
+        )
+        val cls = clientClass(ep)
+        val body = cls.funSpecs
+            .first { it.name == "getText" }
+            .body
+            .toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected toRawResult() for text/plain, got: $body")
+        assertFalse(body.contains(".toResult()"), "text/plain must not use JSON-decoding toResult(), got: $body")
+    }
+
+    @Test
+    fun `octet stream response is chained with toRawResult, not toResult`() {
+        val ep = endpoint(
+            operationId = "getBinary",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val body = cls.funSpecs
+            .first { it.name == "getBinary" }
+            .body
+            .toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected toRawResult() for octet-stream, got: $body")
+        assertFalse(body.contains(".toResult()"), "octet-stream must not use JSON-decoding toResult(), got: $body")
+    }
+
+    @Test
+    fun `JSON string response (bare type string schema) is chained with toResult, not toRawResult`() {
+        val ep = endpoint(
+            operationId = "getToken",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.STRING), ContentType.JSON_CONTENT_TYPE),
+            ),
+        )
+        val cls = clientClass(ep)
+        val body = cls.funSpecs
+            .first { it.name == "getToken" }
+            .body
+            .toString()
+        assertTrue(body.contains(".toResult()"), "Expected JSON-decoding toResult() for a JSON string, got: $body")
+        assertFalse(body.contains(".toRawResult()"), "Got: $body")
+    }
+
+    // A `format: byte` (ByteArray) schema under application/json is a base64 *string* on the wire,
+    // not a JSON byte array — kotlinx.serialization's built-in ByteArraySerializer can't decode
+    // it, and claiming a decoded ByteArray here would be misleading. Downgrade the return type to
+    // String (still base64-encoded) instead, which already decodes correctly via the existing
+    // JSON-string path
+    @Test
+    fun `byte array response under application json downgrades to String and uses toResult`() {
+        val ep = endpoint(
+            operationId = "getEncodedBinary",
+            responses = mapOf(
+                "200" to Response(
+                    "200",
+                    "OK",
+                    TypeRef.Primitive(PrimitiveType.BYTE_ARRAY),
+                    ContentType.JSON_CONTENT_TYPE,
+                ),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getEncodedBinary" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.String", returnType.typeArguments[1].toString(), "Expected String, not ByteArray")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toResult()"), "Expected JSON-decoding toResult(), got: $body")
+        assertFalse(body.contains(".toRawResult()"), "Got: $body")
+    }
+
+    @Test
+    fun `byte array response under application octet stream keeps ByteArray and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getBinaryOctetStream",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.BYTE_ARRAY), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getBinaryOctetStream" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString())
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
+    // text/plain is always raw text, so String is always a faithful representation of it,
+    // regardless of what the schema claims — body<String>() always works, and a caller wanting
+    // the parsed type (e.g. Int) can convert it themselves.
+    @Test
+    fun `text plain response with a non-String schema downgrades to String and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getCount",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.INT), ContentType.TEXT_PLAIN),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getCount" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.String", returnType.typeArguments[1].toString(), "Expected String, not Int")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
+    // application/octet-stream is arbitrary binary, not necessarily valid UTF-8 text, so ByteArray
+    // is the only safe universal representation of it — unlike text/plain, this is never
+    // downgraded to String, since that risks throwing or corrupting non-UTF8 bytes.
+    @Test
+    fun `octet stream response with a non-ByteArray schema downgrades to ByteArray and uses toRawResult`() {
+        val ep = endpoint(
+            operationId = "getCount",
+            responses = mapOf(
+                "200" to Response("200", "OK", TypeRef.Primitive(PrimitiveType.INT), ContentType.OCTET_STREAM),
+            ),
+        )
+        val cls = clientClass(ep)
+        val fn = cls.funSpecs.first { it.name == "getCount" }
+        val returnType = fn.returnType as ParameterizedTypeName
+        assertEquals("kotlin.ByteArray", returnType.typeArguments[1].toString(), "Expected ByteArray, not Int")
+        val body = fn.body.toString()
+        assertTrue(body.contains(".toRawResult()"), "Expected raw body() converter, got: $body")
+        assertFalse(body.contains(".toResult()"), "Got: $body")
+    }
+
+    @Test
     fun `mixed 200 and 204 responses uses 200 schema type`() {
         val ep = endpoint(
             method = HttpMethod.DELETE,
@@ -590,21 +757,24 @@ class ClientGeneratorTest {
     // -- SER-01: Polymorphic spec wires SerializersModule --
 
     @Test
-    fun `polymorphic spec wires serializersModule in createHttpClient call`() {
+    fun `polymorphic spec wires serializersModule into the json passed to the ApiClientBase superclass`() {
         val files = generate(spec(endpoint()), hasPolymorphicTypes = true)
-        val clientProperty = files
+        val cls = files
             .first()
             .members
             .filterIsInstance<TypeSpec>()
             .first()
-            .propertySpecs
-            .first { it.name == "client" }
-        val clientInitializer = clientProperty.initializer.toString()
+        val superParams = cls.superclassConstructorParameters.map { it.toString() }
         assertTrue(
-            clientInitializer.contains("generatedSerializersModule"),
-            "Expected generatedSerializersModule reference",
+            superParams.any { it.contains("json") && it.contains("generatedSerializersModule") },
+            "Expected a json = Json { serializersModule = generatedSerializersModule } superclass param, got: $superParams",
         )
-        assertTrue(clientInitializer.contains("createHttpClient"), "Expected createHttpClient call")
+
+        val clientInitializer = cls.propertySpecs
+            .first { it.name == "client" }
+            .initializer
+            .toString()
+        assertEquals("createHttpClient()", clientInitializer, "createHttpClient() no longer takes serializersModule")
     }
 
     // -- CONT-01: Multipart form-data code generation --
@@ -736,6 +906,173 @@ class ClientGeneratorTest {
         assertFalse(body.contains("setBody"), "Should NOT contain setBody when no requestBody")
         assertFalse(body.contains("contentType"), "Should NOT set contentType when no requestBody")
         assertFalse(body.contains("if (body"), "Should NOT check body != null when no requestBody")
+    }
+
+    // -- Path params must be URL-encoded via encodePathParam, not the raw encodeParam --
+
+    @Test
+    fun `path parameters are encoded via encodePathParam`() {
+        val ep = endpoint(
+            path = "/pets/{petId}",
+            operationId = "getPet",
+            parameters = listOf(
+                Parameter("petId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.STRING), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getPet" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("encodePathParam(petId)"), "Expected path param encoded via encodePathParam")
+    }
+
+    @Test
+    fun `query and header parameters still use encodeParam, not encodePathParam`() {
+        val ep = endpoint(
+            path = "/pets/{petId}",
+            operationId = "getPet",
+            parameters = listOf(
+                Parameter("petId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.STRING), null),
+                Parameter("filter", ParameterLocation.QUERY, true, TypeRef.Primitive(PrimitiveType.STRING), null),
+                Parameter("X-Trace-Id", ParameterLocation.HEADER, true, TypeRef.Primitive(PrimitiveType.STRING), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getPet" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("encodeParam(filter)"), "Expected query param encoded via encodeParam")
+        assertTrue(body.contains("encodeParam(xTraceId)"), "Expected header param encoded via encodeParam")
+        assertFalse(body.contains("encodePathParam(filter)"), "Query param must not use encodePathParam")
+        assertFalse(body.contains("encodePathParam(xTraceId)"), "Header param must not use encodePathParam")
+    }
+
+    // -- Uuid/Instant/LocalDate params: encoded via a direct .toString() call site, not
+    // encodeParam/encodePathParam. These types are JSON-primitive-safe, but ApiClientBase.kt is
+    // generated once, independent of any spec, so giving them a shared overload there would force
+    // every generated client to opt into ExperimentalUuidApi / depend on kotlinx-datetime even for
+    // specs that never use them.
+
+    @Test
+    fun `Uuid path parameter is stringified and URL-path-encoded at the call site`() {
+        val ep = endpoint(
+            path = "/events/{eventId}",
+            operationId = "getEvent",
+            parameters = listOf(
+                Parameter("eventId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.UUID), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getEvent" }
+        val body = funSpec.body.toString()
+        // KotlinPoet fully-qualifies %M references (e.g. io.ktor.http.encodeURLPathPart) when
+        // rendering a bare FunSpec outside a FileSpec's import context, so check the pieces
+        // separately rather than one contiguous "toString().encodeURLPathPart()" substring.
+        assertTrue(body.contains("eventId.toString()"), "Expected a direct toString() call, got: $body")
+        assertTrue(body.contains("encodeURLPathPart()"), "Expected URL-path-encoding, got: $body")
+        assertFalse(body.contains("encodePathParam(eventId)"), "Uuid path param must not go through encodePathParam")
+    }
+
+    @Test
+    fun `Instant path parameter is stringified and URL-path-encoded at the call site`() {
+        val ep = endpoint(
+            path = "/events/{occurredAt}",
+            operationId = "getEvent",
+            parameters = listOf(
+                Parameter("occurredAt", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.DATE_TIME), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "getEvent" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("occurredAt.toString()"), "Expected a direct toString() call, got: $body")
+        assertTrue(body.contains("encodeURLPathPart()"), "Expected URL-path-encoding, got: $body")
+        assertFalse(
+            body.contains("encodePathParam(occurredAt)"),
+            "Instant path param must not go through encodePathParam",
+        )
+    }
+
+    @Test
+    fun `optional LocalDate query parameter is stringified at the call site, inside the null guard`() {
+        val ep = endpoint(
+            operationId = "listEvents",
+            parameters = listOf(
+                Parameter("since", ParameterLocation.QUERY, false, TypeRef.Primitive(PrimitiveType.DATE), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listEvents" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("if (since != null)"), "Expected null guard for optional param")
+        assertTrue(
+            body.contains("""this.parameters.append("since", since.toString())"""),
+            "Expected direct toString() call, got: $body",
+        )
+        assertFalse(body.contains("encodeParam(since)"), "LocalDate query param must not go through encodeParam")
+    }
+
+    @Test
+    fun `optional Uuid header parameter is stringified at the call site, inside the null guard`() {
+        val ep = endpoint(
+            operationId = "listEvents",
+            parameters = listOf(
+                Parameter("traceId", ParameterLocation.HEADER, false, TypeRef.Primitive(PrimitiveType.UUID), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listEvents" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("if (traceId != null)"), "Expected null guard for optional param")
+        assertTrue(
+            body.contains("""append("traceId", traceId.toString())"""),
+            "Expected direct toString() call, got: $body",
+        )
+        assertFalse(body.contains("encodeParam(traceId)"), "Uuid header param must not go through encodeParam")
+    }
+
+    @Test
+    fun `Int query parameter still resolves through encodeParam via the Number overload`() {
+        val ep = endpoint(
+            operationId = "listEvents",
+            parameters = listOf(
+                Parameter("limit", ParameterLocation.QUERY, false, TypeRef.Primitive(PrimitiveType.INT), null),
+            ),
+        )
+        val cls = clientClass(ep)
+        val funSpec = cls.funSpecs.first { it.name == "listEvents" }
+        val body = funSpec.body.toString()
+        assertTrue(body.contains("""this.parameters.append("limit","""), "Expected append(\"limit\", ...), got: $body")
+        assertTrue(body.contains("encodeParam(limit)"), "Expected Int query param to still go through encodeParam")
+    }
+
+    // -- Uuid-typed param/body/response forces the generated client file to opt into
+    // ExperimentalUuidApi, since the function signature references kotlin.uuid.Uuid directly
+    // (independent of how encodeParam/encodePathParam encode it).
+
+    @Test
+    fun `client file opts into ExperimentalUuidApi when a param is Uuid-typed`() {
+        val ep = endpoint(
+            path = "/events/{eventId}",
+            operationId = "getEvent",
+            parameters = listOf(
+                Parameter("eventId", ParameterLocation.PATH, true, TypeRef.Primitive(PrimitiveType.UUID), null),
+            ),
+        )
+        val file = generate(spec(ep)).first()
+        val optInAnnotation = file.annotations.firstOrNull { it.typeName.toString() == "kotlin.OptIn" }
+        assertNotNull(optInAnnotation, "Expected a file-level @OptIn annotation")
+        assertTrue(
+            optInAnnotation.members.any { it.toString().contains("ExperimentalUuidApi") },
+            "Expected @OptIn(ExperimentalUuidApi::class)",
+        )
+    }
+
+    @Test
+    fun `client file does not opt into ExperimentalUuidApi when no param is Uuid-typed`() {
+        val file = generate(spec(endpoint())).first()
+        assertTrue(
+            file.annotations.none { it.typeName.toString() == "kotlin.OptIn" },
+            "Expected no file-level @OptIn when no Uuid is involved",
+        )
     }
 
     // -- URL interpolation: baseUrl must be interpolated, not literal --
