@@ -4,10 +4,23 @@ plugins {
     kotlin("jvm")
     id("org.jetbrains.kotlinx.kover")
     id("com.vanniktech.maven.publish")
+    id("org.jetbrains.dokka") version "2.2.0"
 }
 
 kotlin {
     jvmToolchain(21)
+}
+
+dokka {
+    moduleName.set("justworks-core")
+
+    dokkaSourceSets.main {
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl("https://github.com/AVSystem/justworks/tree/master/core/src/main/kotlin")
+            remoteLineSuffix.set("#L")
+        }
+    }
 }
 
 // todo: remove when https://github.com/JLLeitschuh/ktlint-gradle/issues/912 resolved

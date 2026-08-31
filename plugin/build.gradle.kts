@@ -6,10 +6,23 @@ plugins {
     `java-gradle-plugin`
     id("com.vanniktech.maven.publish")
     id("org.jetbrains.kotlinx.kover")
+    id("org.jetbrains.dokka") version "2.2.0"
 }
 
 kotlin {
     jvmToolchain(21)
+}
+
+dokka {
+    moduleName.set("justworks-plugin")
+
+    dokkaSourceSets.main {
+        sourceLink {
+            localDirectory.set(file("src/main/kotlin"))
+            remoteUrl("https://github.com/AVSystem/justworks/tree/master/plugin/src/main/kotlin")
+            remoteLineSuffix.set("#L")
+        }
+    }
 }
 
 dependencies {
