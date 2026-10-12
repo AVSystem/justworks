@@ -11,6 +11,7 @@ import com.avsystem.justworks.core.gen.EXPERIMENTAL_UUID_API
 import com.avsystem.justworks.core.gen.GENERATED_SERIALIZERS_MODULE
 import com.avsystem.justworks.core.gen.HEADERS_FUN
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
+import com.avsystem.justworks.core.gen.HTTP_CLIENT_PARAM
 import com.avsystem.justworks.core.gen.HTTP_HEADERS
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
 import com.avsystem.justworks.core.gen.HTTP_RESULT
@@ -87,14 +88,26 @@ internal object ClientGenerator {
         val classSimpleName = if (options.generateInterfaces) "${baseName}Impl" else baseName
         val className = ClassName(apiPackage, nameRegistry.register(classSimpleName))
 
-        val clientInitializer = CodeBlock.of("${CREATE_HTTP_CLIENT}()")
+        val clientInitializer = CodeBlock.of("$CREATE_HTTP_CLIENT($HTTP_CLIENT_PARAM)")
 
         val tokenType = LambdaTypeName.get(returnType = STRING)
         val isSingleBearer = securitySchemes.singleOrNull() is SecurityScheme.Bearer
 
+        val httpClientParam = ParameterSpec
+            .builder(HTTP_CLIENT_PARAM, HTTP_CLIENT.copy(nullable = true))
+            .defaultValue("null")
+        if (options.generateKdoc) {
+            httpClientParam.addKdoc(
+                "client to derive this API client from, sharing its engine and plugins; `null` creates a " +
+                    "standalone client. Closing this API client does not close [%L].",
+                HTTP_CLIENT_PARAM,
+            )
+        }
+
         val constructorBuilder = FunSpec
             .constructorBuilder()
             .addParameter(BASE_URL, STRING)
+            .addParameter(httpClientParam.build())
 
         val classBuilder = TypeSpec
             .classBuilder(className)

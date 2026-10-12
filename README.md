@@ -338,19 +338,44 @@ justworks {
 }
 ```
 
-### Ktor Engine
+### Ktor Engine and HttpClient
 
-The generated `HttpClient` is created without an explicit engine, so Ktor uses whichever engine is on the classpath.
-Switch engines by changing your dependency:
+By default, each generated client creates its own `HttpClient` without an explicit engine, so Ktor uses whichever
+engine is on the classpath, with that engine's default settings:
 
 ```kotlin
 dependencies {
-    // Pick one:
-    implementation("io.ktor:ktor-client-cio:3.1.1")     // CIO (default, pure Kotlin)
-    implementation("io.ktor:ktor-client-okhttp:3.1.1")   // OkHttp
-    implementation("io.ktor:ktor-client-apache:3.1.1")   // Apache
+    implementation("io.ktor:ktor-client-cio:3.1.1")   // or ktor-client-apache5, ktor-client-java, ...
 }
 ```
+
+To control the engine, connection pool, timeouts or plugins, pass your own `HttpClient`. The generated client derives
+its client from yours with `HttpClient.config {}`, so every API client built from the same `HttpClient` shares one
+engine (and its connection pool) and the plugins you installed:
+
+```kotlin
+val http = HttpClient(Apache5) {
+    engine {
+        connectTimeout = 2_000
+        socketTimeout = 8_000
+        configureConnectionManager {
+            setMaxConnTotal(500)
+            setMaxConnPerRoute(500)
+        }
+    }
+    install(HttpTimeout) { requestTimeoutMillis = 10_000 }
+}
+
+val pets = PetsApi("https://api.example.com", http) { tokenStore.getAccessToken() }
+val store = StoreApi("https://api.example.com", http) { tokenStore.getAccessToken() }
+```
+
+- The generated client always installs its own `ContentNegotiation` with the generated `Json` and sets
+  `expectSuccess = false`; response mapping relies on both. Don't install `ContentNegotiation` in the client you pass
+  in: plugin configurations are merged, and your JSON converter could take over decoding without the generated
+  `serializersModule`.
+- Closing a generated client does not close the `HttpClient` you passed in. Close it yourself once every API client
+  built from it is done.
 
 ### JSON Configuration
 
@@ -388,6 +413,8 @@ dependencies {
 
 Each generated client extends `ApiClientBase` and creates its own pre-configured `HttpClient` internally.
 You only need to provide the base URL and authentication credentials (if the spec defines security schemes).
+To share an engine, connection pool or plugins across clients, pass your own `HttpClient` as the second argument —
+see [Ktor Engine and HttpClient](#ktor-engine-and-httpclient).
 
 Class names are derived from OpenAPI tags as `<Tag>Api` (e.g., a `pets` tag produces `PetsApi`). Untagged endpoints go
 to `DefaultApi`.
