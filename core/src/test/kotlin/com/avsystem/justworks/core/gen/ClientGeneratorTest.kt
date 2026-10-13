@@ -145,6 +145,47 @@ class ClientGeneratorTest {
         )
     }
 
+    // -- generateInterfaces --
+
+    @Test
+    fun `generateInterfaces false produces only the client class`() {
+        val files = generate(spec(endpoint(tags = listOf("Pets"))))
+        val typeNames = files.flatMap { it.members.filterIsInstance<TypeSpec>() }.map { it.name }
+        assertEquals(listOf("PetsApi"), typeNames)
+    }
+
+    @Test
+    fun `generateInterfaces true produces interface and Impl class`() {
+        val files = generate(
+            spec(endpoint(operationId = "listPets", tags = listOf("Pets"))),
+            options = OutputOptions(generateInterfaces = true),
+        )
+        val types = files.flatMap { it.members.filterIsInstance<TypeSpec>() }.associateBy { it.name }
+
+        val iface = assertNotNull(types["PetsApi"], "Expected PetsApi interface")
+        assertEquals(TypeSpec.Kind.INTERFACE, iface.kind)
+        val ifaceFun = iface.funSpecs.first { it.name == "listPets" }
+        assertTrue(KModifier.SUSPEND in ifaceFun.modifiers, "Interface method should be suspend")
+        assertTrue(ifaceFun.body.isEmpty(), "Interface method should have no body")
+
+        val impl = assertNotNull(types["PetsApiImpl"], "Expected PetsApiImpl class")
+        assertTrue(impl.superinterfaces.keys.any { it.toString().endsWith("PetsApi") }, "Impl should implement PetsApi")
+        val implFun = impl.funSpecs.first { it.name == "listPets" }
+        assertTrue(KModifier.OVERRIDE in implFun.modifiers, "Impl method should override")
+        assertFalse(implFun.body.isEmpty(), "Impl method should have a body")
+    }
+
+    @Test
+    fun `generateInterfaces respects custom prefix and suffix`() {
+        val files = generate(
+            spec(endpoint(tags = listOf("Pets"))),
+            options = OutputOptions(apiClassSuffix = "Client", generateInterfaces = true),
+        )
+        val typeNames = files.flatMap { it.members.filterIsInstance<TypeSpec>() }.mapNotNull { it.name }.toSet()
+        assertTrue("PetsClient" in typeNames, "Expected interface PetsClient; got $typeNames")
+        assertTrue("PetsClientImpl" in typeNames, "Expected class PetsClientImpl; got $typeNames")
+    }
+
     // -- CLNT-02: Endpoint functions are suspend --
 
     @Test
@@ -392,14 +433,72 @@ class ClientGeneratorTest {
         assertEquals("kotlin.String", baseUrl.type.toString())
     }
 
-    // -- No security: constructor has only baseUrl --
+    // -- No security: constructor has only baseUrl and httpClient --
 
     @Test
-    fun `no security schemes generates constructor with only baseUrl`() {
+    fun `no security schemes generates constructor with only baseUrl and httpClient`() {
         val cls = clientClass(endpoint())
         val constructor = assertNotNull(cls.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
-        assertEquals(listOf("baseUrl"), paramNames)
+        assertEquals(listOf("baseUrl", "httpClient"), paramNames)
+    }
+
+    // -- Injectable HttpClient --
+
+    @Test
+    fun `constructor takes a nullable httpClient defaulting to null`() {
+        val cls = clientClass(endpoint())
+        val httpClient = assertNotNull(cls.primaryConstructor).parameters.first { it.name == "httpClient" }
+        assertEquals("io.ktor.client.HttpClient?", httpClient.type.toString())
+        assertEquals("null", httpClient.defaultValue.toString())
+    }
+
+    @Test
+    fun `httpClient precedes auth params so a trailing token lambda still binds to the token`() {
+        val bearer = clientClass(listOf(endpoint()), listOf(SecurityScheme.Bearer("BearerAuth")))
+        assertEquals(
+            listOf("baseUrl", "httpClient", "token"),
+            assertNotNull(bearer.primaryConstructor).parameters.map { it.name },
+        )
+
+        val basic = clientClass(listOf(endpoint()), listOf(SecurityScheme.Basic("BasicAuth")))
+        assertEquals(
+            listOf("baseUrl", "httpClient", "basicAuthTestUsername", "basicAuthTestPassword"),
+            assertNotNull(basic.primaryConstructor).parameters.map { it.name },
+        )
+    }
+
+    @Test
+    fun `client has a single constructor`() {
+        val cls = clientClass(listOf(endpoint()), listOf(SecurityScheme.Bearer("BearerAuth")))
+        assertTrue(cls.funSpecs.none { it.isConstructor }, "Expected no secondary constructors")
+    }
+
+    @Test
+    fun `client property is derived from the injected httpClient`() {
+        val clientInitializer = clientClass(endpoint())
+            .propertySpecs
+            .first { it.name == "client" }
+            .initializer
+            .toString()
+        assertEquals("createHttpClient(httpClient)", clientInitializer)
+    }
+
+    @Test
+    fun `httpClient constructor param has KDoc only when generateKdoc is enabled`() {
+        fun httpClientKdoc(options: OutputOptions): String = generate(spec(endpoint()), options = options)
+            .first()
+            .members
+            .filterIsInstance<TypeSpec>()
+            .first()
+            .let { assertNotNull(it.primaryConstructor) }
+            .parameters
+            .first { it.name == "httpClient" }
+            .kdoc
+            .toString()
+
+        assertTrue(httpClientKdoc(OutputOptions(generateKdoc = true)).contains("sharing its engine"))
+        assertTrue(httpClientKdoc(OutputOptions(generateKdoc = false)).isEmpty())
     }
 
     // -- Pitfall 3: Untagged endpoints go to DefaultClient --
@@ -733,7 +832,11 @@ class ClientGeneratorTest {
             .first { it.name == "client" }
             .initializer
             .toString()
-        assertEquals("createHttpClient()", clientInitializer, "createHttpClient() no longer takes serializersModule")
+        assertEquals(
+            "createHttpClient(httpClient)",
+            clientInitializer,
+            "createHttpClient() no longer takes serializersModule",
+        )
     }
 
     // -- CONT-01: Multipart form-data code generation --
@@ -1148,7 +1251,10 @@ class ClientGeneratorTest {
             .propertySpecs
             .first { it.name == "client" }
         val clientInitializer = clientProperty.initializer.toString()
-        assertTrue(clientInitializer.contains("createHttpClient()"), "Expected plain createHttpClient()")
+        assertTrue(
+            clientInitializer.contains("createHttpClient(httpClient)"),
+            "Expected plain createHttpClient(httpClient)",
+        )
         assertTrue(!clientInitializer.contains("serializersModule"), "Expected no serializersModule")
     }
 
@@ -1260,9 +1366,9 @@ class ClientGeneratorTest {
         val constructor = assertNotNull(cls.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
         assertEquals(
-            listOf("baseUrl"),
+            listOf("baseUrl", "httpClient"),
             paramNames,
-            "Expected only baseUrl param when security is explicitly empty",
+            "Expected only baseUrl and httpClient params when security is explicitly empty",
         )
     }
 
@@ -1350,7 +1456,7 @@ class ClientGeneratorTest {
         )
         val constructor = assertNotNull(cls.primaryConstructor)
         val paramNames = constructor.parameters.map { it.name }
-        assertEquals(listOf("baseUrl", "token"), paramNames, "Single Bearer should use plain token param")
+        assertEquals(listOf("baseUrl", "httpClient", "token"), paramNames, "Single Bearer should use plain token param")
     }
 
     @Test
