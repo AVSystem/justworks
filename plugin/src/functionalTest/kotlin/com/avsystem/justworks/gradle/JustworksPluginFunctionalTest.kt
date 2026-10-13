@@ -1646,4 +1646,200 @@ class JustworksPluginFunctionalTest {
         assertTrue(getTokenFn.contains(".toResult()"), "getToken (JSON string) should use toResult(), got: $getTokenFn")
         assertTrue(getRawFn.contains(".toRawResult()"), "getRaw (text/plain) should use toRawResult(), got: $getRawFn")
     }
+
+    @Test
+    fun `generated clients accept a preconfigured HttpClient and share its engine and plugins`() {
+        writeFile(
+            "api/petstore.yaml",
+            """
+            openapi: '3.0.0'
+            info:
+              title: Petstore
+              version: '1.0'
+            security:
+              - bearerAuth: []
+            paths:
+              /pets:
+                get:
+                  operationId: listPets
+                  tags:
+                    - pets
+                  responses:
+                    '200':
+                      description: A list of pets
+                      content:
+                        application/json:
+                          schema:
+                            type: array
+                            items:
+                              ${'$'}ref: '#/components/schemas/Pet'
+              /pets/{petId}:
+                get:
+                  operationId: getPet
+                  tags:
+                    - pets
+                  parameters:
+                    - name: petId
+                      in: path
+                      required: true
+                      schema:
+                        type: integer
+                        format: int64
+                  responses:
+                    '200':
+                      description: A pet
+                      content:
+                        application/json:
+                          schema:
+                            ${'$'}ref: '#/components/schemas/Pet'
+                    '404':
+                      description: Not found
+            components:
+              securitySchemes:
+                bearerAuth:
+                  type: http
+                  scheme: bearer
+              schemas:
+                Pet:
+                  type: object
+                  required:
+                    - id
+                    - name
+                  properties:
+                    id:
+                      type: integer
+                      format: int64
+                    name:
+                      type: string
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "build.gradle.kts",
+            """
+            plugins {
+                kotlin("jvm") version "2.3.0"
+                kotlin("plugin.serialization") version "2.3.0"
+                id("com.avsystem.justworks")
+            }
+
+            repositories {
+                mavenCentral()
+            }
+
+            dependencies {
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-core:1.8.1")
+                implementation("org.jetbrains.kotlinx:kotlinx-serialization-json:1.8.1")
+                implementation("io.ktor:ktor-client-core:3.1.1")
+                implementation("io.ktor:ktor-client-content-negotiation:3.1.1")
+                implementation("io.ktor:ktor-serialization-kotlinx-json:3.1.1")
+                testImplementation(kotlin("test-junit"))
+                testImplementation("io.ktor:ktor-client-mock:3.1.1")
+                // Without httpClient the API client builds a standalone one, which needs an engine on the classpath.
+                testImplementation("io.ktor:ktor-client-cio:3.1.1")
+            }
+
+            justworks {
+                specs {
+                    register("main") {
+                        specFile = file("api/petstore.yaml")
+                        packageName = "com.example"
+                    }
+                }
+            }
+            """.trimIndent(),
+        )
+
+        writeFile(
+            "src/test/kotlin/InjectedHttpClientTest.kt",
+            """
+            import com.avsystem.justworks.HttpError
+            import com.avsystem.justworks.HttpSuccess
+            import com.example.api.PetsApi
+            import com.example.model.Pet
+            import io.ktor.client.HttpClient
+            import io.ktor.client.engine.mock.MockEngine
+            import io.ktor.client.engine.mock.MockRequestHandleScope
+            import io.ktor.client.engine.mock.respond
+            import io.ktor.client.plugins.defaultRequest
+            import io.ktor.client.request.HttpRequestData
+            import io.ktor.client.request.HttpResponseData
+            import io.ktor.client.request.get
+            import io.ktor.http.HttpHeaders
+            import io.ktor.http.HttpStatusCode
+            import io.ktor.http.headersOf
+            import kotlinx.coroutines.runBlocking
+            import kotlin.test.Test
+            import kotlin.test.assertEquals
+
+            class InjectedHttpClientTest {
+                private val handler: suspend MockRequestHandleScope.(HttpRequestData) -> HttpResponseData = { request ->
+                    when (request.url.encodedPath) {
+                        "/pets" -> respond(
+                            ""${'"'}[{"id":1,"name":"Rex"}]""${'"'},
+                            HttpStatusCode.OK,
+                            headersOf(HttpHeaders.ContentType, "application/json"),
+                        )
+                        else -> respond("", HttpStatusCode.NotFound)
+                    }
+                }
+
+                @Test
+                fun `trailing-lambda and named call sites compile without passing httpClient`() {
+                    PetsApi("http://test") { "t" }.close()
+                    PetsApi(baseUrl = "http://test", token = { "t" }).close()
+                    PetsApi("http://test", null) { "t" }.close()
+                }
+
+                @Test
+                fun `requests go through the injected client's engine and plugins`() = runBlocking {
+                    val engine = MockEngine(handler)
+                    val base = HttpClient(engine) {
+                        defaultRequest { headers.append("X-Injected", "yes") }
+                    }
+                    val result = PetsApi("http://test", base) { "secret" }.listPets()
+
+                    assertEquals(HttpSuccess(200, listOf(Pet(id = 1, name = "Rex"))), result)
+                    val request = engine.requestHistory.single()
+                    assertEquals("yes", request.headers["X-Injected"])
+                    assertEquals("Bearer secret", request.headers[HttpHeaders.Authorization])
+                }
+
+                @Test
+                fun `generated expectSuccess = false wins over the injected client's setting`() = runBlocking {
+                    val base = HttpClient(MockEngine(handler)) { expectSuccess = true }
+                    val result = PetsApi("http://test", base) { "t" }.getPet(42)
+
+                    assertEquals(404, (result as HttpError<*>).code)
+                }
+
+                @Test
+                fun `closing a generated client leaves the injected client and its siblings usable`() = runBlocking {
+                    // Engine owned by the base client, as with HttpClient(Apache5) { ... } in production.
+                    val base = HttpClient(MockEngine) { engine { addHandler(handler) } }
+                    val first = PetsApi("http://test", base) { "t" }
+                    val second = PetsApi("http://test", base) { "t" }
+
+                    first.close()
+
+                    assertEquals(200, (second.listPets() as HttpSuccess<*>).code)
+                    assertEquals(HttpStatusCode.OK, base.get("http://test/pets").status)
+                }
+            }
+            """.trimIndent(),
+        )
+
+        val result = runner("test").build()
+
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":justworksGenerateMain")?.outcome,
+            "justworksGenerateMain should succeed",
+        )
+        assertEquals(
+            TaskOutcome.SUCCESS,
+            result.task(":test")?.outcome,
+            "generated clients should compile in every constructor form and share the injected client",
+        )
+    }
 }
