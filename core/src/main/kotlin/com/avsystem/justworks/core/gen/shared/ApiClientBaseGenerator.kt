@@ -19,6 +19,8 @@ import com.avsystem.justworks.core.gen.ENCODE_TO_JSON_ELEMENT_FUN
 import com.avsystem.justworks.core.gen.ENCODE_URL_PATH_PART_FUN
 import com.avsystem.justworks.core.gen.ENUM_CLASS
 import com.avsystem.justworks.core.gen.HTTP_CLIENT
+import com.avsystem.justworks.core.gen.HTTP_CLIENT_CONFIG
+import com.avsystem.justworks.core.gen.HTTP_CLIENT_PARAM
 import com.avsystem.justworks.core.gen.HTTP_ERROR
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_BUILDER
 import com.avsystem.justworks.core.gen.HTTP_REQUEST_TIMEOUT_EXCEPTION
@@ -44,6 +46,7 @@ import com.squareup.kotlinpoet.NUMBER
 import com.squareup.kotlinpoet.ParameterSpec
 import com.squareup.kotlinpoet.ParameterizedTypeName.Companion.parameterizedBy
 import com.squareup.kotlinpoet.PropertySpec
+import com.squareup.kotlinpoet.STAR
 import com.squareup.kotlinpoet.STRING
 import com.squareup.kotlinpoet.TypeName
 import com.squareup.kotlinpoet.TypeSpec
@@ -322,15 +325,29 @@ internal object ApiClientBaseGenerator {
             .build()
     }
 
-    private fun buildCreateHttpClient(): FunSpec = FunSpec
-        .builder(CREATE_HTTP_CLIENT)
-        .addModifiers(KModifier.PROTECTED)
-        .returns(HTTP_CLIENT)
-        .beginControlFlow("return %T", HTTP_CLIENT)
-        .beginControlFlow("install(%T)", CONTENT_NEGOTIATION)
-        .addStatement("%M(%L)", JSON_FUN, JSON_PROPERTY)
-        .endControlFlow()
-        .addStatement("expectSuccess = false")
-        .endControlFlow()
-        .build()
+    // A caller-supplied client is derived via `config {}`
+    private fun buildCreateHttpClient(): FunSpec {
+        val configType = LambdaTypeName.get(
+            receiver = HTTP_CLIENT_CONFIG.parameterizedBy(STAR),
+            returnType = UNIT,
+        )
+        val baseClient = ParameterSpec
+            .builder(HTTP_CLIENT_PARAM, HTTP_CLIENT.copy(nullable = true))
+            .defaultValue("null")
+            .build()
+
+        return FunSpec
+            .builder(CREATE_HTTP_CLIENT)
+            .addModifiers(KModifier.PROTECTED)
+            .addParameter(baseClient)
+            .returns(HTTP_CLIENT)
+            .beginControlFlow("val defaults: %T =", configType)
+            .beginControlFlow("install(%T)", CONTENT_NEGOTIATION)
+            .addStatement("%M(%L)", JSON_FUN, JSON_PROPERTY)
+            .endControlFlow()
+            .addStatement("expectSuccess = false")
+            .endControlFlow()
+            .addStatement("return %L?.config(defaults) ?: %T(defaults)", HTTP_CLIENT_PARAM, HTTP_CLIENT)
+            .build()
+    }
 }
