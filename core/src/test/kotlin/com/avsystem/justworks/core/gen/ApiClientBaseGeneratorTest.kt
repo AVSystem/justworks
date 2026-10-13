@@ -99,17 +99,30 @@ class ApiClientBaseGeneratorTest {
     }
 
     @Test
-    fun `ApiClientBase has createHttpClient function with no parameters`() {
+    fun `ApiClientBase has createHttpClient function taking an optional base client`() {
         val create = classSpec.funSpecs.first { it.name == "createHttpClient" }
         assertTrue(KModifier.PROTECTED in create.modifiers)
-        assertTrue(
-            create.parameters.isEmpty(),
-            "createHttpClient should take no parameters; json is a constructor property now",
-        )
+        val param = create.parameters.single()
+        assertEquals("httpClient", param.name)
+        assertEquals("io.ktor.client.HttpClient?", param.type.toString())
+        assertEquals("null", param.defaultValue.toString(), "Expected httpClient to default to null")
         val body = create.body.toString()
         assertTrue(body.contains("ContentNegotiation"), "Expected ContentNegotiation install")
         assertTrue(body.contains("json(json)"), "Expected the shared json property installed into ContentNegotiation")
-        assertTrue(body.contains("expectSuccess"), "Expected expectSuccess = false")
+        assertTrue(body.contains("expectSuccess = false"), "Expected expectSuccess = false")
+    }
+
+    @Test
+    fun `createHttpClient derives from the base client via config and falls back to a standalone client`() {
+        val body = classFun("createHttpClient").body.toString()
+        assertTrue(
+            body.contains("httpClient?.config(defaults)"),
+            "Expected a base client to be derived with config(), sharing its engine, got: $body",
+        )
+        assertTrue(
+            body.contains("?: io.ktor.client.HttpClient(defaults)"),
+            "Expected a standalone client when no base client is given, got: $body",
+        )
     }
 
     // -- json property: constructor-injected val --

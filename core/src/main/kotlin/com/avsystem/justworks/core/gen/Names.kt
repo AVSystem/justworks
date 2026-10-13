@@ -8,6 +8,7 @@ import com.squareup.kotlinpoet.MemberName
 // ============================================================================
 
 val HTTP_CLIENT = ClassName("io.ktor.client", "HttpClient")
+val HTTP_CLIENT_CONFIG = ClassName("io.ktor.client", "HttpClientConfig")
 val CONTENT_NEGOTIATION = ClassName("io.ktor.client.plugins.contentnegotiation", "ContentNegotiation")
 val HTTP_HEADERS = ClassName("io.ktor.http", "HttpHeaders")
 val ENCODE_URL_PATH_PART_FUN = MemberName("io.ktor.http", "encodeURLPathPart")
@@ -127,6 +128,7 @@ val UUID_SERIALIZER = ClassName("com.avsystem.justworks", "UuidSerializer")
 const val BASE_URL = "baseUrl"
 const val TOKEN = "token"
 const val CLIENT = "client"
+const val HTTP_CLIENT_PARAM = "httpClient"
 const val BODY = "body"
 const val JSON_PROPERTY = "json"
 const val APPLY_AUTH = "applyAuth"
