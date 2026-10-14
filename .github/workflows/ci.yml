@@ -31,6 +31,9 @@ jobs:
       - name: Run tests with coverage
         run: ./gradlew core:koverXmlReport plugin:koverXmlReport
 
+      - name: Generate API docs
+        run: ./gradlew :dokkaGenerate :core:dokkaJavadocJar
+
       - name: Upload coverage to Codecov
         if: github.event_name == 'pull_request'
         uses: codecov/codecov-action@v5
