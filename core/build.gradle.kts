@@ -4,7 +4,7 @@ plugins {
     kotlin("jvm")
     id("org.jetbrains.kotlinx.kover")
     id("com.vanniktech.maven.publish")
-    id("org.jetbrains.dokka") version "2.2.0"
+    id("org.jetbrains.dokka")
 }
 
 kotlin {

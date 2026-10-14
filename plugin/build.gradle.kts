@@ -6,7 +6,7 @@ plugins {
     `java-gradle-plugin`
     id("com.vanniktech.maven.publish")
     id("org.jetbrains.kotlinx.kover")
-    id("org.jetbrains.dokka") version "2.2.0"
+    id("org.jetbrains.dokka")
 }
 
 kotlin {
